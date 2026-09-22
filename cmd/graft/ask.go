@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -713,6 +714,40 @@ func writeAskHuman(stdout io.Writer, result graph.AskResult) int {
 	body := strings.TrimRight(strings.Join(lines, "\n"), "\n")
 	if savings := askSavingsLine(result, body); savings != "" {
 		body = savings + "\n\n" + body
+	}
+	if result.Scopes != nil {
+		type scopeCount struct {
+			name  string
+			count int
+		}
+		counts := make(map[string]int)
+		for _, hit := range result.Hits {
+			if hit.Scope != "" {
+				counts[hit.Scope]++
+			}
+		}
+		scopes := make([]scopeCount, 0, len(counts))
+		for name, count := range counts {
+			scopes = append(scopes, scopeCount{name: name, count: count})
+		}
+		slices.SortFunc(scopes, func(a, b scopeCount) int {
+			return cmp.Or(cmp.Compare(b.count, a.count), strings.Compare(a.name, b.name))
+		})
+		footers := make([]string, 0, 1+len(result.Scopes.AlsoMatched))
+		if len(scopes) > 0 {
+			parts := make([]string, 0, len(scopes))
+			for _, scope := range scopes {
+				parts = append(parts, fmt.Sprintf("%s/ (%d)", scope.name, scope.count))
+			}
+			footers = append(footers, "matched in: "+strings.Join(parts, " · "))
+		}
+		for _, scope := range result.Scopes.AlsoMatched {
+			name := strings.TrimSuffix(scope.Scope, "/")
+			footers = append(footers, fmt.Sprintf("also matched: %s/ — narrow with --in %s/", name, name))
+		}
+		if len(footers) > 0 {
+			body += "\n\n" + strings.Join(footers, "\n")
+		}
 	}
 	body += askEscalationNudge(result)
 	_, err := io.WriteString(stdout, body+"\n")

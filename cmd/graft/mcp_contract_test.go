@@ -8,9 +8,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/NanoNets/context-graph-engine/internal/graph"
 	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
+	"github.com/NanoNets/context-graph-engine/internal/upkeep"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -58,6 +60,41 @@ func TestMCPServerSpeaksOfficialSDK(t *testing.T) {
 	}
 	if text.Text != "no graph found — run `graft build` first" {
 		t.Errorf("CallTool() text = %q, want missing-graph guidance", text.Text)
+	}
+}
+
+func TestMCPStartupUpkeepIncludesCachedVersionNudge(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	latest := "99.0.0"
+	if err := upkeep.WriteUpdateCache(home, upkeep.UpdateCache{Latest: &latest, CheckedAt: time.Now().UnixMilli()}); err != nil {
+		t.Fatalf("WriteUpdateCache(%q) error = %v, want nil", home, err)
+	}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"version":"7.8.9"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v, want nil", filepath.Join(root, "package.json"), err)
+	}
+	server := newMCPServer(callersOptions{}, root, root)
+	serverTransport, clientTransport := mcp.NewInMemoryTransports()
+	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
+	if err != nil {
+		t.Fatalf("Server.Connect() error = %v", err)
+	}
+	t.Cleanup(func() { _ = serverSession.Close() })
+	client := mcp.NewClient(&mcp.Implementation{Name: "graft-upkeep-contract", Version: "0"}, nil)
+	session, err := client.Connect(t.Context(), clientTransport, nil)
+	if err != nil {
+		t.Fatalf("Client.Connect() error = %v", err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+	if !strings.Contains(session.InitializeResult().Instructions, "99.0.0 available") {
+		t.Errorf("InitializeResult().Instructions = %q, want cached update nudge", session.InitializeResult().Instructions)
+	}
+	if got := session.InitializeResult().ServerInfo.Version; got == "7.8.9" {
+		t.Errorf("InitializeResult().ServerInfo.Version = %q, want running Graft version, not indexed project version", got)
+	}
+	if strings.Contains(session.InitializeResult().Instructions, "graft 7.8.9") {
+		t.Errorf("InitializeResult().Instructions = %q, want running Graft version in update nudge", session.InitializeResult().Instructions)
 	}
 }
 
@@ -159,6 +196,149 @@ func TestMCPCallWorkspaceRepoMap(t *testing.T) {
 	if !strings.HasPrefix(got.text, "workspace map — 2 repo(s)\n") || alpha < 0 || web <= alpha ||
 		!strings.Contains(got.text, "2 of 3 workspace repos have graphs; run graft build to cover missing") {
 		t.Errorf("mcpCall(%q, %q, graft_repo_map) text = %q, want federated map and coverage", root, contextDir, got.text)
+	}
+}
+
+func TestMCPCallRefreshesWorkspaceChildren(t *testing.T) {
+	t.Setenv("GRAFT_NO_REFRESH", "false")
+	t.Setenv("GRAFT_REFRESH", "hash")
+	root := t.TempDir()
+	contextDir := filepath.Join(root, "graft")
+	if err := os.MkdirAll(contextDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v, want nil", contextDir, err)
+	}
+	workspacePath := filepath.Join(contextDir, "workspace.json")
+	if err := os.WriteFile(workspacePath, []byte(`{"version":1,"children":["api","web"]}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v, want nil", workspacePath, err)
+	}
+	for _, child := range []string{"api", "web"} {
+		childRoot := filepath.Join(root, child)
+		sourcePath := filepath.Join(childRoot, "src", "app.ts")
+		if err := os.MkdirAll(filepath.Dir(sourcePath), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q) error = %v, want nil", filepath.Dir(sourcePath), err)
+		}
+		if err := os.WriteFile(sourcePath, []byte("export function before() {}\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) before build error = %v, want nil", sourcePath, err)
+		}
+		outDir := filepath.Join(childRoot, "graft")
+		built, err := graph.BuildGraph(childRoot, sourcefiles.Options{OutDir: outDir})
+		if err != nil {
+			t.Fatalf("BuildGraph(%q) error = %v, want nil", childRoot, err)
+		}
+		if _, err := graph.Write(built.Graph, outDir); err != nil {
+			t.Fatalf("Write(BuildGraph(%q), %q) error = %v, want nil", childRoot, outDir, err)
+		}
+		if err := graph.WriteFingerprint(outDir, "go-v1", built.Fingerprints, nil); err != nil {
+			t.Fatalf("WriteFingerprint(%q, go-v1, files, nil) error = %v, want nil", outDir, err)
+		}
+		if err := os.WriteFile(sourcePath, []byte("export function updated() {}\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) after build error = %v, want nil", sourcePath, err)
+		}
+	}
+
+	got := mcpCall(root, contextDir, "", "graft_repo_map", map[string]any{})
+	if got.isError {
+		t.Fatalf("mcpCall(%q, %q, graft_repo_map) = %#v, want success", root, contextDir, got)
+	}
+	wantNote := "[graft] refreshed the graph (? files changed) before answering — refreshed api, web (2 files changed) before answering\n"
+	if !strings.HasPrefix(got.text, wantNote) {
+		t.Errorf("mcpCall(%q, %q, graft_repo_map) text = %q, want workspace refresh note %q", root, contextDir, got.text, wantNote)
+	}
+	for _, child := range []string{"api", "web"} {
+		outDir := filepath.Join(root, child, "graft")
+		wiring, err := graph.Read(graph.WiringPath(outDir))
+		if err != nil {
+			t.Fatalf("Read(%q) after mcpCall error = %v, want nil", graph.WiringPath(outDir), err)
+		}
+		if !slices.ContainsFunc(wiring.Nodes, func(node graph.NodeV1) bool { return node.Name == "updated" }) {
+			t.Errorf("mcpCall(%q, %q, graft_repo_map) graph nodes for %q = %v, want refreshed updated function", root, contextDir, child, wiring.Nodes)
+		}
+	}
+}
+
+func TestMCPWorkspaceRoutesContract(t *testing.T) {
+	t.Setenv("GRAFT_NO_REFRESH", "false")
+	root, contextDir := workspaceMapFixture(t)
+	for _, tt := range []struct {
+		name        string
+		tool        string
+		args        map[string]any
+		wantError   bool
+		wantPhrases []string
+	}{
+		{
+			name:        "ask federates through the workspace CLI",
+			tool:        "graft_find_code",
+			args:        map[string]any{"query": "worker"},
+			wantPhrases: []string{"api/", "web/"},
+		},
+		{
+			name:        "call tracing resolves and labels children",
+			tool:        "graft_trace_calls",
+			args:        map[string]any{"symbol": "worker"},
+			wantPhrases: []string{"## api/", "## web/", "2 of 3 workspace repos have graphs; run graft build to cover missing"},
+		},
+		{
+			name:        "call tracing reports a missing symbol across children",
+			tool:        "graft_trace_calls",
+			args:        map[string]any{"symbol": "absent"},
+			wantError:   true,
+			wantPhrases: []string{"no symbol \"absent\" in any of the 2 workspace repo(s)", "2 of 3 workspace repos have graphs; run graft build to cover missing"},
+		},
+		{
+			name:        "grep merges child paths and coverage",
+			tool:        "graft_find_all",
+			args:        map[string]any{"pattern": "worker"},
+			wantPhrases: []string{"api/src/app.ts", "web/src/app.ts", "2 of 3 workspace repos have graphs; run graft build to cover missing"},
+		},
+		{
+			name:        "grep preserves invalid pattern errors",
+			tool:        "graft_find_all",
+			args:        map[string]any{"pattern": "["},
+			wantError:   true,
+			wantPhrases: []string{"invalid pattern"},
+		},
+		{
+			name: "freshness reports each child without repairing it",
+			tool: "graft_check_freshness",
+			wantPhrases: []string{
+				"workspace check — 3 repo(s)", "api/: OK", "web/: OK", "missing/: not built (run graft build)",
+				"2 of 3 workspace repos have graphs; run graft build to cover missing",
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mcpCall(root, contextDir, "", tt.tool, tt.args)
+			if got.isError != tt.wantError {
+				t.Errorf("mcpCall(%q, %q, %q, %#v) isError = %t, want %t; text = %q", root, contextDir, tt.tool, tt.args, got.isError, tt.wantError, got.text)
+			}
+			for _, phrase := range tt.wantPhrases {
+				if !strings.Contains(got.text, phrase) {
+					t.Errorf("mcpCall(%q, %q, %q, %#v) text = %q, want it to contain %q", root, contextDir, tt.tool, tt.args, got.text, phrase)
+				}
+			}
+		})
+	}
+}
+
+func TestMCPWorkspaceFreshnessDoesNotRepairDrift(t *testing.T) {
+	t.Setenv("GRAFT_NO_REFRESH", "false")
+	root, contextDir := workspaceMapFixture(t)
+	apiSource := filepath.Join(root, "api", "src", "app.ts")
+	if err := os.WriteFile(apiSource, []byte("export function changed() {}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v, want nil", apiSource, err)
+	}
+
+	got := mcpCall(root, contextDir, "", "graft_check_freshness", map[string]any{})
+	if got.isError || !strings.Contains(got.text, "api/: STALE (1 added, 1 removed, 1 changed)") || !strings.Contains(got.text, "web/: OK") {
+		t.Errorf("mcpCall(%q, %q, graft_check_freshness) = %#v, want stale api and clean web", root, contextDir, got)
+	}
+	wiring, err := graph.Read(graph.WiringPath(filepath.Join(root, "api", "graft")))
+	if err != nil {
+		t.Fatalf("Read(%q) after freshness check error = %v, want nil", graph.WiringPath(filepath.Join(root, "api", "graft")), err)
+	}
+	if !slices.ContainsFunc(wiring.Nodes, func(node graph.NodeV1) bool { return node.Name == "worker" }) {
+		t.Errorf("mcpCall(%q, %q, graft_check_freshness) api nodes = %v, want stale worker graph preserved", root, contextDir, wiring.Nodes)
 	}
 }
 

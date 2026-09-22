@@ -2,7 +2,10 @@
 
 Date: 2026-09-22
 
-Status: approved design; implementation in progress (source discovery, fingerprint foundation, and TypeScript/JavaScript graph extraction).
+Status: approved design; implementation in progress (source discovery,
+TypeScript/JavaScript graph extraction, native refresh, workspace federation,
+cached MCP update notices, background brain-rule cache refresh, and brain-rule
+host-file refresh). Wiring replay and the complete differential matrix remain.
 
 ## Goal
 
@@ -12,8 +15,7 @@ slice:
 - freshness and source drift detection;
 - graph refresh and git-worktree seeding;
 - workspace federation;
-- MCP startup upkeep;
-- local telemetry queueing and background flush.
+- MCP startup upkeep.
 
 The public contract remains unchanged: MCP JSON-RPC messages, tool names and
 aliases, JSON fields, human-readable text, diagnostics, protocol notifications,
@@ -103,38 +105,22 @@ Native host target writers will preserve existing paths, scopes, formats, and
 `--no-global`, `--no-mcp`, `--no-hooks`, and `--no-statusline` choices. A
 failure to rewrite wiring is swallowed and does not fail MCP startup.
 
-### Telemetry
-
-Add a native, privacy-preserving telemetry package:
-
-- the existing event/property allowlist and closed value enums;
-- `DO_NOT_TRACK`, CI, build-key, and persisted user-choice gates;
-- random install and per-repository identifiers;
-- bounded NDJSON queue with newest-event retention and atomic drain/requeue;
-- detached background flush with the same TTL and 4xx/5xx retry policy;
-- `query` tracking from MCP after a tool response is formed;
-- no source paths, symbols, error messages, raw counts, or network waits in the
-  request path.
-
-Telemetry failures are always invisible to the MCP caller.
-
 ## MCP request flow
 
 `runMCP` will keep its existing JSON-RPC boundary and add the following order:
 
 1. resolve the repository and context directory;
-2. run boot upkeep once and start the detached telemetry flush attempt;
+2. run boot upkeep once;
 3. parse each request, preserving notification behavior and parse errors;
 4. canonicalize legacy tool aliases;
 5. skip refresh only for `graft_check_freshness` and explicit refresh-disabled
    conditions;
 6. refresh one graph or workspace children before retrieval;
 7. dispatch to the native single-graph or federated query core;
-8. record the allowlisted MCP query event;
-9. emit exactly one JSON-RPC response on stdout.
+8. emit exactly one JSON-RPC response on stdout.
 
 Any unexpected internal error is converted to the existing soft tool error.
-The process must not write diagnostics or telemetry data to stdout.
+The process must not write diagnostics to stdout.
 
 ## Error and compatibility policy
 
@@ -146,8 +132,7 @@ The process must not write diagnostics or telemetry data to stdout.
   unsupported-refresh wording where the TypeScript contract defines it.
 - Use atomic writes for graph and sidecar replacement; remove temporary files
   on failure.
-- Never make a failed refresh, upkeep action, telemetry write, or telemetry
-  flush fail a query or handshake.
+- Never make a failed refresh or upkeep action fail a query or handshake.
 - Preserve existing GraphV1 JSON field names and optional/null behavior.
 
 ## Implementation order
@@ -162,9 +147,8 @@ contract is shared.
 3. Add graph check, refresh locking, worktree seeding, and graph-only rebuild.
 4. Add workspace loading, child refresh, federated query/report functions.
 5. Add upkeep cache/stamp behavior and native host target writers.
-6. Add telemetry gates, queue, identity, and detached flush.
-7. Wire the MCP server and add the complete TS↔Go differential matrix.
-8. Record verified commands and remaining language-adapter gaps in
+6. Wire the MCP server and add the complete TS↔Go differential matrix.
+7. Record verified commands and remaining language-adapter gaps in
    `docs/go-migration-plan.md`; do not remove the TypeScript implementation.
 
 ## Validation
@@ -174,7 +158,7 @@ Required evidence for the slice:
 - Go contract tests for every new package and failure path;
 - TS↔Go comparison of JSON, human output, exit/error state, stderr, and
   side-effects for clean, invalid, missing, stale, drifted, added, removed,
-  worktree, workspace, busy-lock, and telemetry-disabled cases;
+  worktree, workspace, and busy-lock cases;
 - `npm test`;
 - `go test -race ./...`;
 - `go build ./...`;
@@ -184,8 +168,7 @@ Required evidence for the slice:
   checks with pre-existing findings separated from new findings.
 
 The migration slice is complete only when the native path passes its acceptance
-matrix. Compilation alone does not mark refresh, federation, upkeep, or
-telemetry complete.
+matrix. Compilation alone does not mark refresh, federation, or upkeep complete.
 
 ## Non-goals
 
@@ -195,4 +178,3 @@ telemetry complete.
 - changing public tool names or adding new MCP tools;
 - implementing Python, Go, or other language extractors before the planned
   TypeScript/JavaScript adapter slice is verified;
-- sending telemetry synchronously from MCP requests.

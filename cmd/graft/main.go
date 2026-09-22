@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,8 +12,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/NanoNets/context-graph-engine/internal/upkeep"
 )
 
 type callersOptions struct {
@@ -81,6 +84,22 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if (len(args) == 2 || len(args) == 3) && args[0] == "_brain-refresh" {
+		contextDir := ""
+		if len(args) == 3 {
+			contextDir = args[2]
+		}
+		_ = upkeep.RefreshBrainRules(context.Background(), args[1], contextDir, time.Now()) // keep cache on refresh errors
+		return 0
+	}
+	if len(args) == 1 && args[0] == "_update-check" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return 0
+		}
+		upkeep.RefreshUpdateCache(home, time.Now())
+		return 0
+	}
 	opts, err := parseArgs(args)
 	if err != nil {
 		writeDiagnostic(stderr, "%v\n", err)

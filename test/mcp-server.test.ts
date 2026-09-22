@@ -231,6 +231,79 @@ test('Go MCP retrieval server matches TypeScript tool contracts', async () => {
   }
 });
 
+test('Go MCP refreshes workspace child graphs like TypeScript', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'graft-mcp-workspace-refresh-'));
+  mkdirSync(join(dir, 'graft'), { recursive: true });
+  writeFileSync(join(dir, 'graft', 'workspace.json'), '{"version":1,"children":["api","web"]}\n');
+  for (const child of ['api', 'web']) {
+    const childDir = join(dir, child);
+    mkdirSync(join(childDir, 'src'), { recursive: true });
+    writeFileSync(join(childDir, 'src', 'app.ts'), 'export function before() {}\n');
+    await buildGraph(childDir);
+  }
+
+  const binary = builtGoCLI();
+  const call = {
+    jsonrpc: '2.0', id: 1, method: 'tools/call',
+    params: { name: 'graft_repo_map', arguments: { max_dirs: 2 } },
+  };
+  const primed = await rpcGo(binary, [call], dir, 1);
+  assert.equal(primed[0]?.result.isError, false, 'native build primes each child fingerprint');
+
+  for (const child of ['api', 'web']) {
+    writeFileSync(join(dir, child, 'src', 'app.ts'), 'export function refreshed() {}\n');
+  }
+  const typescript = await rpc([call], dir, 1);
+  const go = await rpcGo(binary, [call], dir, 1);
+  assert.equal(go.length, 1);
+  assert.equal(go[0]?.result.isError, typescript[0]?.result.isError, 'isError matches for workspace refresh');
+  assert.equal(go[0]?.result.content[0]?.text, typescript[0]?.result.content[0]?.text, 'workspace refresh output matches');
+});
+
+test('Go MCP federates workspace tools like TypeScript', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'graft-mcp-workspace-tools-'));
+  mkdirSync(join(dir, 'graft'), { recursive: true });
+  writeFileSync(join(dir, 'graft', 'workspace.json'), '{"version":1,"children":["api","missing","web"]}\n');
+  for (const child of ['api', 'web']) {
+    const childDir = join(dir, child);
+    mkdirSync(join(childDir, 'src'), { recursive: true });
+    writeFileSync(
+      join(childDir, 'src', 'app.ts'),
+      'export function root() {\n  return leaf();\n}\nexport function leaf() {\n  return 1;\n}\n',
+    );
+    await buildGraph(childDir);
+  }
+
+  const binary = builtGoCLI();
+  await rpcGo(
+    binary,
+    [{ jsonrpc: '2.0', id: 0, method: 'tools/call', params: { name: 'graft_repo_map', arguments: {} } }],
+    dir,
+    1,
+  );
+  const messages = [
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'graft_find_code', arguments: { query: 'leaf' } } },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'graft_trace_calls', arguments: { symbol: 'leaf' } } },
+    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'graft_find_all', arguments: { pattern: 'return' } } },
+    { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'graft_repo_map', arguments: { max_dirs: 2 } } },
+    { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'graft_check_freshness', arguments: {} } },
+  ];
+  const typescript = await rpc(messages, dir, messages.length);
+  const go = await rpcGo(binary, messages, dir, messages.length);
+  const byID = (responses: any[]) => new Map(responses.map((response) => [response.id, response]));
+  const tsByID = byID(typescript);
+  const goByID = byID(go);
+  assert.equal(go.length, typescript.length);
+  for (const id of [1, 2, 3, 4, 5]) {
+    assert.equal(goByID.get(id)?.result.isError, tsByID.get(id)?.result.isError, `workspace isError mismatch for ${id}`);
+    assert.equal(
+      goByID.get(id)?.result.content[0]?.text,
+      tsByID.get(id)?.result.content[0]?.text,
+      `workspace text mismatch for ${id}`,
+    );
+  }
+});
+
 test('Go MCP preserves legacy aliases and soft error contracts', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'graft-mcp-errors-'));
   mkdirSync(join(dir, 'src'), { recursive: true });

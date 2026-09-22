@@ -168,6 +168,49 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 	return RefreshResult{Refreshed: true, Drift: drift, Note: note}
 }
 
+// EnsureFreshChildren refreshes changed child graphs in workspace order.
+// Each child uses its own <root>/<child>/graft directory; unsafe or missing
+// child directories are skipped.
+func EnsureFreshChildren(root string, children []string) RefreshResult {
+	refreshedIn := make([]string, 0, len(children))
+	notes := make([]string, 0)
+	files := 0
+	for _, child := range children {
+		if !filepath.IsLocal(child) || child == "." || filepath.Base(child) != child {
+			continue
+		}
+		if info, err := os.Lstat(filepath.Join(root, child)); err != nil || !info.IsDir() {
+			continue
+		}
+		result := EnsureFreshGraph(filepath.Join(root, child), RefreshOptions{})
+		if !result.Refreshed {
+			if result.Note != "" {
+				notes = append(notes, child+"/: "+result.Note)
+			}
+			continue
+		}
+		refreshedIn = append(refreshedIn, child)
+		if result.Drift != nil {
+			files += len(result.Drift.Changed) + len(result.Drift.Added) + len(result.Drift.Removed)
+		}
+	}
+	if len(refreshedIn) == 0 {
+		return RefreshResult{Note: strings.Join(notes, "; ")}
+	}
+	count, plural := "?", "s"
+	if files > 0 {
+		count = fmt.Sprint(files)
+	}
+	if files == 1 {
+		plural = ""
+	}
+	note := fmt.Sprintf("refreshed %s (%s file%s changed) before answering", strings.Join(refreshedIn, ", "), count, plural)
+	if len(notes) > 0 {
+		note += "; " + strings.Join(notes, "; ")
+	}
+	return RefreshResult{Refreshed: true, Note: note}
+}
+
 // RefreshNote formats a refresh result for a CLI or MCP response.
 func RefreshNote(result RefreshResult) string {
 	if !result.Refreshed {

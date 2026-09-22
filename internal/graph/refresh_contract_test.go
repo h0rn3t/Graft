@@ -51,6 +51,111 @@ func TestEnsureFreshGraphRefreshesDriftContract(t *testing.T) {
 	}
 }
 
+func TestEnsureFreshChildrenContract(t *testing.T) {
+	type repoFixture struct {
+		path, before, after, wantName string
+	}
+	for _, tt := range []struct {
+		name        string
+		children    []string
+		noRefresh   string
+		wantNote    string
+		wantRefresh bool
+		symlink     string
+		symlinkTo   string
+		repos       []repoFixture
+	}{
+		{name: "nil children", noRefresh: "false"},
+		{
+			name: "clean child", noRefresh: "false", children: []string{"api"},
+			repos: []repoFixture{{path: "api", before: "export function ready() {}\n", wantName: "ready"}},
+		},
+		{
+			name: "one changed child", noRefresh: "false", children: []string{"api"}, wantRefresh: true,
+			wantNote: "[graft] refreshed the graph (? files changed) before answering — refreshed api (1 file changed) before answering",
+			repos:    []repoFixture{{path: "api", before: "export function before() {}\n", after: "export function after() {}\n", wantName: "after"}},
+		},
+		{
+			name: "multiple changed children retain order", noRefresh: "false", children: []string{"web", "api"}, wantRefresh: true,
+			wantNote: "[graft] refreshed the graph (? files changed) before answering — refreshed web, api (2 files changed) before answering",
+			repos: []repoFixture{
+				{path: "web", before: "export function before() {}\n", after: "export function after() {}\n", wantName: "after"},
+				{path: "api", before: "export function before() {}\n", after: "export function after() {}\n", wantName: "after"},
+			},
+		},
+		{
+			name: "environment disabled", noRefresh: "1", children: []string{"api"},
+			repos: []repoFixture{{path: "api", before: "export function before() {}\n", after: "export function after() {}\n", wantName: "before"}},
+		},
+		{
+			name: "parent traversal rejected", noRefresh: "false", children: []string{"../outside"},
+			repos: []repoFixture{{path: "../outside", before: "export function before() {}\n", after: "export function after() {}\n", wantName: "before"}},
+		},
+		{
+			name: "symlink child rejected", noRefresh: "false", children: []string{"outside"}, symlink: "outside", symlinkTo: "../outside",
+			repos: []repoFixture{{path: "../outside", before: "export function before() {}\n", after: "export function after() {}\n", wantName: "before"}},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GRAFT_NO_REFRESH", tt.noRefresh)
+			t.Setenv("GRAFT_REFRESH", "hash")
+			base := t.TempDir()
+			root := filepath.Join(base, "workspace")
+			if err := os.MkdirAll(root, 0o755); err != nil {
+				t.Fatalf("MkdirAll(%q) error = %v, want nil", root, err)
+			}
+			for _, repo := range tt.repos {
+				repoRoot := filepath.Join(root, repo.path)
+				outDir := filepath.Join(repoRoot, "graft")
+				options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts"}}
+				writeRefreshSource(t, repoRoot, "src/app.ts", repo.before)
+				buildAndWriteRefreshGraph(t, repoRoot, options)
+				if repo.after != "" {
+					writeRefreshSource(t, repoRoot, "src/app.ts", repo.after)
+				}
+			}
+			if tt.symlink != "" {
+				if err := os.Symlink(tt.symlinkTo, filepath.Join(root, tt.symlink)); err != nil {
+					t.Skipf("Symlink(%q, %q) error = %v", tt.symlinkTo, filepath.Join(root, tt.symlink), err)
+				}
+			}
+
+			got := EnsureFreshChildren(root, tt.children)
+			if got.Refreshed != tt.wantRefresh || RefreshNote(got) != tt.wantNote {
+				t.Errorf("EnsureFreshChildren(%q, %q) = %#v, RefreshNote = %q; want Refreshed = %t, RefreshNote = %q", root, tt.children, got, RefreshNote(got), tt.wantRefresh, tt.wantNote)
+			}
+			for _, repo := range tt.repos {
+				outDir := filepath.Join(root, repo.path, "graft")
+				wiring, err := Read(WiringPath(outDir))
+				if err != nil {
+					t.Fatalf("Read(%q) after EnsureFreshChildren error = %v, want nil", WiringPath(outDir), err)
+				}
+				if !slices.ContainsFunc(wiring.Nodes, func(node NodeV1) bool { return node.Name == repo.wantName }) {
+					t.Errorf("EnsureFreshChildren(%q, %q) graph nodes = %v, want %q", root, tt.children, wiring.Nodes, repo.wantName)
+				}
+			}
+		})
+	}
+}
+
+func TestEnsureFreshChildrenPreservesChildLimitationsContract(t *testing.T) {
+	t.Setenv("GRAFT_NO_REFRESH", "false")
+	t.Setenv("GRAFT_REFRESH", "hash")
+	root := t.TempDir()
+	childRoot := filepath.Join(root, "api")
+	outDir := filepath.Join(childRoot, "graft")
+	options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".py"}}
+	writeRefreshSource(t, childRoot, "src/app.ts", "export function ready() {}\n")
+	buildAndWriteRefreshGraph(t, childRoot, options)
+	writeRefreshSource(t, childRoot, "src/tool.py", "def unsupported():\n    pass\n")
+
+	got := EnsureFreshChildren(root, []string{"api"})
+	note := RefreshNote(got)
+	if got.Refreshed || !strings.Contains(note, "api/: graph refresh skipped: native graph cannot index 1 unsupported or unreadable source file(s), including \"src/tool.py\"") {
+		t.Errorf("EnsureFreshChildren(%q, [api]) = %#v, RefreshNote = %q, want child limitation without refresh", root, got, note)
+	}
+}
+
 func TestEnsureFreshGraphNoOpContract(t *testing.T) {
 	root := t.TempDir()
 	outDir := filepath.Join(root, "graft")

@@ -3,12 +3,16 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
 )
 
 func TestRunCallersContract(t *testing.T) {
@@ -150,15 +154,24 @@ func workspaceMapFixture(t *testing.T) (root, contextDir string) {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", filepath.Join(contextDir, "workspace.json"), err)
 	}
 	for _, child := range []string{"api", "web"} {
-		file := graphNode("src/app.ts", "app.ts", "file", "src/app.ts")
-		symbol := graphNode("src/app.ts#worker", "worker", "function", "src/app.ts")
-		wiring := graph.GraphV1{
-			Meta:  graph.GraphMeta{Version: 1, NodeCount: 2, EdgeCount: 1, Languages: []string{"typescript"}},
-			Nodes: []graph.NodeV1{file, symbol},
-			Edges: []graph.EdgeV1{{Source: file.ID, Target: symbol.ID, Relation: "contains", Confidence: "extracted"}},
+		childRoot := filepath.Join(root, child)
+		sourcePath := filepath.Join(childRoot, "src", "app.ts")
+		if err := os.MkdirAll(filepath.Dir(sourcePath), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q) error = %v, want nil", filepath.Dir(sourcePath), err)
 		}
-		if _, err := graph.Write(wiring, filepath.Join(root, child, "graft")); err != nil {
-			t.Fatalf("graph.Write(%q) error = %v, want nil", filepath.Join(root, child), err)
+		if err := os.WriteFile(sourcePath, []byte("export function worker() {}\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v, want nil", sourcePath, err)
+		}
+		outDir := filepath.Join(childRoot, "graft")
+		built, err := graph.BuildGraph(childRoot, sourcefiles.Options{OutDir: outDir})
+		if err != nil {
+			t.Fatalf("BuildGraph(%q) error = %v, want nil", childRoot, err)
+		}
+		if _, err := graph.Write(built.Graph, outDir); err != nil {
+			t.Fatalf("Write(BuildGraph(%q), %q) error = %v, want nil", childRoot, outDir, err)
+		}
+		if err := graph.WriteFingerprint(outDir, "go-v1", built.Fingerprints, nil); err != nil {
+			t.Fatalf("WriteFingerprint(%q, go-v1, files, nil) error = %v, want nil", outDir, err)
 		}
 	}
 	return root, contextDir
@@ -629,4 +642,141 @@ func skeletonAmbiguousFixture(t *testing.T) string {
 		t.Fatalf("graph.Write(%q) error = %v", dir, err)
 	}
 	return dir
+}
+
+func TestRunBrainRefreshContract(t *testing.T) {
+	type observedRequest struct {
+		path          string
+		authorization string
+	}
+	initial := []byte(`{"brainId":"brain/1","fetchedAt":1,"checkedAt":2,"rules":[{"ruleId":"old","symbol":"old#Symbol","fingerprint":"old-hash","rule":"old rule"}]}`)
+	for _, tt := range []struct {
+		name         string
+		config       bool
+		status       int
+		response     string
+		initialCache []byte
+		wantCache    bool
+		wantRequest  bool
+		wantRule     graph.BrainRule
+	}{
+		{
+			name:   "fetches and stores brain rules",
+			config: true, status: http.StatusOK,
+			response:  `{"anchors":[{"rule_id":"rule-1","symbol":"src/app.ts#Run","fingerprint":"body-hash","rule":"keep errors wrapped","source_url":"https://example.com/commit/1"}]}`,
+			wantCache: true, wantRequest: true,
+			wantRule: graph.BrainRule{RuleID: "rule-1", Symbol: "src/app.ts#Run", Fingerprint: "body-hash", Rule: "keep errors wrapped", SourceURL: "https://example.com/commit/1"},
+		},
+		{
+			name:   "empty anchors are cached as an empty array",
+			config: true, status: http.StatusOK, response: `{"anchors":[]}`,
+			wantCache: true, wantRequest: true,
+		},
+		{
+			name:   "upstream failure preserves the old cache",
+			config: true, status: http.StatusServiceUnavailable, response: `unavailable`,
+			initialCache: initial, wantCache: true, wantRequest: true,
+		},
+		{
+			name:   "invalid response preserves the old cache",
+			config: true, status: http.StatusOK, response: `{"anchors":{}}`,
+			initialCache: initial, wantCache: true, wantRequest: true,
+		},
+		{
+			name:   "unlinked repository is a silent no-op",
+			status: http.StatusOK, response: `{"anchors":[]}`,
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			contextDir := filepath.Join(root, "graft")
+			cachePath := filepath.Join(contextDir, ".cache", "brain-rules.json")
+			if tt.config {
+				if err := os.MkdirAll(filepath.Join(root, ".graft"), 0o755); err != nil {
+					t.Fatalf("MkdirAll(%q) error = %v, want nil", filepath.Join(root, ".graft"), err)
+				}
+				config := []byte(`{"brain":{"brainId":"brain/1","token":"test-token","baseUrl":"https://configured.invalid"}}`)
+				if err := os.WriteFile(filepath.Join(root, ".graft", "config.json"), config, 0o644); err != nil {
+					t.Fatalf("WriteFile(%q) error = %v, want nil", filepath.Join(root, ".graft", "config.json"), err)
+				}
+			}
+			if tt.initialCache != nil {
+				if err := os.MkdirAll(filepath.Dir(cachePath), 0o755); err != nil {
+					t.Fatalf("MkdirAll(%q) error = %v, want nil", filepath.Dir(cachePath), err)
+				}
+				if err := os.WriteFile(cachePath, tt.initialCache, 0o644); err != nil {
+					t.Fatalf("WriteFile(%q) error = %v, want nil", cachePath, err)
+				}
+			}
+			requests := make(chan observedRequest, 1)
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests <- observedRequest{path: r.URL.EscapedPath(), authorization: r.Header.Get("Authorization")}
+				w.WriteHeader(tt.status)
+				if _, err := io.WriteString(w, tt.response); err != nil {
+					t.Errorf("WriteString(response) error = %v, want nil", err)
+				}
+			}))
+			t.Cleanup(server.Close)
+			t.Setenv("GRAFT_BRAIN_ID", "")
+			t.Setenv("GRAFT_BRAIN_TOKEN", "")
+			t.Setenv("GRAFT_BRAIN_URL", server.URL)
+			t.Setenv("GRAFT_DIR", "")
+
+			var stdout, stderr bytes.Buffer
+			if got := run([]string{"_brain-refresh", root, contextDir}, &stdout, &stderr); got != 0 {
+				t.Errorf("run(_brain-refresh %q %q) = %d, want 0; stderr = %q", root, contextDir, got, stderr.String())
+			}
+			if stdout.Len() != 0 || stderr.Len() != 0 {
+				t.Errorf("run(_brain-refresh %q %q) output = %q, %q, want empty", root, contextDir, stdout.String(), stderr.String())
+			}
+			if tt.wantRequest {
+				select {
+				case got := <-requests:
+					if got.path != "/api/public/brains/brain%2F1/rules/anchors" || got.authorization != "Bearer test-token" {
+						t.Errorf("brain refresh request = %#v, want encoded brain path and bearer token", got)
+					}
+				default:
+					t.Errorf("run(_brain-refresh %q %q) made no request, want one", root, contextDir)
+				}
+			} else {
+				select {
+				case got := <-requests:
+					t.Errorf("run(_brain-refresh %q %q) request = %#v, want none", root, contextDir, got)
+				default:
+				}
+			}
+			data, err := os.ReadFile(cachePath)
+			if !tt.wantCache {
+				if !os.IsNotExist(err) {
+					t.Errorf("ReadFile(%q) error = %v, want not exist", cachePath, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("ReadFile(%q) error = %v, want nil", cachePath, err)
+			}
+			if tt.initialCache != nil {
+				if !bytes.Equal(data, tt.initialCache) {
+					t.Errorf("brain cache after failed refresh = %s, want unchanged %s", data, tt.initialCache)
+				}
+				return
+			}
+			var cache struct {
+				Rules     []graph.BrainRule `json:"rules"`
+				FetchedAt int64             `json:"fetchedAt"`
+			}
+			if err := json.Unmarshal(data, &cache); err != nil {
+				t.Fatalf("json.Unmarshal(brain cache) error = %v, want nil", err)
+			}
+			if cache.FetchedAt <= 0 {
+				t.Errorf("brain cache fetchedAt = %d, want positive timestamp", cache.FetchedAt)
+			}
+			if tt.wantRule.RuleID != "" && (len(cache.Rules) != 1 || cache.Rules[0] != tt.wantRule) {
+				t.Errorf("brain cache rules = %#v, want [%#v]", cache.Rules, tt.wantRule)
+			}
+			if tt.wantRule.RuleID == "" && (!strings.Contains(string(data), `"rules":[]`) || len(cache.Rules) != 0) {
+				t.Errorf("brain cache = %s, want an encoded empty rules array", data)
+			}
+		})
+	}
 }
