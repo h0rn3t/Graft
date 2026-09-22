@@ -98,6 +98,74 @@ func TestMCPStartupUpkeepIncludesCachedVersionNudge(t *testing.T) {
 	}
 }
 
+func TestMCPStartupReconcilesGeminiWiringContract(t *testing.T) {
+	root := t.TempDir()
+	contextDir := filepath.Join(root, ".graft-context")
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("GRAFT_BRAIN_ID", "")
+	t.Setenv("GRAFT_BRAIN_TOKEN", "")
+	t.Setenv("GRAFT_MCP_NPX", "1")
+	geminiPath := filepath.Join(root, "GEMINI.md")
+	const userText = "# User notes\n\n<!-- graft:start -->\nold instructions\n<!-- graft:end -->\n\nKeep this.\n"
+	if err := os.WriteFile(geminiPath, []byte(userText), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v, want nil", geminiPath, err)
+	}
+	settingsPath := filepath.Join(root, ".gemini", "settings.json")
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v, want nil", filepath.Dir(settingsPath), err)
+	}
+	if err := os.WriteFile(settingsPath, []byte(`{"theme":"dark"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v, want nil", settingsPath, err)
+	}
+	stampPath := filepath.Join(contextDir, ".cache", "wiring-stamp.json")
+	if err := os.MkdirAll(filepath.Dir(stampPath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v, want nil", filepath.Dir(stampPath), err)
+	}
+	if err := os.WriteFile(stampPath, []byte(`{"version":"1.0.0","hosts":["gemini"],"opts":{"global":false,"mcp":true,"hooks":false,"statusline":false},"at":"old"}`), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v, want nil", stampPath, err)
+	}
+
+	got := mcpStartupInstructions(root, contextDir, "2.0.0")
+	const note = "· graft refreshed this repo's agent wiring (written by 1.0.0, now 2.0.0): gemini."
+	if !strings.HasPrefix(got, note+"\n\n"+mcpInstructionsText) {
+		t.Errorf("mcpStartupInstructions(%q, %q, %q) = %q, want refresh note before MCP instructions", root, contextDir, "2.0.0", got)
+	}
+	gemini, err := os.ReadFile(geminiPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) after startup error = %v, want nil", geminiPath, err)
+	}
+	if !strings.HasPrefix(string(gemini), "# User notes\n\n<!-- graft:start -->\n## Graft — repo context graph\n") || !strings.HasSuffix(string(gemini), "\nKeep this.\n") {
+		t.Errorf("mcpStartupInstructions(%q, %q, %q) GEMINI.md = %q, want refreshed Graft section with user text retained", root, contextDir, "2.0.0", gemini)
+	}
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) after startup error = %v, want nil", settingsPath, err)
+	}
+	var settings map[string]any
+	if err := json.Unmarshal(data, &settings); err != nil {
+		t.Fatalf("Unmarshal(%q) after startup error = %v, want nil", settingsPath, err)
+	}
+	servers, ok := settings["mcpServers"].(map[string]any)
+	entry, entryOK := servers["graft"].(map[string]any)
+	if !ok || !entryOK || entry["command"] != "npx" {
+		t.Errorf("mcpStartupInstructions(%q, %q, %q) mcpServers.graft = %v, want NPX server entry", root, contextDir, "2.0.0", settings["mcpServers"])
+	}
+	var stamp struct {
+		Version string `json:"version"`
+	}
+	data, err = os.ReadFile(stampPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%q) after startup error = %v, want nil", stampPath, err)
+	}
+	if err := json.Unmarshal(data, &stamp); err != nil {
+		t.Fatalf("Unmarshal(%q) after startup error = %v, want nil", stampPath, err)
+	}
+	if stamp.Version != "2.0.0" {
+		t.Errorf("mcpStartupInstructions(%q, %q, %q) stamp version = %q, want %q", root, contextDir, "2.0.0", stamp.Version, "2.0.0")
+	}
+}
+
 func TestRunMCPPreservesNDJSONBoundary(t *testing.T) {
 	dir := t.TempDir()
 	input := strings.Join([]string{

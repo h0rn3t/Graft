@@ -167,17 +167,7 @@ func writeBrainSections(root, contextDir string, rules []graph.BrainRule, repoLa
 }
 
 func brainSectionTargets(root, contextDir string) []string {
-	var stamp *struct {
-		Hosts []string `json:"hosts"`
-	}
-	if data, err := os.ReadFile(filepath.Join(filepath.Dir(brainRulesCachePath(root, contextDir)), "wiring-stamp.json")); err == nil {
-		var decoded *struct {
-			Hosts []string `json:"hosts"`
-		}
-		if json.Unmarshal(data, &decoded) == nil {
-			stamp = decoded
-		}
-	}
+	stamp := readWiringStamp(filepath.Dir(brainRulesCachePath(root, contextDir)))
 	hosts := wiredBrainHostIDs(root)
 	if stamp != nil {
 		hosts = slices.Concat(stamp.Hosts, hosts)
@@ -284,56 +274,7 @@ func renderBrainSection(rules []graph.BrainRule, repoLabel string) string {
 }
 
 func upsertBrainSection(path, body string) error {
-	const start = "<!-- graft:brain:start -->"
-	const endMarker = "<!-- graft:brain:end -->"
-	block := start + "\n" + strings.TrimSpace(strings.ReplaceAll(body, "\r", "")) + "\n" + endMarker
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return err
-		}
-		return os.WriteFile(path, []byte(block+"\n"), 0o644)
-	}
-	if err != nil {
-		return err
-	}
-	text := string(data)
-	eol := "\n"
-	if strings.Contains(text, "\r\n") {
-		eol = "\r\n"
-	}
-	lines := strings.Split(strings.ReplaceAll(text, "\r\n", "\n"), "\n")
-	startIndex, endIndex := -1, -1
-	for index, line := range lines {
-		if strings.TrimSpace(line) == start {
-			startIndex = index
-			for markerIndex := index + 1; markerIndex < len(lines); markerIndex++ {
-				if strings.TrimSpace(lines[markerIndex]) == endMarker {
-					endIndex = markerIndex
-					break
-				}
-			}
-			break
-		}
-	}
-	if startIndex >= 0 && endIndex >= 0 {
-		if strings.Join(lines[startIndex:endIndex+1], "\n") == block {
-			return nil
-		}
-		updated := slices.Concat(
-			lines[:startIndex],
-			strings.Split(strings.ReplaceAll(block, "\n", eol), eol),
-			lines[endIndex+1:],
-		)
-		return os.WriteFile(path, []byte(strings.Join(updated, eol)), 0o644)
-	}
-	separator := eol + eol
-	if strings.HasSuffix(text, separator) {
-		separator = ""
-	} else if strings.HasSuffix(text, eol) {
-		separator = eol
-	}
-	return os.WriteFile(path, []byte(text+separator+strings.ReplaceAll(block, "\n", eol)+eol), 0o644)
+	return upsertManagedSection(path, body, "<!-- graft:brain:start -->", "<!-- graft:brain:end -->")
 }
 
 func brainRulesCacheStale(cache *brainRulesCache, now time.Time) bool {

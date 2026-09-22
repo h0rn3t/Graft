@@ -213,13 +213,21 @@ func newMCPServer(opts callersOptions, root, contextDir string) *mcp.Server {
 
 func mcpStartupInstructions(root, contextDir, current string) string {
 	now := time.Now()
+	lines := make([]string, 0, 2)
+	if note := upkeep.ReconcileWiring(root, contextDir, current, now,
+		func(repo string) ([]string, error) { return upkeep.WiredHostIDs(repo), nil },
+		func(repo string, hosts []string, options upkeep.WiringOptions) error {
+			return upkeep.RewriteWiring(context.Background(), repo, hosts, options)
+		},
+	); note != "" {
+		lines = append(lines, note)
+	}
 	upkeep.MaybeRefreshBrainRules(root, contextDir, now)
 	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return mcpInstructionsText
+	if err == nil && home != "" {
+		upkeep.MaybeRefreshInBackground(home, now)
+		lines = append(lines, upkeep.StartupLines(current, home)...)
 	}
-	upkeep.MaybeRefreshInBackground(home, now)
-	lines := upkeep.StartupLines(current, home)
 	if len(lines) == 0 {
 		return mcpInstructionsText
 	}
