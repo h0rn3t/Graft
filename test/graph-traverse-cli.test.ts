@@ -40,6 +40,27 @@ function runCli(args: string[]): { stdout: string; stderr: string; status: numbe
   }
 }
 
+function builtGoCli(): string {
+  const d = mkdtempSync(join(tmpdir(), 'graft-go-cli-'));
+  const binary = join(d, 'graft');
+  execFileSync('go', ['build', '-o', binary, './cmd/graft'], { stdio: 'pipe' });
+  return binary;
+}
+
+function runGoCli(binary: string, args: string[]): { stdout: string; stderr: string; status: number } {
+  try {
+    const stdout = execFileSync(binary, args, {
+      cwd: process.cwd(),
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    return { stdout, stderr: '', status: 0 };
+  } catch (err) {
+    const e = err as { stdout?: string; stderr?: string; status?: number };
+    return { stdout: e.stdout ?? '', stderr: e.stderr ?? '', status: e.status ?? 1 };
+  }
+}
+
 test('graft callers: happy path shows header and the caller hit', () => {
   const d = builtRepo();
   const r = runCli(['callers', 'add', d]);
@@ -213,4 +234,29 @@ test('graft callers: quotes the call site, and only where it is the right line',
   // --json is a data contract: the quote is a text-output nicety and must stay out.
   const json = JSON.parse(runCli(['callers', 'add', d, '--json']).stdout);
   assert.ok(!JSON.stringify(json).includes('return add(a, -b)'));
+});
+
+test('Go callers CLI matches TypeScript JSON, exit codes, and diagnostics', () => {
+  const d = builtRepo();
+  const binary = builtGoCli();
+  const cases = [
+    ['callers', 'add', d, '--json'],
+    ['callers', 'add', d, '--depth', '2', '--json'],
+    ['callers', 'missingSymbol', d],
+    ['callers', 'add', d, '--direction', 'sideways'],
+    ['callers', 'add', d, '--depth', 'banana'],
+    ['callers', 'add', mkdtempSync(join(tmpdir(), 'graft-go-cli-missing-'))],
+  ];
+
+  for (const args of cases) {
+    const typescript = runCli(args);
+    const go = runGoCli(binary, args);
+    assert.equal(go.status, typescript.status, `status mismatch for ${args.join(' ')}`);
+    assert.equal(go.stderr, typescript.stderr, `stderr mismatch for ${args.join(' ')}`);
+    if (go.status === 0) {
+      assert.deepEqual(JSON.parse(go.stdout), JSON.parse(typescript.stdout), `JSON mismatch for ${args.join(' ')}`);
+    } else {
+      assert.equal(go.stdout, typescript.stdout, `stdout mismatch for ${args.join(' ')}`);
+    }
+  }
 });

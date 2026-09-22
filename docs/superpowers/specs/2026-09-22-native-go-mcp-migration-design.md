@@ -2,7 +2,7 @@
 
 Date: 2026-09-22
 
-Status: approved design; implementation not started.
+Status: approved design; implementation in progress (source discovery, fingerprint foundation, and TypeScript/JavaScript graph extraction).
 
 ## Goal
 

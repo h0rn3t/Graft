@@ -28,6 +28,34 @@ async function rpc(messages: object[], dir: string, expected: number): Promise<a
   return responses;
 }
 
+function builtGoCLI(): string {
+  const dir = mkdtempSync(join(tmpdir(), 'graft-mcp-go-cli-'));
+  const binary = join(dir, 'graft');
+  execFileSync('go', ['build', '-o', binary, './cmd/graft'], { stdio: 'pipe' });
+  return binary;
+}
+
+async function rpcGo(binary: string, messages: object[], dir: string, expected: number): Promise<any[]> {
+  const child = spawn(binary, ['mcp', dir], { stdio: ['pipe', 'pipe', 'pipe'] });
+  const responses: any[] = [];
+  let buf = '';
+  child.stdout.on('data', (d) => {
+    buf += d.toString();
+    let i;
+    while ((i = buf.indexOf('\n')) !== -1) {
+      const line = buf.slice(0, i).trim();
+      buf = buf.slice(i + 1);
+      if (line) responses.push(JSON.parse(line));
+    }
+  });
+  for (const m of messages) child.stdin.write(`${JSON.stringify(m)}\n`);
+  const deadline = Date.now() + 15000;
+  while (responses.length < expected && Date.now() < deadline) await new Promise((r) => setTimeout(r, 50));
+  child.kill();
+  await once(child, 'exit').catch(() => {});
+  return responses;
+}
+
 test('initialize → tools/list → tools/call round-trip', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'graft-mcpsrv-'));
   const rs = await rpc(
@@ -152,4 +180,88 @@ test('unknown method returns -32601', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'graft-mcpsrv2-'));
   const rs = await rpc([{ jsonrpc: '2.0', id: 9, method: 'resources/list' }], dir, 1);
   assert.equal(rs[0].error.code, -32601);
+});
+
+test('Go MCP retrieval server matches TypeScript tool contracts', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'graft-mcp-parity-'));
+  mkdirSync(join(dir, 'src'), { recursive: true });
+  writeFileSync(
+    join(dir, 'src', 'math.ts'),
+    'export function add(a: number, b: number): number {\n  return a + b;\n}\n' +
+      'export function sub(a: number, b: number): number {\n  return add(a, -b);\n}\n',
+  );
+  execFileSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'build', dir], { stdio: 'pipe' });
+  const binary = builtGoCLI();
+  const messages = [
+    { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26' } },
+    { jsonrpc: '2.0', id: 2, method: 'tools/list' },
+    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'graft_find_code', arguments: { query: 'add numbers' } } },
+    { jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'graft_trace_calls', arguments: { symbol: 'add' } } },
+    { jsonrpc: '2.0', id: 5, method: 'tools/call', params: { name: 'graft_find_all', arguments: { pattern: 'add' } } },
+    { jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'graft_file_api', arguments: { file: 'src/math.ts' } } },
+    { jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name: 'graft_repo_map', arguments: {} } },
+    { jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'graft_ask', arguments: { query: 'add numbers' } } },
+    { jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'graft_check_freshness', arguments: {} } },
+  ];
+  const typescript = await rpc(messages, dir, 9);
+  // Prime the native extractor's one-time fingerprint before comparing steady-state tool output.
+  await rpcGo(binary, [
+    { jsonrpc: '2.0', id: 0, method: 'tools/call', params: { name: 'graft_repo_map', arguments: {} } },
+  ], dir, 1);
+  const go = await rpcGo(binary, messages, dir, 9);
+  const byID = (responses: any[]) => new Map(responses.map((response) => [response.id, response]));
+  const tsByID = byID(typescript);
+  const goByID = byID(go);
+
+  assert.equal(go.length, typescript.length);
+  assert.deepEqual(
+    goByID.get(2)?.result.tools.map((tool: { name: string }) => tool.name),
+    tsByID.get(2)?.result.tools.map((tool: { name: string }) => tool.name),
+  );
+  assert.equal(goByID.get(1)?.result.protocolVersion, tsByID.get(1)?.result.protocolVersion);
+  assert.equal(goByID.get(1)?.result.serverInfo.name, 'graft');
+  assert.match(goByID.get(1)?.result.serverInfo.version ?? '', /^\d+\.\d+\.\d+$/);
+  for (const id of [3, 4, 5, 6, 7, 8, 9]) {
+    assert.equal(goByID.get(id)?.result.isError, tsByID.get(id)?.result.isError, `isError mismatch for ${id}`);
+    assert.equal(
+      goByID.get(id)?.result.content[0]?.text,
+      tsByID.get(id)?.result.content[0]?.text,
+      `text mismatch for ${id}`,
+    );
+  }
+});
+
+test('Go MCP preserves legacy aliases and soft error contracts', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'graft-mcp-errors-'));
+  mkdirSync(join(dir, 'src'), { recursive: true });
+  writeFileSync(join(dir, 'src', 'math.ts'), 'export function add(a: number, b: number) { return a + b; }\n');
+  execFileSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', 'build', dir], { stdio: 'pipe' });
+  const binary = builtGoCLI();
+  const builtMessages = [
+    { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'graft_ask', arguments: { query: 'add' } } },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'nope', arguments: {} } },
+  ];
+  const tsBuilt = new Map((await rpc(builtMessages, dir, 2)).map((response) => [response.id, response]));
+  await rpcGo(binary, [
+    { jsonrpc: '2.0', id: 0, method: 'tools/call', params: { name: 'graft_repo_map', arguments: {} } },
+  ], dir, 1);
+  const goBuilt = new Map((await rpcGo(binary, builtMessages, dir, 2)).map((response) => [response.id, response]));
+  for (const id of [1, 2]) {
+    assert.equal(goBuilt.get(id)?.result.isError, tsBuilt.get(id)?.result.isError, `built isError mismatch for ${id}`);
+    assert.equal(goBuilt.get(id)?.result.content[0]?.text, tsBuilt.get(id)?.result.content[0]?.text, `built text mismatch for ${id}`);
+  }
+
+  const bare = mkdtempSync(join(tmpdir(), 'graft-mcp-errors-bare-'));
+  const bareMessages = [
+    { jsonrpc: '2.0', id: 1, method: 'tools/list' },
+    { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'graft_trace_calls', arguments: { symbol: 'add' } } },
+    { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'nope', arguments: {} } },
+  ];
+  const tsBare = new Map((await rpc(bareMessages, bare, 3)).map((response) => [response.id, response]));
+  const goBare = new Map((await rpcGo(binary, bareMessages, bare, 3)).map((response) => [response.id, response]));
+  assert.deepEqual(goBare.get(1)?.result.tools, tsBare.get(1)?.result.tools);
+  for (const id of [2, 3]) {
+    assert.equal(goBare.get(id)?.result.isError, tsBare.get(id)?.result.isError, `bare isError mismatch for ${id}`);
+    assert.equal(goBare.get(id)?.result.content[0]?.text, tsBare.get(id)?.result.content[0]?.text, `bare text mismatch for ${id}`);
+  }
 });

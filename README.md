@@ -64,6 +64,7 @@
 - [Visualize it](#visualize-it-graft-viz) (`graft viz`)
 - [Tested on your popular repos](#tested-on-your-popular-repos)
 - [Development](#development)
+- [Go migration](#go-migration)
 - [License](#license)
 
 ---
@@ -590,6 +591,24 @@ npm test
 
 npm run cli -- build --deep .      # run the CLI from source
 ```
+
+---
+
+## Go migration
+
+The Go 1.27 port is incremental so the existing TypeScript CLI keeps its
+behavior while each migrated slice is checked against the current contracts.
+The browser viewer remains TypeScript; the current Go track contains the CLI
+metadata/upgrade, graph-quality, and query slices (`callers`, `skeleton`,
+`grep`, `map`, and `ask`) with differential coverage against TypeScript.
+
+```bash
+go test ./...
+go run ./cmd/graph-quality <repo-dir-or-wiring.json> [--json] [--strict]
+```
+
+The TypeScript build remains the source of truth for commands that have not yet
+been ported.
 
 ---
 
