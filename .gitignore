@@ -40,3 +40,6 @@ openspec/
 # Local agent instructions.
 CLAUDE.md
 AGENTS.md
+
+# Native Go CLI binaries, built per platform by scripts/build-go.mjs.
+/bin/graft-*

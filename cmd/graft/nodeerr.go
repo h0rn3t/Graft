@@ -51,8 +51,7 @@ func newNodeFSError(err error, syscallName, path string) (*nodeFSError, bool) {
 func buildRootError(root string) (*nodeFSError, bool) {
 	info, err := os.Stat(root)
 	if err != nil {
-		var pathErr *fs.PathError
-		if errors.As(err, &pathErr) {
+		if pathErr, ok := errors.AsType[*fs.PathError](err); ok {
 			return newNodeFSError(pathErr.Err, "scandir", root)
 		}
 		return nil, false

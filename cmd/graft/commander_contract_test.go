@@ -42,7 +42,7 @@ func TestGrammarMatchesTheCLIContract(t *testing.T) {
 			continue
 		}
 		command := program
-		for _, word := range strings.Fields(entry.Name) {
+		for word := range strings.FieldsSeq(entry.Name) {
 			if command = command.findCommand(word); command == nil {
 				t.Fatalf("contract command %q is missing from the Go grammar", entry.Name)
 			}

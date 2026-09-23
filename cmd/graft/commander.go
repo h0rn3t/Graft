@@ -31,8 +31,8 @@ type optionSpec struct {
 
 func parseOptionSpec(flags string) optionSpec {
 	spec := optionSpec{flags: flags}
-	parts := strings.Fields(strings.ReplaceAll(flags, ",", " "))
-	for _, part := range parts {
+	parts := strings.FieldsSeq(strings.ReplaceAll(flags, ",", " "))
+	for part := range parts {
 		switch {
 		case strings.HasPrefix(part, "--"):
 			spec.long = part

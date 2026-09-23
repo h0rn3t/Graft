@@ -34,9 +34,10 @@
     "./package.json": "./package.json"
   },
   "bin": {
-    "graft": "dist/cli.js"
+    "graft": "bin/graft.js"
   },
   "files": [
+    "bin",
     "dist",
     "scripts",
     "README.md",
@@ -44,11 +45,12 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json && tsc -p viewer/tsconfig.json && node scripts/build-viewer.mjs",
+    "build:go": "node scripts/build-go.mjs",
     "dev": "tsc -p tsconfig.json --watch",
     "cli": "tsx src/cli.ts",
     "test": "node scripts/run-tests.mjs",
     "prepare": "npm run build && node scripts/stamp-telemetry-key.mjs",
-    "prepublishOnly": "npm run build",
+    "prepublishOnly": "npm run build && npm run build:go",
     "postinstall": "node scripts/postinstall.mjs"
   },
   "engines": {

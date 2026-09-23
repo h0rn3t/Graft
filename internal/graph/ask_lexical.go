@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"maps"
 	"math"
 	"regexp"
 	"slices"
@@ -226,8 +227,8 @@ func askHasTermTS(field map[string]int, term string) bool {
 	if _, ok := field[term+"s"]; ok {
 		return true
 	}
-	if strings.HasSuffix(term, "s") {
-		_, ok := field[strings.TrimSuffix(term, "s")]
+	if before, ok := strings.CutSuffix(term, "s"); ok {
+		_, ok := field[before]
 		return ok
 	}
 	return false
@@ -796,10 +797,10 @@ func askRankScopesAndFuse(scopes []string, ops askScopeOps, compare func(a, b st
 			blended := (lexical + float64(askGraphWeightTS*graphScore)) * factor
 			if blended > 0 {
 				candidates = append(candidates, askScopeCandidate{
-					askScopedDoc: askScopedDoc{id: id, scope: scope, score: blended},
-					lexical:      lexical,
-					graph:        graphScore,
-					rankFactor:   factor,
+					id: id, scope: scope, score: blended,
+					lexical:    lexical,
+					graph:      graphScore,
+					rankFactor: factor,
 				})
 			}
 		}
@@ -932,9 +933,7 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 	df := make(map[string]int)
 	documentCount := len(conceptDocs) + len(symbolDocs)
 	if useIndexStats {
-		for term, count := range index.DF {
-			df[term] = count
-		}
+		maps.Copy(df, index.DF)
 		documentCount = index.DocCount + len(conceptDocs)
 	}
 	countBag := func(fields ...map[string]int) {
