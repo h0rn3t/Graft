@@ -7,22 +7,39 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
 )
 
-const (
-	// Bump when extraction output or grammar versions change.
-	graphExtractorID        = "go-v1"
-	defaultSourceExtensions = `
-		.tsx .jsx .mts .cts .ts .mjs .cjs .js
-		.pyi .py .go .java .kt .kts .swift .php .r .rs
-		.c .h .cpp .cc .cxx .hpp .hh .cs .scala .sc .ex .exs
-		.sol .ml .mli .zig .dart .clj .cljs .cljc .bb .nix .lua .vue
-	`
-)
+// ExtractorID names the native extractor in its cache and fingerprint sidecars.
+// Bump it whenever extraction output or a grammar version changes, so a graph
+// built by an older extractor is never trusted as fresh.
+const ExtractorID = "go-v2"
+
+var goModuleLine = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)
+
+// SourceExtensions lists every extension a depth, breadth, or container tier
+// claims, sorted and de-duplicated (source-files.ts supportedExtensions).
+func SourceExtensions() []string {
+	set := make(map[string]struct{})
+	for _, entry := range depthExtensions {
+		set[entry.ext] = struct{}{}
+	}
+	for _, lang := range genericLanguages {
+		for _, extension := range lang.extensions {
+			set[extension] = struct{}{}
+		}
+	}
+	for _, lang := range containerLanguages {
+		for _, extension := range lang.extensions {
+			set[extension] = struct{}{}
+		}
+	}
+	return slices.Sorted(maps.Keys(set))
+}
 
 // BuildResult contains a graph and its known coverage limitations.
 type BuildResult struct {
@@ -42,84 +59,122 @@ type BuildResult struct {
 	Limitations []string
 }
 
-// BuildGraph walks root and builds a GraphV1 from TypeScript and JavaScript files.
-// opts controls source visibility; an empty Extensions slice uses the known source
-// extensions so files without an adapter are reported in Unsupported. Graph remains
-// partial when Unsupported, Errors, or Limitations is non-empty.
+type cachedEdge struct {
+	Source       string   `json:"source"`
+	Relation     Relation `json:"relation"`
+	TargetID     string   `json:"targetId,omitempty"`
+	Specifier    string   `json:"specifier,omitempty"`
+	Name         string   `json:"name,omitempty"`
+	ViaMember    bool     `json:"viaMember,omitempty"`
+	RecvType     string   `json:"recvType,omitempty"`
+	Kinds        []Kind   `json:"kinds,omitempty"`
+	ArgCount     *int     `json:"argCount,omitempty"`
+	ImplicitSelf bool     `json:"implicitSelf,omitempty"`
+	File         string   `json:"file"`
+}
+
+type cachedFile struct {
+	Size     int64        `json:"size"`
+	MTimeMS  float64      `json:"mtimeMs"`
+	Hash     string       `json:"hash"`
+	Nodes    []NodeV1     `json:"nodes"`
+	RawEdges []cachedEdge `json:"rawEdges"`
+	Error    string       `json:"error,omitempty"`
+}
+
+type extractCache struct {
+	Version   int                   `json:"version"`
+	Extractor string                `json:"extractor"`
+	Files     map[string]cachedFile `json:"files"`
+}
+
+// extractCacheVersion changes with the on-disk shape of extractCache.
+const extractCacheVersion = 2
+
+// BuildGraph walks root and builds a GraphV1 (graph/build.ts buildGraph).
+// opts controls source visibility; an empty Extensions slice uses
+// SourceExtensions, so files without a native adapter are reported in
+// Unsupported. The graph is partial when Unsupported or Errors is non-empty.
 // When opts.OutDir is set, an extractor-specific parse cache is stored in its
-// `.cache` directory. Persist the returned fingerprints only after Write succeeds.
+// `.cache` directory and the prior graph's meaning layer is carried over.
+// Persist the returned fingerprints only after Write succeeds.
 func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
-	const cacheVersion = 1
-	type cachedEdge struct {
-		Source    string   `json:"source"`
-		Relation  Relation `json:"relation"`
-		TargetID  string   `json:"targetId,omitempty"`
-		Specifier string   `json:"specifier,omitempty"`
-		Name      string   `json:"name,omitempty"`
-		ViaMember bool     `json:"viaMember,omitempty"`
-		File      string   `json:"file"`
+	extensions := make(map[string]struct{})
+	wanted := opts.Extensions
+	if len(wanted) == 0 {
+		wanted = SourceExtensions()
 	}
-	type cachedFile struct {
-		Size     int64        `json:"size"`
-		MTimeMS  float64      `json:"mtimeMs"`
-		Hash     string       `json:"hash"`
-		Nodes    []NodeV1     `json:"nodes"`
-		RawEdges []cachedEdge `json:"rawEdges"`
-		Error    string       `json:"error,omitempty"`
+	for _, extension := range wanted {
+		extension = strings.ToLower(strings.TrimSpace(extension))
+		if !strings.HasPrefix(extension, ".") {
+			extension = "." + extension
+		}
+		extensions[extension] = struct{}{}
 	}
-	type extractCache struct {
-		Version   int                   `json:"version"`
-		Extractor string                `json:"extractor"`
-		Files     map[string]cachedFile `json:"files"`
-	}
-	if len(opts.Extensions) == 0 {
-		opts.Extensions = strings.Fields(defaultSourceExtensions)
-	}
-	files, err := sourcefiles.Walk(root, opts)
+	walk := opts
+	walk.Extensions = nil
+	repoFiles, err := sourcefiles.Walk(root, walk)
 	if err != nil {
 		return BuildResult{}, fmt.Errorf("walk source files: %w", err)
 	}
-	cachePath := ""
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return BuildResult{}, fmt.Errorf("resolve source root: %w", err)
+	}
+	relFiles := make([]string, 0, len(repoFiles))
+	var files []sourcefiles.File
+	var modules []goModule
+	for _, file := range repoFiles {
+		relFiles = append(relFiles, file.Rel)
+		if _, ok := extensions[strings.ToLower(path.Ext(file.Rel))]; ok {
+			files = append(files, file)
+		}
+		if path.Base(file.Rel) != "go.mod" {
+			continue
+		}
+		if data, err := os.ReadFile(file.Abs); err == nil {
+			if match := goModuleLine.FindSubmatch(data); match != nil {
+				modules = append(modules, goModule{module: string(match[1]), dir: path.Dir(file.Rel)})
+			}
+		}
+	}
+
 	outDir := opts.OutDir
+	cachePath := ""
 	if outDir != "" {
 		if !filepath.IsAbs(outDir) {
 			outDir = filepath.Join(root, outDir)
 		}
-		cachePath = filepath.Join(outDir, ".cache", "extract."+graphExtractorID+".json")
+		cachePath = filepath.Join(outDir, ".cache", "extract."+ExtractorID+".json")
 	}
 	prior := extractCache{}
 	if cachePath != "" {
-		if data, err := os.ReadFile(cachePath); err == nil {
-			if err := json.Unmarshal(data, &prior); err != nil {
-				prior = extractCache{}
-			}
+		if data, err := os.ReadFile(cachePath); err == nil && json.Unmarshal(data, &prior) != nil {
+			prior = extractCache{}
 		}
 	}
-	if prior.Version != cacheVersion || prior.Extractor != graphExtractorID || prior.Files == nil {
+	if prior.Version != extractCacheVersion || prior.Extractor != ExtractorID || prior.Files == nil {
 		prior.Files = make(map[string]cachedFile)
 	}
-	current := extractCache{Version: cacheVersion, Extractor: graphExtractorID, Files: make(map[string]cachedFile, len(files))}
+	current := extractCache{Version: extractCacheVersion, Extractor: ExtractorID, Files: make(map[string]cachedFile, len(files))}
 	result := BuildResult{
 		Fingerprints: make(map[string]FingerprintFile, len(files)),
 		Unsupported:  make([]string, 0),
 		Errors:       make([]string, 0),
-		Limitations: []string{
-			"member-call edges without a resolved receiver type are omitted",
-			"multi-scope metadata is not yet discovered",
-		},
+		Limitations:  make([]string, 0),
 	}
 	nodes := make([]NodeV1, 0, len(files))
 	rawEdges := make([]rawEdge, 0)
 	languageSet := make(map[string]struct{})
 	for _, file := range files {
-		label, _, supported := sourceGrammar(file.Rel)
+		_, label, _ := languageOf(file.Rel)
 		source, readable, readErr := sourcefiles.Read(file.Abs)
 		fingerprint := FingerprintFile{Size: file.Size, MTimeMS: file.MTimeMS}
 		if readErr == nil && readable {
 			fingerprint.Hash = sourcefiles.Hash(source)
 		}
 		result.Fingerprints[file.Rel] = fingerprint
-		if !supported {
+		if !nativeSupported(file.Rel) {
 			result.Unsupported = append(result.Unsupported, file.Rel)
 			continue
 		}
@@ -151,7 +206,9 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 			for _, edge := range cached.RawEdges {
 				rawEdges = append(rawEdges, rawEdge{
 					source: edge.Source, relation: edge.Relation, targetID: edge.TargetID,
-					specifier: edge.Specifier, name: edge.Name, viaMember: edge.ViaMember, file: edge.File,
+					specifier: edge.Specifier, name: edge.Name, viaMember: edge.ViaMember,
+					recvType: edge.RecvType, kinds: edge.Kinds, argCount: edge.ArgCount,
+					implicitSelf: edge.ImplicitSelf, file: edge.File,
 				})
 			}
 			languageSet[label] = struct{}{}
@@ -173,7 +230,9 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		for _, edge := range extracted.rawEdges {
 			entry.RawEdges = append(entry.RawEdges, cachedEdge{
 				Source: edge.source, Relation: edge.relation, TargetID: edge.targetID,
-				Specifier: edge.specifier, Name: edge.name, ViaMember: edge.viaMember, File: edge.file,
+				Specifier: edge.specifier, Name: edge.name, ViaMember: edge.viaMember,
+				RecvType: edge.recvType, Kinds: edge.kinds, ArgCount: edge.argCount,
+				ImplicitSelf: edge.implicitSelf, File: edge.file,
 			})
 		}
 		current.Files[file.Rel] = entry
@@ -188,11 +247,16 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		}
 		_ = writeAtomicSidecar(cachePath, data) // A cache write failure only costs reuse on the next build.
 	}
-	languages := slices.AppendSeq(make([]string, 0, len(languageSet)), maps.Keys(languageSet))
-	slices.Sort(languages)
-	edges := resolveRawEdges(nodes, rawEdges)
+
+	edges := resolveEdges(nodes, rawEdges, modules)
+	scopes := applyMinSubstanceGuard(discoverScopes(absRoot, relFiles), nodes)
+	if outDir != "" {
+		if priorGraph, err := Read(WiringPath(outDir)); err == nil {
+			carryMeaning(nodes, priorGraph.Nodes)
+		}
+	}
 	result.Graph = GraphV1{
-		Meta:  GraphMeta{Version: 1, NodeCount: len(nodes), EdgeCount: len(edges), Languages: languages},
+		Meta:  GraphMeta{Version: 1, NodeCount: len(nodes), EdgeCount: len(edges), Languages: slices.Sorted(maps.Keys(languageSet)), Scopes: &scopes},
 		Nodes: nodes,
 		Edges: edges,
 	}
@@ -201,136 +265,29 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 	return result, nil
 }
 
-func sourceGrammar(file string) (label, grammar string, ok bool) {
-	switch strings.ToLower(path.Ext(file)) {
-	case ".ts", ".mts", ".cts":
-		return "typescript", "typescript", true
-	case ".tsx":
-		return "tsx", "tsx", true
-	case ".js", ".mjs", ".cjs":
-		return "javascript", "javascript", true
-	case ".jsx":
-		return "jsx", "javascript", true
-	default:
-		return "", "", false
-	}
+// nativeSupported reports whether a native Go adapter extracts file.
+func nativeSupported(file string) bool {
+	lang, _, ok := languageOf(file)
+	_, native := grammars[lang]
+	return ok && native
 }
 
-func resolveRawEdges(nodes []NodeV1, rawEdges []rawEdge) []EdgeV1 {
-	fileIDs := make(map[string]string)
-	perFileName := make(map[string]map[string][]NodeV1)
-	globalName := make(map[string][]NodeV1)
-	for _, node := range nodes {
-		if node.Kind == "file" {
-			fileIDs[node.Path] = node.ID
-			continue
-		}
-		if perFileName[node.Path] == nil {
-			perFileName[node.Path] = make(map[string][]NodeV1)
-		}
-		perFileName[node.Path][node.Name] = append(perFileName[node.Path][node.Name], node)
-		globalName[node.Name] = append(globalName[node.Name], node)
+// carryMeaning folds the prior graph's summaries into nodes without an LLM
+// (enrich.ts enrichGraph with no summarizer): an unchanged ready body keeps its
+// summary; a changed one keeps it as a stale hint.
+func carryMeaning(nodes, prior []NodeV1) {
+	byID := make(map[string]NodeV1, len(prior))
+	for _, node := range prior {
+		byID[node.ID] = node
 	}
-	resolveImport := func(specifier, file string) string {
-		if !strings.HasPrefix(specifier, ".") {
-			return specifier
-		}
-		base := path.Clean(path.Join(path.Dir(file), specifier))
-		noExtension := base
-		for _, extension := range []string{".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".py"} {
-			if before, ok := strings.CutSuffix(base, extension); ok {
-				noExtension = before
-				break
-			}
-		}
-		candidates := []string{base}
-		for _, extension := range []string{".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".py"} {
-			candidates = append(candidates, noExtension+extension)
-		}
-		for _, extension := range []string{".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".py"} {
-			candidates = append(candidates, path.Join(noExtension, "index"+extension))
-		}
-		for _, candidate := range candidates {
-			if _, ok := fileIDs[candidate]; ok {
-				return candidate
-			}
-		}
-		return specifier
-	}
-	resolveName := func(name, file string, kinds []Kind) (string, Confidence, bool) {
-		local := perFileName[file][name]
-		match := ""
-		for _, node := range local {
-			if slices.Contains(kinds, node.Kind) {
-				if match != "" {
-					return "", "", false
-				}
-				match = node.ID
-			}
-		}
-		if match != "" {
-			return match, "extracted", true
-		}
-		for _, node := range globalName[name] {
-			if !slices.Contains(kinds, node.Kind) {
-				continue
-			}
-			if match != "" {
-				return "", "", false
-			}
-			match = node.ID
-		}
-		if match != "" {
-			return match, "inferred", true
-		}
-		return "", "", false
-	}
-	edges := make([]EdgeV1, 0, len(rawEdges))
-	seen := make(map[string]struct{}, len(rawEdges))
-	add := func(source, target string, relation Relation, confidence Confidence) {
-		key := source + "\x00" + string(relation) + "\x00" + target
-		if _, ok := seen[key]; ok {
-			return
-		}
-		seen[key] = struct{}{}
-		edges = append(edges, EdgeV1{Source: source, Target: target, Relation: relation, Confidence: confidence})
-	}
-	for _, edge := range rawEdges {
-		switch edge.relation {
-		case "contains":
-			add(edge.source, edge.targetID, edge.relation, "extracted")
-		case "imports":
-			add(edge.source, resolveImport(edge.specifier, edge.file), edge.relation, "extracted")
-		case "references":
-			if edge.specifier == "" {
-				continue
-			}
-			targetFile := resolveImport(edge.specifier, edge.file)
-			if _, ok := fileIDs[targetFile]; !ok {
-				continue
-			}
-			candidates := perFileName[targetFile][edge.name]
-			if len(candidates) == 1 {
-				add(edge.source, candidates[0].ID, edge.relation, "extracted")
-			}
-		case "extends", "implements":
-			kinds := []Kind{"class", "interface"}
-			if edge.relation == "implements" {
-				kinds = []Kind{"interface"}
-			}
-			if target, confidence, ok := resolveName(edge.name, edge.file, kinds); ok {
-				add(edge.source, target, edge.relation, confidence)
-			} else {
-				add(edge.source, edge.name, edge.relation, "inferred")
-			}
-		case "calls":
-			if edge.viaMember {
-				continue
-			}
-			if target, confidence, ok := resolveName(edge.name, edge.file, []Kind{"function"}); ok {
-				add(edge.source, target, edge.relation, confidence)
-			}
+	for index := range nodes {
+		was, ok := byID[nodes[index].ID]
+		switch {
+		case !ok:
+		case was.SummaryState == "ready" && was.BodyHash == nodes[index].BodyHash:
+			nodes[index].Summary, nodes[index].Crux, nodes[index].SummaryState = was.Summary, was.Crux, "ready"
+		case was.Summary != nil && *was.Summary != "":
+			nodes[index].Summary, nodes[index].Crux, nodes[index].SummaryState = was.Summary, was.Crux, "stale"
 		}
 	}
-	return edges
 }

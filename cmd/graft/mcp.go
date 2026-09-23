@@ -452,8 +452,14 @@ func mcpCall(root, contextDir, dirOverride, requestedName string, args map[strin
 		children, workspace := graph.ReadWorkspaceChildren(contextDir)
 		var refresh graph.RefreshResult
 		if workspace {
-			refresh = graph.EnsureFreshChildren(root, children)
-		} else {
+			eligible := make([]string, 0, len(children))
+			for _, child := range children {
+				if refreshableGraph(filepath.Join(root, child, "graft")) {
+					eligible = append(eligible, child)
+				}
+			}
+			refresh = graph.EnsureFreshChildren(root, eligible)
+		} else if refreshableGraph(contextDir) {
 			options := graph.RefreshOptions{}
 			if dirOverride != "" {
 				options.Source.OutDir = contextDir
@@ -790,7 +796,7 @@ func mcpCheckFreshness(root, contextDir string) string {
 	} else {
 		parts = append(parts, "graft check: OK — the graph is in sync with the code.")
 	}
-	fingerprint, err := graph.ReadFingerprint(contextDir, "go-v1")
+	fingerprint, err := graph.ReadFingerprint(contextDir, graph.ExtractorID)
 	graphStatus, graphClean := "graph check: UNKNOWN\n\nNo Go freshness fingerprint found. Run `graft build` first.", false
 	if err != nil {
 		graphStatus = fmt.Sprintf("graph check: UNKNOWN\n\nCannot read graph fingerprint: %v", err)

@@ -170,7 +170,7 @@ func workspaceMapFixture(t *testing.T) (root, contextDir string) {
 		if _, err := graph.Write(built.Graph, outDir); err != nil {
 			t.Fatalf("Write(BuildGraph(%q), %q) error = %v, want nil", childRoot, outDir, err)
 		}
-		if err := graph.WriteFingerprint(outDir, "go-v1", built.Fingerprints, nil); err != nil {
+		if err := graph.WriteFingerprint(outDir, graph.ExtractorID, built.Fingerprints, nil); err != nil {
 			t.Fatalf("WriteFingerprint(%q, go-v1, files, nil) error = %v, want nil", outDir, err)
 		}
 	}

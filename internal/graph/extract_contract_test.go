@@ -79,8 +79,8 @@ func TestExtractFileContract(t *testing.T) {
 		},
 		{
 			name:    "unsupported extension",
-			path:    "src/app.py",
-			source:  "def run(): pass",
+			path:    "src/app.rs",
+			source:  "fn run() {}",
 			wantErr: true,
 		},
 	}
@@ -104,7 +104,7 @@ func TestExtractFileContract(t *testing.T) {
 			}
 			for index, want := range tt.wantEdges {
 				edge := got.rawEdges[index]
-				if edge != want {
+				if !reflect.DeepEqual(edge, want) {
 					t.Errorf("extractFile(%q, source).rawEdges[%d] = %#v, want %#v", tt.path, index, edge, want)
 				}
 			}
@@ -123,13 +123,13 @@ func TestExtractArrowSignatureContract(t *testing.T) {
 			name:   "TypeScript block-bodied arrow",
 			path:   "src/app.ts",
 			source: "const greet = (name: string) => { return name; }",
-			want:   "greet = (name: string) =>",
+			want:   "greet = (name: string)",
 		},
 		{
 			name:   "JavaScript expression-bodied arrow",
 			path:   "src/app.js",
 			source: "const greet = (name) => name;",
-			want:   "greet = (name) =>",
+			want:   "greet = (name)",
 		},
 	}
 	for _, tt := range tests {

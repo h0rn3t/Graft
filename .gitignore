@@ -36,3 +36,6 @@ openspec/
 # The native CLI source shares the name of the generated graph cache.
 !/cmd/graft/
 !/cmd/graft/**
+
+# Local agent instructions.
+/CLAUDE.md

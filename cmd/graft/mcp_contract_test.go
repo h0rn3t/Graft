@@ -296,7 +296,7 @@ func TestMCPCallRefreshesWorkspaceChildren(t *testing.T) {
 		if _, err := graph.Write(built.Graph, outDir); err != nil {
 			t.Fatalf("Write(BuildGraph(%q), %q) error = %v, want nil", childRoot, outDir, err)
 		}
-		if err := graph.WriteFingerprint(outDir, "go-v1", built.Fingerprints, nil); err != nil {
+		if err := graph.WriteFingerprint(outDir, graph.ExtractorID, built.Fingerprints, nil); err != nil {
 			t.Fatalf("WriteFingerprint(%q, go-v1, files, nil) error = %v, want nil", outDir, err)
 		}
 		if err := os.WriteFile(sourcePath, []byte("export function updated() {}\n"), 0o644); err != nil {
@@ -321,6 +321,49 @@ func TestMCPCallRefreshesWorkspaceChildren(t *testing.T) {
 		if !slices.ContainsFunc(wiring.Nodes, func(node graph.NodeV1) bool { return node.Name == "updated" }) {
 			t.Errorf("mcpCall(%q, %q, graft_repo_map) graph nodes for %q = %v, want refreshed updated function", root, contextDir, child, wiring.Nodes)
 		}
+	}
+}
+
+func TestMCPCallPreservesUnsupportedWorkspaceChild(t *testing.T) {
+	root := t.TempDir()
+	childRoot := filepath.Join(root, "web")
+	source := filepath.Join(childRoot, "src", "app.ts")
+	if err := os.MkdirAll(filepath.Dir(source), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(source, []byte("export function current() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(childRoot, "src", "other.rs"), []byte("fn other() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	childContext := filepath.Join(childRoot, "graft")
+	legacy := graph.GraphV1{Meta: graph.GraphMeta{Version: 1}, Nodes: []graph.NodeV1{{ID: "legacy", Name: "legacy", Kind: "function", Path: "src/app.ts", Span: "L1-L1"}}}
+	path, err := graph.Write(legacy, childContext)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	parentContext := filepath.Join(root, "graft")
+	if err := os.MkdirAll(parentContext, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(parentContext, "workspace.json"), []byte(`{"version":1,"children":["web"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := mcpCall(root, parentContext, "", "graft_repo_map", nil)
+	if got.isError {
+		t.Fatalf("mcpCall() = %#v, want success", got)
+	}
+	after, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Error("MCP query replaced a child graph containing unsupported Go source")
 	}
 }
 
@@ -439,8 +482,8 @@ func TestMCPRefreshContract(t *testing.T) {
 				if err := os.MkdirAll(filepath.Join(root, "src"), 0o755); err != nil {
 					t.Fatalf("MkdirAll(%q) for unsupported source error = %v, want nil", filepath.Join(root, "src"), err)
 				}
-				if err := os.WriteFile(filepath.Join(root, "src", "other.go"), []byte("package other"), 0o644); err != nil {
-					t.Fatalf("WriteFile(%q) for unsupported source error = %v, want nil", filepath.Join(root, "src", "other.go"), err)
+				if err := os.WriteFile(filepath.Join(root, "src", "other.rs"), []byte("fn other() {}"), 0o644); err != nil {
+					t.Fatalf("WriteFile(%q) for unsupported source error = %v, want nil", filepath.Join(root, "src", "other.rs"), err)
 				}
 			}
 			built, err := graph.BuildGraph(root, sourcefiles.Options{OutDir: contextDir})
@@ -450,7 +493,7 @@ func TestMCPRefreshContract(t *testing.T) {
 			if _, err := graph.Write(built.Graph, contextDir); err != nil {
 				t.Fatalf("Write(BuildGraph(%q), %q) error = %v, want nil", root, contextDir, err)
 			}
-			if err := graph.WriteFingerprint(contextDir, "go-v1", built.Fingerprints, nil); err != nil {
+			if err := graph.WriteFingerprint(contextDir, graph.ExtractorID, built.Fingerprints, nil); err != nil {
 				t.Fatalf("WriteFingerprint(%q, go-v1) error = %v, want nil", contextDir, err)
 			}
 			if tt.editSource {
@@ -485,7 +528,7 @@ func TestMCPRefreshContract(t *testing.T) {
 			if tt.wantStale && (!strings.Contains(got.text, "src/app.ts#after") || !strings.Contains(got.text, "src/app.ts#before")) {
 				t.Errorf("mcpCall(%q, %q, %q) text = %q, want added and removed symbol IDs", root, contextDir, tt.tool, got.text)
 			}
-			if tt.wantUnsupported && (!strings.Contains(got.text, "graph check: PARTIAL") || !strings.Contains(got.text, "src/other.go")) {
+			if tt.wantUnsupported && (!strings.Contains(got.text, "graph check: PARTIAL") || !strings.Contains(got.text, "src/other.rs")) {
 				t.Errorf("mcpCall(%q, %q, %q) text = %q, want an explicit unsupported-source limitation", root, contextDir, tt.tool, got.text)
 			}
 			if slices.ContainsFunc(loaded.Nodes, func(node graph.NodeV1) bool { return node.Name == "after" }) {

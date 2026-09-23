@@ -56,7 +56,7 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 	}
 	options.Source.OutDir = outDir
 	if len(options.Source.Extensions) == 0 {
-		options.Source.Extensions = strings.Fields(defaultSourceExtensions)
+		options.Source.Extensions = SourceExtensions()
 	}
 	seedNote := ""
 	if _, err := os.Stat(WiringPath(outDir)); errors.Is(err, fs.ErrNotExist) {
@@ -81,7 +81,7 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 	} else if err != nil {
 		return RefreshResult{Note: fmt.Sprintf("graph refresh skipped: %v", err)}
 	}
-	fingerprint, err := ReadFingerprint(outDir, graphExtractorID)
+	fingerprint, err := ReadFingerprint(outDir, ExtractorID)
 	if err != nil {
 		return RefreshResult{Note: fmt.Sprintf("graph refresh skipped: %v", err)}
 	}
@@ -95,8 +95,11 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 		if err != nil {
 			return RefreshResult{Note: fmt.Sprintf("graph refresh skipped: %v", err)}
 		}
+		if len(files) == 0 {
+			return RefreshResult{Note: seedNote}
+		}
 		for _, file := range files {
-			if _, _, supported := sourceGrammar(file.Rel); !supported {
+			if !nativeSupported(file.Rel) {
 				unsupported = append(unsupported, file.Rel)
 			}
 		}
@@ -124,7 +127,7 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 	lockPath := filepath.Join(cacheDir, ".sync.lock")
 	defer func() { _ = os.Remove(lockPath) }() // Stale-lock recovery retries cleanup after five minutes.
 	if drift != nil {
-		fingerprint, err = ReadFingerprint(outDir, graphExtractorID)
+		fingerprint, err = ReadFingerprint(outDir, ExtractorID)
 		if err != nil {
 			return RefreshResult{Drift: drift, Note: fmt.Sprintf("graph refresh skipped: %v", err)}
 		}
@@ -158,13 +161,20 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 	if _, err := Write(built.Graph, outDir); err != nil {
 		return RefreshResult{Drift: drift, Note: fmt.Sprintf("graph refresh skipped: %v", err)}
 	}
-	if err := WriteFingerprint(outDir, graphExtractorID, built.Fingerprints, options.Source.OnlyDirs); err != nil {
+	if err := WriteAskIndex(outDir, built.Graph); err != nil {
+		return RefreshResult{Refreshed: true, Drift: drift, Note: fmt.Sprintf("ask index write failed: %v", err)}
+	}
+	if err := WriteFingerprint(outDir, ExtractorID, built.Fingerprints, options.Source.OnlyDirs); err != nil {
 		return RefreshResult{Refreshed: true, Drift: drift, Note: fmt.Sprintf("fingerprint write failed: %v", err)}
 	}
-	note := "native extractor limitations: " + strings.Join(built.Limitations, "; ")
+	var notes []string
 	if seedNote != "" {
-		note = seedNote + "; " + note
+		notes = append(notes, seedNote)
 	}
+	if len(built.Limitations) > 0 {
+		notes = append(notes, "native extractor limitations: "+strings.Join(built.Limitations, "; "))
+	}
+	note := strings.Join(notes, "; ")
 	return RefreshResult{Refreshed: true, Drift: drift, Note: note}
 }
 
@@ -316,13 +326,13 @@ func unsupportedFingerprintFiles(fingerprint *Fingerprint, drift *Drift) []strin
 				continue
 			}
 		}
-		if _, _, supported := sourceGrammar(path); !supported {
+		if !nativeSupported(path) {
 			unsupported = append(unsupported, path)
 		}
 	}
 	if drift != nil {
 		for _, path := range drift.Added {
-			if _, _, supported := sourceGrammar(path); !supported {
+			if !nativeSupported(path) {
 				unsupported = append(unsupported, path)
 			}
 		}

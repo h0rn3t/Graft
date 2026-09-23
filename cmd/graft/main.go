@@ -35,6 +35,8 @@ type callersOptions struct {
 	full        bool
 	noGraphRank bool
 	jsonOutput  bool
+	noRefresh   bool
+	onlyDirs    []string
 }
 
 type callersResult struct {
@@ -106,6 +108,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 2
 	}
 	switch opts.command {
+	case "build":
+		return runBuild(opts, stdout, stderr)
 	case "callers":
 		return runCallers(opts, stdout, stderr)
 	case "skeleton":
@@ -161,6 +165,15 @@ func parseArgs(args []string) (callersOptions, error) {
 		case arg == "--no-graph-rank":
 			opts.noGraphRank = true
 		case arg == "--no-refresh":
+			opts.noRefresh = true
+		case arg == "--only-dir":
+			value, err := nextOptionValue(args, &index, arg)
+			if err != nil {
+				return callersOptions{}, err
+			}
+			opts.onlyDirs = append(opts.onlyDirs, value)
+		case strings.HasPrefix(arg, "--only-dir="):
+			opts.onlyDirs = append(opts.onlyDirs, strings.TrimPrefix(arg, "--only-dir="))
 		case arg == "--dir":
 			value, err := nextOptionValue(args, &index, arg)
 			if err != nil {
@@ -205,8 +218,20 @@ func parseArgs(args []string) (callersOptions, error) {
 			positionals = append(positionals, arg)
 		}
 	}
-	if len(positionals) == 0 || (positionals[0] != "callers" && positionals[0] != "skeleton" && positionals[0] != "grep" && positionals[0] != "map" && positionals[0] != "ask" && positionals[0] != "mcp") {
-		return callersOptions{}, fmt.Errorf("usage: graft <ask|callers|skeleton|grep|mcp> <query> [dir] [options] or graft map [dir] [options]")
+	if len(positionals) == 0 || (positionals[0] != "build" && positionals[0] != "callers" && positionals[0] != "skeleton" && positionals[0] != "grep" && positionals[0] != "map" && positionals[0] != "ask" && positionals[0] != "mcp") {
+		return callersOptions{}, fmt.Errorf("usage: graft build [dir] [options], graft <ask|callers|skeleton|grep> <query> [dir] [options], graft map [dir] [options], or graft mcp [dir]")
+	}
+	if positionals[0] == "build" {
+		if len(positionals) > 2 {
+			return callersOptions{}, fmt.Errorf("unexpected argument %q", positionals[2])
+		}
+		opts.command = "build"
+		opts.root = "."
+		opts.rootSet = true
+		if len(positionals) == 2 {
+			opts.root = positionals[1]
+		}
+		return opts, nil
 	}
 	if positionals[0] == "mcp" {
 		if len(positionals) > 2 {
@@ -259,6 +284,7 @@ func runCallers(opts callersOptions, stdout, stderr io.Writer) int {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
+	refreshBeforeQuery(root, contextDir, opts, stderr)
 
 	loaded, err := graph.Read(graph.WiringPath(contextDir))
 	if err != nil {
@@ -323,6 +349,42 @@ func resolvePaths(opts callersOptions) (string, string, error) {
 		return "", "", fmt.Errorf("failed to resolve context directory %q: %w", opts.contextDir, err)
 	}
 	return absoluteRoot, absoluteContext, nil
+}
+
+func refreshBeforeQuery(root, contextDir string, opts callersOptions, stderr io.Writer) {
+	if opts.noRefresh {
+		return
+	}
+	var refreshed graph.RefreshResult
+	if children, workspace := graph.ReadWorkspaceChildren(contextDir); workspace {
+		eligible := make([]string, 0, len(children))
+		for _, child := range children {
+			if refreshableGraph(filepath.Join(root, child, "graft")) {
+				eligible = append(eligible, child)
+			}
+		}
+		refreshed = graph.EnsureFreshChildren(root, eligible)
+	} else {
+		if !refreshableGraph(contextDir) {
+			return
+		}
+		options := graph.RefreshOptions{}
+		if opts.contextDir != "" {
+			options.Source.OutDir = contextDir
+		}
+		refreshed = graph.EnsureFreshGraph(root, options)
+	}
+	if note := graph.RefreshNote(refreshed); note != "" {
+		writeDiagnostic(stderr, "%s\n", note)
+	}
+}
+
+func refreshableGraph(contextDir string) bool {
+	if _, err := os.Stat(graph.WiringPath(contextDir)); err != nil {
+		return true
+	}
+	paths, err := filepath.Glob(filepath.Join(contextDir, ".cache", "fingerprint.*.json"))
+	return err == nil && len(paths) > 0
 }
 
 func nearestContextDir(start string) string {

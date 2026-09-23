@@ -73,7 +73,6 @@ type NodeV1 struct {
 	ID           string       `json:"id"`
 	Name         string       `json:"name"`
 	Kind         Kind         `json:"kind"`
-	Owner        *string      `json:"owner,omitempty"`
 	Path         string       `json:"path"`
 	Span         string       `json:"span"`
 	Signature    *string      `json:"signature"`
@@ -82,11 +81,14 @@ type NodeV1 struct {
 	BodyHash     string       `json:"body_hash"`
 	Chars        *int         `json:"chars,omitempty"`
 	BodyText     *string      `json:"body_text,omitempty"`
-	Arity        *int         `json:"arity,omitempty"`
-	Variadic     *bool        `json:"variadic,omitempty"`
 	SummaryState SummaryState `json:"summary_state"`
 	Summary      *string      `json:"summary"`
 	Crux         *Crux        `json:"crux"`
+	// Owner, Arity, and Variadic follow Crux because the TypeScript extractor
+	// appends them last, and wiring.json keeps its key order.
+	Owner    *string `json:"owner,omitempty"`
+	Arity    *int    `json:"arity,omitempty"`
+	Variadic *bool   `json:"variadic,omitempty"`
 }
 
 // EdgeV1 is a version-one graph edge.

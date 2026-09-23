@@ -38,13 +38,13 @@ func TestEnsureFreshGraphRefreshesDriftContract(t *testing.T) {
 	if !slices.ContainsFunc(wiring.Nodes, func(node NodeV1) bool { return node.ID == "src/app.ts#after" }) {
 		t.Errorf("EnsureFreshGraph(%q, %#v) wiring nodes = %v, want src/app.ts#after", root, options, wiring.Nodes)
 	}
-	fingerprint, err := ReadFingerprint(outDir, "go-v1")
+	fingerprint, err := ReadFingerprint(outDir, ExtractorID)
 	if err != nil {
-		t.Fatalf("ReadFingerprint(%q, %q) after refresh error = %v, want nil", outDir, "go-v1", err)
+		t.Fatalf("ReadFingerprint(%q, %q) after refresh error = %v, want nil", outDir, ExtractorID, err)
 	}
 	if fingerprint == nil || fingerprint.Files["src/app.ts"].Hash != sourcefiles.Hash("export function after() {}") ||
 		!slices.Equal(fingerprint.OnlyDirs, options.Source.OnlyDirs) || len(fingerprint.Files) != 1 {
-		t.Errorf("ReadFingerprint(%q, %q) = %#v, want the refreshed source hash", outDir, "go-v1", fingerprint)
+		t.Errorf("ReadFingerprint(%q, %q) = %#v, want the refreshed source hash", outDir, ExtractorID, fingerprint)
 	}
 	if note := RefreshNote(got); !strings.HasPrefix(note, "[graft] refreshed the graph (1 file changed) before answering") {
 		t.Errorf("RefreshNote(%#v) = %q, want the one-file refresh note", got, note)
@@ -144,14 +144,14 @@ func TestEnsureFreshChildrenPreservesChildLimitationsContract(t *testing.T) {
 	root := t.TempDir()
 	childRoot := filepath.Join(root, "api")
 	outDir := filepath.Join(childRoot, "graft")
-	options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".py"}}
+	options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".rs"}}
 	writeRefreshSource(t, childRoot, "src/app.ts", "export function ready() {}\n")
 	buildAndWriteRefreshGraph(t, childRoot, options)
-	writeRefreshSource(t, childRoot, "src/tool.py", "def unsupported():\n    pass\n")
+	writeRefreshSource(t, childRoot, "src/tool.rs", "fn unsupported() {}\n")
 
 	got := EnsureFreshChildren(root, []string{"api"})
 	note := RefreshNote(got)
-	if got.Refreshed || !strings.Contains(note, "api/: graph refresh skipped: native graph cannot index 1 unsupported or unreadable source file(s), including \"src/tool.py\"") {
+	if got.Refreshed || !strings.Contains(note, "api/: graph refresh skipped: native graph cannot index 1 unsupported or unreadable source file(s), including \"src/tool.rs\"") {
 		t.Errorf("EnsureFreshChildren(%q, [api]) = %#v, RefreshNote = %q, want child limitation without refresh", root, got, note)
 	}
 }
@@ -241,7 +241,7 @@ func TestEnsureFreshGraphSeedsGitWorktreeContract(t *testing.T) {
 	if !slices.ContainsFunc(graph.Nodes, func(node NodeV1) bool { return node.Name == "before" }) {
 		t.Errorf("Read(%q) nodes = %v, want the parent graph's before function", WiringPath(filepath.Join(root, "graft")), graph.Nodes)
 	}
-	for _, name := range []string{"ask-index.json", "extract.go-v1.json", "fingerprint.go-v1.json"} {
+	for _, name := range []string{"ask-index.json", "extract." + ExtractorID + ".json", "fingerprint." + ExtractorID + ".json"} {
 		path := filepath.Join(root, "graft", ".cache", name)
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("Stat(%q) after worktree seed error = %v, want copied sidecar", path, err)
@@ -334,8 +334,8 @@ func TestEnsureFreshGraphMissingFingerprintContract(t *testing.T) {
 	if !got.Refreshed || got.Drift != nil {
 		t.Fatalf("EnsureFreshGraph(%q, %#v) with a missing fingerprint = %#v, want one refresh with unknown drift", root, options, got)
 	}
-	if fingerprint, err := ReadFingerprint(outDir, "go-v1"); err != nil || fingerprint == nil || len(fingerprint.Files) != 1 {
-		t.Errorf("ReadFingerprint(%q, %q) after refresh = %#v, %v, want one file", outDir, "go-v1", fingerprint, err)
+	if fingerprint, err := ReadFingerprint(outDir, ExtractorID); err != nil || fingerprint == nil || len(fingerprint.Files) != 1 {
+		t.Errorf("ReadFingerprint(%q, %q) after refresh = %#v, %v, want one file", outDir, ExtractorID, fingerprint, err)
 	}
 	got = EnsureFreshGraph(root, options)
 	if got.Refreshed || got.Note != "" {
@@ -369,12 +369,12 @@ func TestEnsureFreshGraphUnsupportedSourceContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(%q) before refresh error = %v", WiringPath(outDir), err)
 	}
-	beforeFingerprint, err := os.ReadFile(filepath.Join(outDir, ".cache", "fingerprint.go-v1.json"))
+	beforeFingerprint, err := os.ReadFile(filepath.Join(outDir, ".cache", "fingerprint."+ExtractorID+".json"))
 	if err != nil {
-		t.Fatalf("ReadFile(%q) before refresh error = %v", filepath.Join(outDir, ".cache", "fingerprint.go-v1.json"), err)
+		t.Fatalf("ReadFile(%q) before refresh error = %v", filepath.Join(outDir, ".cache", "fingerprint."+ExtractorID+".json"), err)
 	}
-	writeRefreshSource(t, root, "src/unsupported.go", "package unsupported\n")
-	options := RefreshOptions{Source: sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".go"}}}
+	writeRefreshSource(t, root, "src/unsupported.rs", "fn unsupported() {}\n")
+	options := RefreshOptions{Source: sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".rs"}}}
 
 	got := EnsureFreshGraph(root, options)
 	if got.Refreshed || !strings.Contains(got.Note, "unsupported") {
@@ -384,9 +384,9 @@ func TestEnsureFreshGraphUnsupportedSourceContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(%q) after refresh error = %v", WiringPath(outDir), err)
 	}
-	afterFingerprint, err := os.ReadFile(filepath.Join(outDir, ".cache", "fingerprint.go-v1.json"))
+	afterFingerprint, err := os.ReadFile(filepath.Join(outDir, ".cache", "fingerprint."+ExtractorID+".json"))
 	if err != nil {
-		t.Fatalf("ReadFile(%q) after refresh error = %v", filepath.Join(outDir, ".cache", "fingerprint.go-v1.json"), err)
+		t.Fatalf("ReadFile(%q) after refresh error = %v", filepath.Join(outDir, ".cache", "fingerprint."+ExtractorID+".json"), err)
 	}
 	if !slices.Equal(beforeGraph, afterGraph) || !slices.Equal(beforeFingerprint, afterFingerprint) {
 		t.Errorf("EnsureFreshGraph(%q, %#v) changed graph or fingerprint despite unsupported source", root, options)
@@ -396,21 +396,21 @@ func TestEnsureFreshGraphUnsupportedSourceContract(t *testing.T) {
 func TestEnsureFreshGraphUnsupportedBaselineContract(t *testing.T) {
 	root := t.TempDir()
 	outDir := filepath.Join(root, "graft")
-	options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".go"}}
+	options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".rs"}}
 	writeRefreshSource(t, root, "src/app.ts", "export function retained() {}")
-	writeRefreshSource(t, root, "src/unsupported.go", "package unsupported\n")
+	writeRefreshSource(t, root, "src/unsupported.rs", "fn unsupported() {}\n")
 	built, err := BuildGraph(root, options)
 	if err != nil {
 		t.Fatalf("BuildGraph(%q, %#v) error = %v, want nil", root, options, err)
 	}
 	if len(built.Unsupported) != 1 {
-		t.Fatalf("BuildGraph(%q, %#v) unsupported = %v, want src/unsupported.go", root, options, built.Unsupported)
+		t.Fatalf("BuildGraph(%q, %#v) unsupported = %v, want src/unsupported.rs", root, options, built.Unsupported)
 	}
 	if _, err := Write(built.Graph, outDir); err != nil {
 		t.Fatalf("Write(BuildGraph(%q), %q) error = %v, want nil", root, outDir, err)
 	}
-	if err := WriteFingerprint(outDir, "go-v1", built.Fingerprints, nil); err != nil {
-		t.Fatalf("WriteFingerprint(%q, %q, files, nil) error = %v, want nil", outDir, "go-v1", err)
+	if err := WriteFingerprint(outDir, ExtractorID, built.Fingerprints, nil); err != nil {
+		t.Fatalf("WriteFingerprint(%q, %q, files, nil) error = %v, want nil", outDir, ExtractorID, err)
 	}
 	before, err := os.ReadFile(WiringPath(outDir))
 	if err != nil {
@@ -452,8 +452,8 @@ func TestEnsureFreshGraphUndecodableBaselineContract(t *testing.T) {
 	if _, err := Write(built.Graph, outDir); err != nil {
 		t.Fatalf("Write(BuildGraph(%q), %q) error = %v, want nil", root, outDir, err)
 	}
-	if err := WriteFingerprint(outDir, "go-v1", built.Fingerprints, nil); err != nil {
-		t.Fatalf("WriteFingerprint(%q, %q, files, nil) error = %v, want nil", outDir, "go-v1", err)
+	if err := WriteFingerprint(outDir, ExtractorID, built.Fingerprints, nil); err != nil {
+		t.Fatalf("WriteFingerprint(%q, %q, files, nil) error = %v, want nil", outDir, ExtractorID, err)
 	}
 
 	got := EnsureFreshGraph(root, RefreshOptions{Source: options})
@@ -622,7 +622,7 @@ func buildAndWriteRefreshGraph(t *testing.T, root string, opts sourcefiles.Optio
 	if _, err := Write(result.Graph, opts.OutDir); err != nil {
 		t.Fatalf("Write(BuildGraph(%q), %q) error = %v, want nil", root, opts.OutDir, err)
 	}
-	if err := WriteFingerprint(opts.OutDir, "go-v1", result.Fingerprints, opts.OnlyDirs); err != nil {
-		t.Fatalf("WriteFingerprint(%q, %q, files, %v) error = %v, want nil", opts.OutDir, "go-v1", opts.OnlyDirs, err)
+	if err := WriteFingerprint(opts.OutDir, ExtractorID, result.Fingerprints, opts.OnlyDirs); err != nil {
+		t.Fatalf("WriteFingerprint(%q, %q, files, %v) error = %v, want nil", opts.OutDir, ExtractorID, opts.OnlyDirs, err)
 	}
 }

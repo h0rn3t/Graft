@@ -26,7 +26,7 @@ func TestBuildGraphContract(t *testing.T) {
 	}
 	write("src/helper.js", "export function helper() {}")
 	write("src/main.ts", "import { helper } from \"./helper.js\";\nexport function run() { return helper; }")
-	write("src/main.go", "package main")
+	write("src/main.rs", "fn main() {}")
 
 	opts := sourcefiles.Options{OutDir: filepath.Join(root, "graft")}
 	got, err := BuildGraph(root, opts)
@@ -39,12 +39,9 @@ func TestBuildGraphContract(t *testing.T) {
 		{Source: "src/main.ts", Target: "src/main.ts#run", Relation: "contains", Confidence: "extracted"},
 		{Source: "src/main.ts#run", Target: "src/helper.js#helper", Relation: "references", Confidence: "extracted"},
 	}
-	wantLimitations := []string{
-		"member-call edges without a resolved receiver type are omitted",
-		"multi-scope metadata is not yet discovered",
-	}
-	if got.Graph.Meta.Version != 1 || got.Graph.Meta.NodeCount != 4 || got.Graph.Meta.EdgeCount != len(wantEdges) || !reflect.DeepEqual(got.Graph.Meta.Languages, []string{"javascript", "typescript"}) || len(got.Graph.Nodes) != 4 || !reflect.DeepEqual(got.Graph.Edges, wantEdges) || !reflect.DeepEqual(got.Unsupported, []string{"src/main.go"}) || len(got.Errors) != 0 || !reflect.DeepEqual(got.Limitations, wantLimitations) {
-		t.Errorf("BuildGraph(%q, %#v) = %#v, want GraphV1 with 4 nodes, 4 edges, TS/JS coverage, and unsupported src/main.go", root, opts, got)
+	wantScopes := []ScopeV1{{Prefix: "", Label: "", Markers: []string{}}}
+	if got.Graph.Meta.Version != 1 || got.Graph.Meta.NodeCount != 4 || got.Graph.Meta.EdgeCount != len(wantEdges) || !reflect.DeepEqual(got.Graph.Meta.Languages, []string{"javascript", "typescript"}) || len(got.Graph.Nodes) != 4 || !reflect.DeepEqual(got.Graph.Edges, wantEdges) || !reflect.DeepEqual(got.Unsupported, []string{"src/main.rs"}) || len(got.Errors) != 0 || len(got.Limitations) != 0 || got.Graph.Meta.Scopes == nil || !reflect.DeepEqual(*got.Graph.Meta.Scopes, wantScopes) {
+		t.Errorf("BuildGraph(%q, %#v) = %#v, want GraphV1 with 4 nodes, 4 edges, TS/JS coverage, root scope, no limitations, and unsupported src/main.rs", root, opts, got)
 	}
 	if invariants := CheckInvariants(got.Graph); len(invariants.Problems) > 0 {
 		t.Errorf("CheckInvariants(BuildGraph(%q)) = %v, want no problems", root, invariants.Problems)
@@ -81,7 +78,7 @@ func TestBuildGraphFingerprintContract(t *testing.T) {
 	outDir := filepath.Join(root, "graft")
 	path := filepath.Join(root, "src", "app.ts")
 	source := "export function run() {}"
-	unsupportedPath := filepath.Join(root, "src", "app.go")
+	unsupportedPath := filepath.Join(root, "src", "app.rs")
 	unsupportedSource := "package app\n"
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(path), err)
@@ -92,20 +89,20 @@ func TestBuildGraphFingerprintContract(t *testing.T) {
 	if err := os.WriteFile(unsupportedPath, []byte(unsupportedSource), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", unsupportedPath, err)
 	}
-	opts := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".go"}, OnlyDirs: []string{"src"}}
+	opts := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".rs"}, OnlyDirs: []string{"src"}}
 	result, err := BuildGraph(root, opts)
 	if err != nil {
 		t.Fatalf("BuildGraph(%q, %#v) error = %v, want nil", root, opts, err)
 	}
-	if !slices.Equal(result.Unsupported, []string{"src/app.go"}) {
-		t.Errorf("BuildGraph(%q, %#v) unsupported = %v, want [src/app.go]", root, opts, result.Unsupported)
+	if !slices.Equal(result.Unsupported, []string{"src/app.rs"}) {
+		t.Errorf("BuildGraph(%q, %#v) unsupported = %v, want [src/app.rs]", root, opts, result.Unsupported)
 	}
-	fingerprint, err := ReadFingerprint(outDir, "go-v1")
+	fingerprint, err := ReadFingerprint(outDir, ExtractorID)
 	if err != nil {
-		t.Fatalf("ReadFingerprint(%q, %q) error = %v, want nil", outDir, "go-v1", err)
+		t.Fatalf("ReadFingerprint(%q, %q) error = %v, want nil", outDir, ExtractorID, err)
 	}
 	if fingerprint != nil {
-		t.Fatalf("ReadFingerprint(%q, %q) = %#v after BuildGraph, want nil", outDir, "go-v1", fingerprint)
+		t.Fatalf("ReadFingerprint(%q, %q) = %#v after BuildGraph, want nil", outDir, ExtractorID, fingerprint)
 	}
 	files, err := sourcefiles.Walk(root, opts)
 	if err != nil {
@@ -116,7 +113,7 @@ func TestBuildGraphFingerprintContract(t *testing.T) {
 	}
 	wantHashes := map[string]string{
 		"src/app.ts": sourcefiles.Hash(source),
-		"src/app.go": sourcefiles.Hash(unsupportedSource),
+		"src/app.rs": sourcefiles.Hash(unsupportedSource),
 	}
 	for _, file := range files {
 		got := result.Fingerprints[file.Rel]
@@ -138,22 +135,22 @@ func TestBuildGraphFingerprintContract(t *testing.T) {
 	if _, err := Write(result.Graph, outDir); err != nil {
 		t.Fatalf("Write(BuildGraph(%q), %q) error = %v, want nil", root, outDir, err)
 	}
-	if err := WriteFingerprint(outDir, "go-v1", result.Fingerprints, opts.OnlyDirs); err != nil {
-		t.Fatalf("WriteFingerprint(%q, %q, files, %v) error = %v, want nil", outDir, "go-v1", opts.OnlyDirs, err)
+	if err := WriteFingerprint(outDir, ExtractorID, result.Fingerprints, opts.OnlyDirs); err != nil {
+		t.Fatalf("WriteFingerprint(%q, %q, files, %v) error = %v, want nil", outDir, ExtractorID, opts.OnlyDirs, err)
 	}
-	fingerprint, err = ReadFingerprint(outDir, "go-v1")
+	fingerprint, err = ReadFingerprint(outDir, ExtractorID)
 	if err != nil {
-		t.Fatalf("ReadFingerprint(%q, %q) after write error = %v, want nil", outDir, "go-v1", err)
+		t.Fatalf("ReadFingerprint(%q, %q) after write error = %v, want nil", outDir, ExtractorID, err)
 	}
 	if fingerprint == nil || !slices.Equal(fingerprint.OnlyDirs, opts.OnlyDirs) || len(fingerprint.Files) != 1 {
-		t.Fatalf("ReadFingerprint(%q, %q) = %#v, want src/app.ts and onlyDirs %v", outDir, "go-v1", fingerprint, opts.OnlyDirs)
+		t.Fatalf("ReadFingerprint(%q, %q) = %#v, want src/app.ts and onlyDirs %v", outDir, ExtractorID, fingerprint, opts.OnlyDirs)
 	}
-	drift, err := ProbeDrift(root, outDir, "go-v1", opts)
+	drift, err := ProbeDrift(root, outDir, ExtractorID, opts)
 	if err != nil {
-		t.Fatalf("ProbeDrift(%q, %q, %q, %#v) error = %v, want nil", root, outDir, "go-v1", opts, err)
+		t.Fatalf("ProbeDrift(%q, %q, %q, %#v) error = %v, want nil", root, outDir, ExtractorID, opts, err)
 	}
 	if drift == nil || len(drift.Added)+len(drift.Changed)+len(drift.Removed) != 0 {
-		t.Errorf("ProbeDrift(%q, %q, %q, %#v) = %#v, want clean fingerprint", root, outDir, "go-v1", opts, drift)
+		t.Errorf("ProbeDrift(%q, %q, %q, %#v) = %#v, want clean fingerprint", root, outDir, ExtractorID, opts, drift)
 	}
 }
 
@@ -176,7 +173,7 @@ func TestBuildGraphExtractionCacheContract(t *testing.T) {
 	if first.Parsed != 1 || first.Reused != 0 {
 		t.Errorf("BuildGraph(%q, %#v) cache counts = (%d, %d), want (1, 0)", root, opts, first.Parsed, first.Reused)
 	}
-	cachePath := filepath.Join(outDir, ".cache", "extract.go-v1.json")
+	cachePath := filepath.Join(outDir, ".cache", "extract."+ExtractorID+".json")
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		t.Fatalf("ReadFile(%q) error = %v, want a written extraction cache", cachePath, err)
@@ -189,8 +186,8 @@ func TestBuildGraphExtractionCacheContract(t *testing.T) {
 	if err := json.Unmarshal(data, &cache); err != nil {
 		t.Fatalf("Unmarshal(%q) error = %v, want valid JSON", cachePath, err)
 	}
-	if cache.Version != 1 || cache.Extractor != "go-v1" || len(cache.Files) != 1 {
-		t.Errorf("extract cache = (version %d, extractor %q, files %v), want (1, %q, [src/app.ts])", cache.Version, cache.Extractor, cache.Files, "go-v1")
+	if cache.Version != extractCacheVersion || cache.Extractor != ExtractorID || len(cache.Files) != 1 {
+		t.Errorf("extract cache = (version %d, extractor %q, files %v), want (1, %q, [src/app.ts])", cache.Version, cache.Extractor, cache.Files, ExtractorID)
 	}
 
 	second, err := BuildGraph(root, opts)
@@ -233,7 +230,7 @@ func TestBuildGraphExtractionCacheFailureContract(t *testing.T) {
 		sidecar string
 	}{
 		{name: "malformed JSON", sidecar: "{"},
-		{name: "wrong version", sidecar: `{"version":2,"extractor":"go-v1","files":{}}`},
+		{name: "wrong version", sidecar: `{"version":99,"extractor":"go-v2","files":{}}`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
@@ -242,7 +239,7 @@ func TestBuildGraphExtractionCacheFailureContract(t *testing.T) {
 			if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 				t.Fatalf("MkdirAll(%q) error = %v", cacheDir, err)
 			}
-			cachePath := filepath.Join(cacheDir, "extract.go-v1.json")
+			cachePath := filepath.Join(cacheDir, "extract."+ExtractorID+".json")
 			if err := os.WriteFile(cachePath, []byte(tt.sidecar), 0o644); err != nil {
 				t.Fatalf("WriteFile(%q) error = %v", cachePath, err)
 			}
@@ -271,7 +268,7 @@ func TestBuildGraphExtractionCacheFailureContract(t *testing.T) {
 	if _, err := BuildGraph(root, opts); err != nil {
 		t.Fatalf("BuildGraph(%q, %#v) seed cache error = %v", root, opts, err)
 	}
-	cachePath := filepath.Join(outDir, ".cache", "extract.go-v1.json")
+	cachePath := filepath.Join(outDir, ".cache", "extract."+ExtractorID+".json")
 	data, err := os.ReadFile(cachePath)
 	if err != nil {
 		t.Fatalf("ReadFile(%q) error = %v", cachePath, err)

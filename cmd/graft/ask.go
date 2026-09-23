@@ -30,6 +30,7 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
+	refreshBeforeQuery(root, contextDir, opts, stderr)
 	if children, ok := graph.ReadWorkspaceChildren(contextDir); ok {
 		return runWorkspaceAsk(root, contextDir, children, opts, limit, stdout, stderr)
 	}

@@ -20,6 +20,7 @@ func runMap(opts callersOptions, stdout, stderr io.Writer) int {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
+	refreshBeforeQuery(root, contextDir, opts, stderr)
 	if _, ok := graph.ReadWorkspaceChildren(contextDir); ok {
 		// The TypeScript workspace path renders text even when --json is set.
 		if _, err := io.WriteString(stdout, graph.FederateMap(root, contextDir, graph.RepoMapOptions{MaxDirs: maxDirs})); err != nil {

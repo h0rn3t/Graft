@@ -10,11 +10,12 @@ import (
 )
 
 func runSkeleton(opts callersOptions, stdout, stderr io.Writer) int {
-	_, contextDir, err := resolvePaths(opts)
+	root, contextDir, err := resolvePaths(opts)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
+	refreshBeforeQuery(root, contextDir, opts, stderr)
 	loaded, err := graph.Read(graph.WiringPath(contextDir))
 	result := graph.SkeletonResult{
 		File:    opts.query,

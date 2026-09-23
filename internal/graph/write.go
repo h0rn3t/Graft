@@ -3,6 +3,8 @@ package graph
 import (
 	"cmp"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -43,16 +45,17 @@ func Write(graph GraphV1, outDir string) (string, error) {
 	for i := range sorted.Nodes {
 		sorted.Nodes[i].BodyText = nil
 	}
+	compare := localeCompare()
 	slices.SortStableFunc(sorted.Nodes, func(a, b NodeV1) int {
-		return cmp.Compare(a.ID, b.ID)
+		return compare(a.ID, b.ID)
 	})
 	sorted.Edges = make([]EdgeV1, len(graph.Edges))
 	copy(sorted.Edges, graph.Edges)
 	slices.SortStableFunc(sorted.Edges, func(a, b EdgeV1) int {
 		return cmp.Or(
-			cmp.Compare(a.Source, b.Source),
-			cmp.Compare(a.Relation, b.Relation),
-			cmp.Compare(a.Target, b.Target),
+			compare(a.Source, b.Source),
+			compare(string(a.Relation), string(b.Relation)),
+			compare(a.Target, b.Target),
 		)
 	})
 
@@ -60,7 +63,9 @@ func Write(graph GraphV1, outDir string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return "", fmt.Errorf("create graph directory: %w", err)
 	}
-	data, err := json.MarshalIndent(sorted, "", "  ")
+	// json/v2 escapes neither HTML characters nor U+2028/U+2029, matching the
+	// JSON.stringify output TypeScript builds write.
+	data, err := jsonv2.Marshal(sorted, jsontext.WithIndent("  "))
 	if err != nil {
 		return "", fmt.Errorf("encode graph: %w", err)
 	}
