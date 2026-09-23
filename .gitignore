@@ -38,4 +38,5 @@ openspec/
 !/cmd/graft/**
 
 # Local agent instructions.
-/CLAUDE.md
+CLAUDE.md
+AGENTS.md
