@@ -90,3 +90,26 @@ func TestBuildReusesStoredOnlyDirsContract(t *testing.T) {
 		t.Errorf("run(build %q) nodes = %#v, want stored src scope", root, loaded.Nodes)
 	}
 }
+
+func TestBuildNoReuseReparsesUnchangedSource(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "app.ts"), []byte("export function run() {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"build", root}, "parsed: 1 of 1 files (0 replayed"},
+		{[]string{"build", root}, "parsed: 0 of 1 files (1 replayed"},
+		{[]string{"build", root, "--no-reuse"}, "parsed: 1 of 1 files (0 replayed"},
+	} {
+		var stdout, stderr bytes.Buffer
+		if status := run(tt.args, &stdout, &stderr); status != 0 {
+			t.Fatalf("run(%v) status = %d, want 0; stderr = %q", tt.args, status, stderr.String())
+		}
+		if !strings.Contains(stdout.String(), tt.want) {
+			t.Errorf("run(%v) stdout = %q, want substring %q", tt.args, stdout.String(), tt.want)
+		}
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
 )
@@ -76,6 +77,46 @@ func ReadFingerprint(outDir, extractor string) (*Fingerprint, error) {
 		return nil, nil
 	}
 	return &fingerprint, nil
+}
+
+// ReadFingerprintScope returns the latest usable source-scope fingerprint in
+// outDir, including sidecars written by the previous TypeScript CLI. It returns
+// nil when no valid scope record is available.
+func ReadFingerprintScope(outDir string) *Fingerprint {
+	if fingerprint, err := ReadFingerprint(outDir, ExtractorID); err == nil && fingerprint != nil {
+		return fingerprint
+	}
+	entries, err := os.ReadDir(filepath.Join(outDir, ".cache"))
+	if err != nil {
+		return nil
+	}
+	var latest *Fingerprint
+	var latestTime time.Time
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, "fingerprint.") || !strings.HasSuffix(name, ".json") || name == "fingerprint."+ExtractorID+".json" {
+			continue
+		}
+		stamp := strings.TrimSuffix(strings.TrimPrefix(name, "fingerprint."), ".json")
+		info, err := entry.Info()
+		if err != nil {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(outDir, ".cache", name))
+		if err != nil {
+			continue
+		}
+		var candidate Fingerprint
+		if json.Unmarshal(data, &candidate) != nil || candidate.Version != fingerprintVersion ||
+			candidate.Extractor != stamp || candidate.Files == nil {
+			continue
+		}
+		if latest == nil || info.ModTime().After(latestTime) {
+			latest = &candidate
+			latestTime = info.ModTime()
+		}
+	}
+	return latest
 }
 
 // WriteFingerprint atomically writes a fingerprint sidecar. File paths are

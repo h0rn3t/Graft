@@ -32,6 +32,10 @@ type Options struct {
 	FollowSubmodules  bool
 	FollowNestedRepos bool
 	MaxFileBytes      int64
+	NoReuse           bool
+	NoSeed            bool
+	NoCacheWrite      bool // Suppress extraction cache writes for read-only graph checks.
+	OnProgress        func(index, total int, file string)
 }
 
 // File carries the stable repository path and stat data used by graph builds

@@ -2,6 +2,7 @@ package graph
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -79,5 +80,34 @@ func TestReadReturnsErrorsForMissingAndInvalidGraphs(t *testing.T) {
 	}
 	if _, err := Read(path); err == nil {
 		t.Error("Read(invalid graph) error = nil, want error")
+	}
+	if err := os.WriteFile(path, []byte("null"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Read(path); err == nil {
+		t.Error("Read(null graph) error = nil, want error")
+	}
+}
+
+func TestWritePreservesAnotherTemporaryFile(t *testing.T) {
+	outDir := t.TempDir()
+	path := WiringPath(outDir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	other := fmt.Sprintf("%s.%d.tmp", path, os.Getpid())
+	if err := os.WriteFile(other, []byte("another writer"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Write(GraphV1{Meta: GraphMeta{Version: 1}, Nodes: []NodeV1{}, Edges: []EdgeV1{}}, outDir)
+	if err != nil {
+		t.Fatalf("Write(graph) error = %v, want nil", err)
+	}
+	got, err := os.ReadFile(other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != "another writer" {
+		t.Errorf("temporary file = %q, want %q", got, "another writer")
 	}
 }

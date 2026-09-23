@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,8 +16,6 @@ import (
 	"github.com/NanoNets/context-graph-engine/internal/graph"
 	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
 )
-
-const maxFileBytes int64 = 1_000_000
 
 // Options controls which source files Check considers.
 type Options struct {
@@ -32,19 +29,19 @@ type Options struct {
 
 // ContentDrift describes a recorded source file whose decoded content hash changed.
 type ContentDrift struct {
-	Path string
-	From string
-	To   string
+	Path string `json:"path"`
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 // Result contains the deterministic context freshness findings.
 type Result struct {
-	OK           bool
-	Missing      bool
-	ContentDrift []ContentDrift
-	Removed      []string
-	Coverage     []string
-	IndexDrift   []string
+	OK           bool           `json:"ok"`
+	Missing      bool           `json:"missing"`
+	ContentDrift []ContentDrift `json:"contentDrift"`
+	Removed      []string       `json:"removed"`
+	Coverage     []string       `json:"coverage"`
+	IndexDrift   []string       `json:"indexDrift"`
 }
 
 // Check compares the persisted context manifest and node roster with the source tree.
@@ -55,10 +52,7 @@ func Check(root string, opts Options) (Result, error) {
 		return Result{}, fmt.Errorf("resolve repository root: %w", err)
 	}
 	outDir := resolveContextDir(root, opts.ContextDir)
-	manifest, err := readManifest(filepath.Join(outDir, "manifest.json"))
-	if err != nil {
-		return Result{}, err
-	}
+	manifest := readManifest(filepath.Join(outDir, "manifest.json"))
 	if manifest == nil {
 		return Result{Missing: true}, nil
 	}
@@ -113,143 +107,49 @@ func resolveContextDir(root, override string) string {
 	return filepath.Join(root, override)
 }
 
-func readManifest(path string) (*graph.Manifest, error) {
+func readManifest(path string) *graph.Manifest {
 	data, err := os.ReadFile(path)
-	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
-	}
 	if err != nil {
-		return nil, fmt.Errorf("read manifest: %w", err)
+		return nil
 	}
 	var manifest *graph.Manifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return nil, nil
+		return nil
 	}
-	return manifest, nil
+	return manifest
 }
 
 func currentFiles(root, outDir string, opts Options) (map[string]string, error) {
-	extensions := extensionSet(opts.Extensions)
-	includes := includeSet(opts.IncludeDirs)
-	paths, fromGit := gitVisibleFiles(root)
-	if !fromGit {
-		paths = nil
-		err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
-			if walkErr != nil {
-				return nil
-			}
-			if entry.IsDir() {
-				if path != root && (pathWithin(outDir, path) || shouldSkipDir(entry.Name(), includes)) {
-					return fs.SkipDir
-				}
-				return nil
-			}
-			paths = append(paths, path)
-			return nil
-		})
-		if err != nil {
-			return nil, fmt.Errorf("walk source tree: %w", err)
-		}
-	}
-
-	current := make(map[string]string, len(paths))
-	for _, path := range paths {
-		if pathWithin(outDir, path) {
-			continue
-		}
-		rel, err := filepath.Rel(root, path)
-		if err != nil || rel == "." || hasSkippedComponent(rel, includes) {
-			continue
-		}
-		if !extensions[strings.ToLower(filepath.Ext(rel))] {
-			continue
-		}
-		info, err := os.Lstat(path)
-		if err != nil || !info.Mode().IsRegular() || info.Size() > maxFileBytes {
-			continue
-		}
-		text, ok, err := sourcefiles.Read(path)
-		if err != nil || !ok {
-			continue
-		}
-		current[filepath.ToSlash(rel)] = textHash(text)
-	}
-	return current, nil
-}
-
-func gitVisibleFiles(root string) ([]string, bool) {
-	output, err := exec.Command("git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--").Output()
-	if err != nil {
-		return nil, false
-	}
-	paths := make([]string, 0)
-	for path := range strings.SplitSeq(string(output), "\x00") {
-		if path != "" {
-			paths = append(paths, filepath.Join(root, filepath.FromSlash(path)))
-		}
-	}
-	return paths, true
-}
-
-func extensionSet(values []string) map[string]bool {
-	if values == nil {
-		values = []string{
+	extensions := opts.Extensions
+	if extensions == nil {
+		extensions = []string{
 			".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".py", ".go", ".rs",
 			".java", ".kt", ".scala", ".rb", ".php", ".c", ".h", ".cpp", ".hpp",
 			".cc", ".cs", ".swift", ".sql", ".sh", ".proto",
 		}
+	} else if len(extensions) == 0 {
+		return make(map[string]string), nil
 	}
-	extensions := make(map[string]bool, len(values))
-	for _, value := range values {
-		value = strings.ToLower(strings.TrimSpace(value))
-		if value != "" && !strings.HasPrefix(value, ".") {
-			value = "." + value
+	fingerprint := graph.ReadFingerprintScope(outDir)
+	var onlyDirs []string
+	if fingerprint != nil {
+		onlyDirs = fingerprint.OnlyDirs
+	}
+	files, err := sourcefiles.Walk(root, sourcefiles.Options{
+		OutDir: outDir, Extensions: extensions, IncludeDirs: opts.IncludeDirs, OnlyDirs: onlyDirs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("walk source tree: %w", err)
+	}
+	current := make(map[string]string, len(files))
+	for _, file := range files {
+		text, ok, err := sourcefiles.Read(file.Abs)
+		if err != nil || !ok {
+			continue
 		}
-		if value != "" {
-			extensions[value] = true
-		}
+		current[file.Rel] = textHash(text)
 	}
-	return extensions
-}
-
-func includeSet(values []string) map[string]bool {
-	includes := make(map[string]bool, len(values))
-	for _, value := range values {
-		if value != "" {
-			includes[value] = true
-		}
-	}
-	return includes
-}
-
-func hasSkippedComponent(path string, includes map[string]bool) bool {
-	parts := strings.Split(filepath.ToSlash(path), "/")
-	for _, part := range parts[:len(parts)-1] {
-		if shouldSkipDir(part, includes) {
-			return true
-		}
-	}
-	return false
-}
-
-func shouldSkipDir(name string, includes map[string]bool) bool {
-	if strings.HasPrefix(name, ".") {
-		return true
-	}
-	if includes[name] {
-		return false
-	}
-	switch name {
-	case "node_modules", "dist", "build", "_build", "out", "target", "vendor", "coverage", "__pycache__", "venv":
-		return true
-	default:
-		return false
-	}
-}
-
-func pathWithin(parent, path string) bool {
-	rel, err := filepath.Rel(parent, path)
-	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return current, nil
 }
 
 func textHash(text string) string {

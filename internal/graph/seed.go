@@ -75,6 +75,15 @@ func seedGraphFromWorktree(root, outDir string) (string, bool, error) {
 	if value != "" && value != "0" && value != "false" {
 		return "", false, nil
 	}
+	main, ok := mainWorktreeRoot(root)
+	if !ok {
+		return "", false, nil
+	}
+	if _, err := os.Stat(WiringPath(outDir)); err == nil {
+		return "", false, nil
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return "", false, fmt.Errorf("check worktree graph: %w", err)
+	}
 	cacheDir := filepath.Join(outDir, ".cache")
 	locked, err := waitForGraphLock(cacheDir)
 	if err != nil {
@@ -89,10 +98,6 @@ func seedGraphFromWorktree(root, outDir string) (string, bool, error) {
 		return "", false, nil
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", false, fmt.Errorf("check worktree graph: %w", err)
-	}
-	main, ok := mainWorktreeRoot(root)
-	if !ok {
-		return "", false, nil
 	}
 	sourceDir := filepath.Join(main, "graft")
 	sourceGraph := WiringPath(sourceDir)

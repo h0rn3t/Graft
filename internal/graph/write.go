@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -29,11 +30,14 @@ func Read(path string) (*GraphV1, error) {
 	if err != nil {
 		return nil, err
 	}
-	var graph GraphV1
+	var graph *GraphV1
 	if err := json.Unmarshal(data, &graph); err != nil {
 		return nil, err
 	}
-	return &graph, nil
+	if graph == nil {
+		return nil, errors.New("null graph")
+	}
+	return graph, nil
 }
 
 // Write sorts and atomically persists graph under outDir. The serialized copy
@@ -60,9 +64,6 @@ func Write(graph GraphV1, outDir string) (string, error) {
 	})
 
 	path := WiringPath(outDir)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", fmt.Errorf("create graph directory: %w", err)
-	}
 	// json/v2 escapes neither HTML characters nor U+2028/U+2029, matching the
 	// JSON.stringify output TypeScript builds write.
 	data, err := jsonv2.Marshal(sorted, jsontext.WithIndent("  "))
@@ -70,14 +71,8 @@ func Write(graph GraphV1, outDir string) (string, error) {
 		return "", fmt.Errorf("encode graph: %w", err)
 	}
 	data = append(data, '\n')
-	temporary := fmt.Sprintf("%s.%d.tmp", path, os.Getpid())
-	if err := os.WriteFile(temporary, data, 0o644); err != nil {
-		_ = os.Remove(temporary)
-		return "", fmt.Errorf("write temporary graph: %w", err)
-	}
-	if err := os.Rename(temporary, path); err != nil {
-		_ = os.Remove(temporary)
-		return "", fmt.Errorf("replace graph: %w", err)
+	if err := writeAtomicSidecar(path, data); err != nil {
+		return "", fmt.Errorf("write graph: %w", err)
 	}
 	return path, nil
 }

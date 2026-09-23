@@ -34,6 +34,8 @@ func SourceExtensions() []string {
 // BuildResult contains a graph and its known coverage limitations.
 type BuildResult struct {
 	Graph GraphV1
+	// SeededFrom is the main checkout copied into a new linked worktree.
+	SeededFrom string
 	// OnlyDirs is the effective persisted source scope used by this build.
 	OnlyDirs []string
 	// Parsed is the number of supported source files parsed during this build.
@@ -88,7 +90,8 @@ const extractCacheVersion = 2
 // SourceExtensions, so files without a native adapter are reported in
 // Unsupported. The graph is partial when Unsupported or Errors is non-empty.
 // When opts.OutDir is set, an extractor-specific parse cache is stored in its
-// `.cache` directory and the prior graph's meaning layer is carried over.
+// `.cache` directory unless opts.NoCacheWrite is set, and the prior graph's
+// meaning layer is carried over.
 // Persist the returned fingerprints only after Write succeeds.
 func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 	if opts.OnlyDirs == nil && opts.OutDir != "" {
@@ -146,16 +149,22 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		}
 	}
 
+	seededFrom := ""
 	outDir := opts.OutDir
 	cachePath := ""
 	if outDir != "" {
 		if !filepath.IsAbs(outDir) {
 			outDir = filepath.Join(root, outDir)
 		}
+		if !opts.NoReuse && !opts.NoSeed && filepath.Clean(outDir) == filepath.Join(absRoot, "graft") {
+			if main, busy, err := seedGraphFromWorktree(absRoot, outDir); err == nil && !busy {
+				seededFrom = main
+			}
+		}
 		cachePath = filepath.Join(outDir, ".cache", "extract."+ExtractorID+".json")
 	}
 	prior := extractCache{}
-	if cachePath != "" {
+	if cachePath != "" && !opts.NoReuse {
 		if data, err := os.ReadFile(cachePath); err == nil && json.Unmarshal(data, &prior) != nil {
 			prior = extractCache{}
 		}
@@ -165,6 +174,7 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 	}
 	current := extractCache{Version: extractCacheVersion, Extractor: ExtractorID, Files: make(map[string]cachedFile, len(files))}
 	result := BuildResult{
+		SeededFrom:   seededFrom,
 		OnlyDirs:     slices.Clone(opts.OnlyDirs),
 		Fingerprints: make(map[string]FingerprintFile, len(files)),
 		Unsupported:  make([]string, 0),
@@ -174,7 +184,10 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 	nodes := make([]NodeV1, 0, len(files))
 	rawEdges := make([]rawEdge, 0)
 	languageSet := make(map[string]struct{})
-	for _, file := range files {
+	for index, file := range files {
+		if opts.OnProgress != nil {
+			opts.OnProgress(index, len(files), file.Rel)
+		}
 		_, label, _ := languageOf(file.Rel)
 		if label == "" {
 			label, _ = genericLanguageOf(file.Rel)
@@ -254,7 +267,7 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		rawEdges = append(rawEdges, extracted.rawEdges...)
 		languageSet[extracted.language] = struct{}{}
 	}
-	if cachePath != "" {
+	if cachePath != "" && !opts.NoCacheWrite {
 		data, err := json.Marshal(current)
 		if err != nil {
 			return BuildResult{}, fmt.Errorf("encode graph extraction cache: %w", err)

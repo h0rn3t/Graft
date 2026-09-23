@@ -19,24 +19,33 @@ import (
 )
 
 type callersOptions struct {
-	command     string
-	query       string
-	root        string
-	rootSet     bool
-	contextDir  string
-	in          string
-	ignoreCase  bool
-	fixed       bool
-	maxDirs     string
-	limit       string
-	direction   string
-	depth       string
-	source      bool
-	full        bool
-	noGraphRank bool
-	jsonOutput  bool
-	noRefresh   bool
-	onlyDirs    []string
+	command            string
+	query              string
+	root               string
+	rootSet            bool
+	contextDir         string
+	in                 string
+	ignoreCase         bool
+	fixed              bool
+	maxDirs            string
+	limit              string
+	direction          string
+	depth              string
+	source             bool
+	full               bool
+	noGraphRank        bool
+	jsonOutput         bool
+	noRefresh          bool
+	noReuse            bool
+	lsp                bool
+	noGitignore        bool
+	noIgnore           bool
+	onlyDirs           []string
+	extensions         []string
+	includeDirs        []string
+	followSubmodules   *bool
+	followNestedRepos  *bool
+	workspaceChildName string
 }
 
 type callersResult struct {
@@ -110,6 +119,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	switch opts.command {
 	case "build":
 		return runBuild(opts, stdout, stderr)
+	case "check":
+		return runCheck(opts, stdout, stderr)
 	case "callers":
 		return runCallers(opts, stdout, stderr)
 	case "skeleton":
@@ -166,6 +177,14 @@ func parseArgs(args []string) (callersOptions, error) {
 			opts.noGraphRank = true
 		case arg == "--no-refresh":
 			opts.noRefresh = true
+		case arg == "--no-reuse":
+			opts.noReuse = true
+		case arg == "--lsp":
+			opts.lsp = true
+		case arg == "--no-gitignore":
+			opts.noGitignore = true
+		case arg == "--no-ignore":
+			opts.noIgnore = true
 		case arg == "--only-dir":
 			value, err := nextOptionValue(args, &index, arg)
 			if err != nil {
@@ -174,6 +193,30 @@ func parseArgs(args []string) (callersOptions, error) {
 			opts.onlyDirs = append(opts.onlyDirs, value)
 		case strings.HasPrefix(arg, "--only-dir="):
 			opts.onlyDirs = append(opts.onlyDirs, strings.TrimPrefix(arg, "--only-dir="))
+		case arg == "-e" || arg == "--extensions":
+			if index+1 >= len(args) || strings.HasPrefix(args[index+1], "-") {
+				return callersOptions{}, fmt.Errorf("option %s requires a value", arg)
+			}
+			for index+1 < len(args) && !strings.HasPrefix(args[index+1], "-") {
+				index++
+				opts.extensions = append(opts.extensions, args[index])
+			}
+		case strings.HasPrefix(arg, "--extensions="):
+			opts.extensions = append(opts.extensions, strings.TrimPrefix(arg, "--extensions="))
+		case arg == "--include-dir":
+			value, err := nextOptionValue(args, &index, arg)
+			if err != nil {
+				return callersOptions{}, err
+			}
+			opts.includeDirs = append(opts.includeDirs, value)
+		case strings.HasPrefix(arg, "--include-dir="):
+			opts.includeDirs = append(opts.includeDirs, strings.TrimPrefix(arg, "--include-dir="))
+		case arg == "--follow-submodules" || arg == "--no-follow-submodules":
+			follow := arg == "--follow-submodules"
+			opts.followSubmodules = &follow
+		case arg == "--follow-nested-repos" || arg == "--no-follow-nested-repos":
+			follow := arg == "--follow-nested-repos"
+			opts.followNestedRepos = &follow
 		case arg == "--dir":
 			value, err := nextOptionValue(args, &index, arg)
 			if err != nil {
@@ -218,8 +261,8 @@ func parseArgs(args []string) (callersOptions, error) {
 			positionals = append(positionals, arg)
 		}
 	}
-	if len(positionals) == 0 || (positionals[0] != "build" && positionals[0] != "callers" && positionals[0] != "skeleton" && positionals[0] != "grep" && positionals[0] != "map" && positionals[0] != "ask" && positionals[0] != "mcp") {
-		return callersOptions{}, fmt.Errorf("usage: graft build [dir] [options], graft <ask|callers|skeleton|grep> <query> [dir] [options], graft map [dir] [options], or graft mcp [dir]")
+	if len(positionals) == 0 || (positionals[0] != "build" && positionals[0] != "check" && positionals[0] != "callers" && positionals[0] != "skeleton" && positionals[0] != "grep" && positionals[0] != "map" && positionals[0] != "ask" && positionals[0] != "mcp") {
+		return callersOptions{}, fmt.Errorf("usage: graft build [dir] [options], graft check [dir] [options], graft <ask|callers|skeleton|grep> <query> [dir] [options], graft map [dir] [options], or graft mcp [dir]")
 	}
 	if positionals[0] == "build" {
 		if len(positionals) > 2 {
@@ -230,6 +273,17 @@ func parseArgs(args []string) (callersOptions, error) {
 		opts.rootSet = true
 		if len(positionals) == 2 {
 			opts.root = positionals[1]
+		}
+		return opts, nil
+	}
+	if positionals[0] == "check" {
+		if len(positionals) > 2 {
+			return callersOptions{}, fmt.Errorf("unexpected argument %q", positionals[2])
+		}
+		opts.command = "check"
+		if len(positionals) == 2 {
+			opts.root = positionals[1]
+			opts.rootSet = true
 		}
 		return opts, nil
 	}
@@ -336,6 +390,9 @@ func resolvePaths(opts callersOptions) (string, string, error) {
 		return "", "", fmt.Errorf("failed to resolve repository root %q: %w", root, err)
 	}
 	contextDir := opts.contextDir
+	if contextDir == "" && opts.workspaceChildName == "" {
+		contextDir = os.Getenv("GRAFT_DIR")
+	}
 	if contextDir == "" {
 		if opts.rootSet {
 			contextDir = filepath.Join(absoluteRoot, "graft")
@@ -391,6 +448,9 @@ func nearestContextDir(start string) string {
 	for dir := start; ; dir = filepath.Dir(dir) {
 		contextDir := filepath.Join(dir, "graft")
 		if _, err := os.Stat(graph.WiringPath(contextDir)); err == nil {
+			return contextDir
+		}
+		if _, err := os.Stat(filepath.Join(contextDir, "workspace.json")); err == nil {
 			return contextDir
 		}
 		parent := filepath.Dir(dir)

@@ -73,6 +73,33 @@ func TestBuildGraphContract(t *testing.T) {
 	}
 }
 
+func TestBuildGraphNoReuseAndWorktreeSeed(t *testing.T) {
+	t.Setenv("GRAFT_NO_SEED", "false")
+	main, worktree := newRefreshGitWorktree(t, "export function before() {}")
+	outDir := filepath.Join(worktree, "graft")
+	opts := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts"}}
+	seeded, err := BuildGraph(worktree, opts)
+	if err != nil {
+		t.Fatalf("BuildGraph(%q, %#v) error = %v, want nil", worktree, opts, err)
+	}
+	main, err = filepath.EvalSymlinks(main)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seeded.SeededFrom != main || seeded.Reused != 1 {
+		t.Errorf("BuildGraph(%q, %#v) = seeded %q, reused %d; want %q and 1", worktree, opts, seeded.SeededFrom, seeded.Reused, main)
+	}
+	noReuse := opts
+	noReuse.NoReuse = true
+	cold, err := BuildGraph(worktree, noReuse)
+	if err != nil {
+		t.Fatalf("BuildGraph(%q, %#v) error = %v, want nil", worktree, noReuse, err)
+	}
+	if cold.Parsed != 1 || cold.Reused != 0 || cold.SeededFrom != "" {
+		t.Errorf("BuildGraph(%q, %#v) = parsed %d, reused %d, seeded %q; want 1, 0, empty", worktree, noReuse, cold.Parsed, cold.Reused, cold.SeededFrom)
+	}
+}
+
 func TestBuildGraphReusesStoredOnlyDirsContract(t *testing.T) {
 	root := t.TempDir()
 	outDir := filepath.Join(root, "graft")

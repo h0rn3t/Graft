@@ -98,6 +98,63 @@ func TestLoadWorkspaceGraphsEmptyManifestContract(t *testing.T) {
 	}
 }
 
+func TestWorkspaceBuildChildrenContract(t *testing.T) {
+	root := t.TempDir()
+	writeWorkspaceRepo(t, root, "zeta", false)
+	writeWorkspaceRepo(t, root, "alpha", false)
+	children, ok := WorkspaceBuildChildren(root, "")
+	if !ok || !slices.Equal(children, []string{"alpha", "zeta"}) {
+		t.Errorf("WorkspaceBuildChildren(%q, empty context) = (%v, %t), want sorted workspace children", root, children, ok)
+	}
+	if err := os.Mkdir(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if children, ok := WorkspaceBuildChildren(root, ""); ok || children != nil {
+		t.Errorf("WorkspaceBuildChildren(%q, empty context) with own .git = (%v, %t), want not a workspace", root, children, ok)
+	}
+	contextDir := filepath.Join(root, "graft")
+	if err := WriteWorkspace(contextDir, []string{"zeta"}); err != nil {
+		t.Fatal(err)
+	}
+	if children, ok := WorkspaceBuildChildren(root, contextDir); !ok || !slices.Equal(children, []string{"alpha", "zeta"}) {
+		t.Errorf("WorkspaceBuildChildren(%q, %q) with an index = (%v, %t), want newly discovered children", root, contextDir, children, ok)
+	}
+}
+
+func TestWriteAndClearWorkspaceParentContract(t *testing.T) {
+	contextDir := t.TempDir()
+	if err := WriteWorkspace(contextDir, []string{"web", "api"}); err != nil {
+		t.Fatalf("WriteWorkspace(%q, children) error = %v", contextDir, err)
+	}
+	data, err := os.ReadFile(filepath.Join(contextDir, "workspace.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "{\n  \"version\": 1,\n  \"children\": [\n    \"api\",\n    \"web\"\n  ]\n}\n"
+	if string(data) != want {
+		t.Errorf("WriteWorkspace(%q, children) = %q, want %q", contextDir, data, want)
+	}
+	for _, rel := range []string{".graph/wiring.json", ".cache/session.json", "old-card.md"} {
+		path := filepath.Join(contextDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("old"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := ClearWorkspaceParent(contextDir); err != nil {
+		t.Fatalf("ClearWorkspaceParent(%q) error = %v", contextDir, err)
+	}
+	entries, err := os.ReadDir(contextDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Name() != "workspace.json" {
+		t.Errorf("ClearWorkspaceParent(%q) entries = %v, want only workspace.json", contextDir, entries)
+	}
+}
+
 func TestLoadWorkspaceGraphsUsesLastDuplicateKeyContract(t *testing.T) {
 	root := t.TempDir()
 	if _, err := Write(GraphV1{}, filepath.Join(root, "alpha", "graft")); err != nil {

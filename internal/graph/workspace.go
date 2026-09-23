@@ -2,6 +2,8 @@ package graph
 
 import (
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -83,34 +85,7 @@ func LoadWorkspaceGraphs(root, contextDir string) WorkspaceGraphs {
 		children = nil
 	}
 	if children == nil {
-		var config struct {
-			IncludeDirs []string `json:"includeDirs"`
-		}
-		if data, err := readWorkspaceFile(rootFS, filepath.Join(".graft", "config.json")); err == nil {
-			if json.Unmarshal(data, &config) != nil {
-				config.IncludeDirs = nil
-			}
-		}
-		entries, err := os.ReadDir(root)
-		if err != nil {
-			return result
-		}
-		skipDirs := [...]string{
-			"node_modules", "dist", "build", "_build", "out", "target", "vendor",
-			"coverage", "__pycache__", "venv",
-		}
-		for _, entry := range entries {
-			name := entry.Name()
-			if !entry.IsDir() || strings.HasPrefix(name, ".") {
-				continue
-			}
-			if slices.Contains(skipDirs[:], name) && !slices.Contains(config.IncludeDirs, name) {
-				continue
-			}
-			if _, err := rootFS.Stat(filepath.Join(name, ".git")); err == nil {
-				children = append(children, name)
-			}
-		}
+		children = discoverWorkspaceChildren(root, rootFS)
 	}
 	slices.Sort(children)
 	for _, child := range children {
@@ -131,6 +106,122 @@ func LoadWorkspaceGraphs(root, contextDir string) WorkspaceGraphs {
 		result.Loaded = append(result.Loaded, WorkspaceChild{Name: child, Graph: *graph})
 	}
 	return result
+}
+
+// DiscoverWorkspaceChildren lists immediate git repositories under root in
+// deterministic order, applying the persisted includeDirs overrides.
+func DiscoverWorkspaceChildren(root string) []string {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil
+	}
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		return nil
+	}
+	defer func() { _ = rootFS.Close() }() // The read-only root has no buffered state to flush.
+	return discoverWorkspaceChildren(root, rootFS)
+}
+
+func discoverWorkspaceChildren(root string, rootFS *os.Root) []string {
+	var config struct {
+		IncludeDirs []string `json:"includeDirs"`
+	}
+	if data, err := readWorkspaceFile(rootFS, filepath.Join(".graft", "config.json")); err == nil {
+		if json.Unmarshal(data, &config) != nil {
+			config.IncludeDirs = nil
+		}
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return nil
+	}
+	skipDirs := [...]string{
+		"node_modules", "dist", "build", "_build", "out", "target", "vendor",
+		"coverage", "__pycache__", "venv",
+	}
+	children := make([]string, 0)
+	for _, entry := range entries {
+		name := entry.Name()
+		if !entry.IsDir() || strings.HasPrefix(name, ".") {
+			continue
+		}
+		if slices.Contains(skipDirs[:], name) && !slices.Contains(config.IncludeDirs, name) {
+			continue
+		}
+		if _, err := rootFS.Stat(filepath.Join(name, ".git")); err == nil {
+			children = append(children, name)
+		}
+	}
+	slices.Sort(children)
+	return children
+}
+
+// WorkspaceBuildChildren reports the child repos to split and whether root is
+// a workspace build target. A valid existing workspace index keeps an empty
+// workspace recognizable; rebuilding it discovers the currently present repos.
+func WorkspaceBuildChildren(root, contextDir string) ([]string, bool) {
+	root, err := filepath.Abs(root)
+	if err != nil {
+		return nil, false
+	}
+	if contextDir == "" {
+		contextDir = filepath.Join(root, "graft")
+	} else if !filepath.IsAbs(contextDir) {
+		contextDir = filepath.Join(root, contextDir)
+	}
+	if _, indexed := ReadWorkspaceChildren(contextDir); indexed {
+		return DiscoverWorkspaceChildren(root), true
+	}
+	if _, err := os.Stat(filepath.Join(root, ".git")); err == nil {
+		return nil, false
+	}
+	children := DiscoverWorkspaceChildren(root)
+	return children, len(children) >= 2
+}
+
+// WriteWorkspace atomically writes a sorted version-one workspace index.
+func WriteWorkspace(outDir string, children []string) error {
+	type workspaceIndex struct {
+		Version  int      `json:"version"`
+		Children []string `json:"children"`
+	}
+	sorted := slices.Clone(children)
+	if sorted == nil {
+		sorted = make([]string, 0)
+	}
+	slices.Sort(sorted)
+	data, err := jsonv2.Marshal(workspaceIndex{Version: 1, Children: sorted}, jsontext.WithIndent("  "))
+	if err != nil {
+		return fmt.Errorf("encode workspace index: %w", err)
+	}
+	if err := writeAtomicSidecar(filepath.Join(outDir, "workspace.json"), append(data, '\n')); err != nil {
+		return fmt.Errorf("write workspace index: %w", err)
+	}
+	return nil
+}
+
+// ClearWorkspaceParent removes parent graph artifacts while preserving the
+// workspace index just written to contextDir.
+func ClearWorkspaceParent(contextDir string) error {
+	root, err := os.OpenRoot(contextDir)
+	if err != nil {
+		return fmt.Errorf("open workspace context directory: %w", err)
+	}
+	defer func() { _ = root.Close() }() // The directory root has no buffered state to flush.
+	entries, err := os.ReadDir(contextDir)
+	if err != nil {
+		return fmt.Errorf("read workspace context directory: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.Name() == "workspace.json" {
+			continue
+		}
+		if err := root.RemoveAll(entry.Name()); err != nil {
+			return fmt.Errorf("remove parent graph artifact %q: %w", entry.Name(), err)
+		}
+	}
+	return nil
 }
 
 // FederateMap formats a repository map for each loaded child and reports missing graphs.
