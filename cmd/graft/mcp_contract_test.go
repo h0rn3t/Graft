@@ -118,7 +118,9 @@ func TestMCPStartupReconcilesGeminiWiringContract(t *testing.T) {
 	if err := os.WriteFile(settingsPath, []byte(`{"theme":"dark"}`), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", settingsPath, err)
 	}
-	stampPath := filepath.Join(contextDir, ".cache", "wiring-stamp.json")
+	// The stamp lives in the repo's own cache, as the TypeScript cacheDir(root)
+	// resolves it, even when the server was given another context directory.
+	stampPath := filepath.Join(root, "graft", ".cache", "wiring-stamp.json")
 	if err := os.MkdirAll(filepath.Dir(stampPath), 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q) error = %v, want nil", filepath.Dir(stampPath), err)
 	}
@@ -407,7 +409,7 @@ func TestMCPWorkspaceRoutesContract(t *testing.T) {
 			tool:        "graft_find_all",
 			args:        map[string]any{"pattern": "["},
 			wantError:   true,
-			wantPhrases: []string{"invalid pattern"},
+			wantPhrases: []string{"Invalid regular expression: /[/: Unterminated character class"},
 		},
 		{
 			name: "freshness reports each child without repairing it",

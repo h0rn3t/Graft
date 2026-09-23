@@ -24,6 +24,12 @@ const minScopeNodes = 5
 // localeCompare returns a comparator matching JavaScript's default
 // String.prototype.localeCompare, which the TypeScript graph writer sorts by.
 // A collator is not safe for concurrent use, so each sort takes its own.
+// LocaleCompare orders strings like JavaScript's String.prototype.localeCompare
+// in the English locale.
+func LocaleCompare() func(a, b string) int {
+	return localeCompare()
+}
+
 func localeCompare() func(a, b string) int {
 	return collate.New(textlanguage.English).CompareString
 }

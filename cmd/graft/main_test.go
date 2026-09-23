@@ -723,7 +723,7 @@ func TestRunBrainRefreshContract(t *testing.T) {
 			t.Setenv("GRAFT_DIR", "")
 
 			var stdout, stderr bytes.Buffer
-			if got := run([]string{"_brain-refresh", root, contextDir}, &stdout, &stderr); got != 0 {
+			if got := run([]string{"_brain-refresh", root}, &stdout, &stderr); got != 0 {
 				t.Errorf("run(_brain-refresh %q %q) = %d, want 0; stderr = %q", root, contextDir, got, stderr.String())
 			}
 			if stdout.Len() != 0 || stderr.Len() != 0 {

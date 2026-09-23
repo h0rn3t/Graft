@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -165,13 +164,14 @@ func Walk(root string, opts Options) ([]File, error) {
 			Abs:  path,
 			Rel:  rel,
 			Size: info.Size(),
-			MTimeMS: float64(modified.Unix())*float64(time.Second/time.Millisecond) +
+			// sec*1e3 + nsec/1e6 rounded per operation, as Node computes mtimeMs;
+			// the explicit conversion keeps the product from fusing into an FMA.
+			MTimeMS: float64(float64(modified.Unix())*float64(time.Second/time.Millisecond)) +
 				float64(modified.Nanosecond())/float64(time.Millisecond),
 		})
 	}
-	slices.SortFunc(files, func(a, b File) int {
-		return strings.Compare(a.Rel, b.Rel)
-	})
+	// Git-visible files keep git's order and filesystem walks their sorted
+	// order, exactly the order the TypeScript walk yields.
 	return files, nil
 }
 
@@ -280,6 +280,8 @@ func gitVisibleFiles(root string, opts Options, state *walkState) ([]string, boo
 		gitlink bool
 		nested  bool
 	}
+	// Git's own output order, merged per path, as the TypeScript walk keeps it.
+	order := make([]string, 0)
 	entries := make(map[string]gitEntry)
 	includes := stringSet(opts.IncludeDirs)
 	for record := range strings.SplitSeq(string(output), "\x00") {
@@ -305,12 +307,23 @@ func gitVisibleFiles(root string, opts Options, state *walkState) ([]string, boo
 		if rel == "" || !filepath.IsLocal(filepath.FromSlash(rel)) {
 			continue
 		}
-		prior := entries[rel]
+		prior, seen := entries[rel]
+		if !seen {
+			order = append(order, rel)
+		}
 		entries[rel] = gitEntry{gitlink: entry.gitlink || prior.gitlink, nested: entry.nested || prior.nested}
 	}
 
-	files := make(map[string]struct{}, len(entries))
-	for rel, entry := range entries {
+	files := make([]string, 0, len(entries))
+	added := make(map[string]struct{}, len(entries))
+	add := func(path string) {
+		if _, dup := added[path]; !dup {
+			added[path] = struct{}{}
+			files = append(files, path)
+		}
+	}
+	for _, rel := range order {
+		entry := entries[rel]
 		abs := filepath.Join(root, filepath.FromSlash(rel))
 		if skippedPath(abs, state.topRoot, includes) {
 			continue
@@ -330,15 +343,15 @@ func gitVisibleFiles(root string, opts Options, state *walkState) ([]string, boo
 				}
 			}
 			for _, child := range childFiles {
-				files[child] = struct{}{}
+				add(child)
 			}
 			continue
 		}
 		if isSourceFile(abs, opts.MaxFileBytes) {
-			files[abs] = struct{}{}
+			add(abs)
 		}
 	}
-	return slices.Sorted(maps.Keys(files)), true, nil
+	return files, true, nil
 }
 
 func gitVisibleFilesShallow(root string, includeDirs []string, maxFileBytes int64) ([]string, bool) {

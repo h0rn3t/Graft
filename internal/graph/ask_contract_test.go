@@ -89,7 +89,7 @@ func TestAskRankingMetadataPreservesFileLeadersAndBaseline(t *testing.T) {
 	}
 	fileFirst := false
 	result, err := Ask(wiring, "amber cobalt", AskOptions{
-		Limit:                  8,
+		Limit:                  new(8.0),
 		NoGraphRank:            true,
 		FileFirst:              &fileFirst,
 		FileComplement:         true,
@@ -127,7 +127,7 @@ func TestFuseAskGatesWeakWorkspaceScope(t *testing.T) {
 		{Scope: "strong", Hits: []AskHit{{Kind: "symbol", Title: "strong", Pointer: "strong.ts:L1-L1", Score: 1}}},
 		{Scope: "weak", Hits: []AskHit{{Kind: "symbol", Title: "weak", Pointer: "weak.ts:L1-L1", Score: 0.1}}},
 	}, 0)
-	if len(result.Hits) != 1 || result.Hits[0].Scope != "strong" {
+	if len(result.Hits) != 1 || result.Hits[0].Scope == nil || *result.Hits[0].Scope != "strong" {
 		t.Errorf("FuseAsk(%q).Hits = %#v, want only strong scope", "query", result.Hits)
 	}
 	if result.Scopes == nil || len(result.Scopes.Federated) != 1 || result.Scopes.Federated[0] != "strong" {

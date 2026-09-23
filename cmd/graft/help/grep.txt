@@ -1,0 +1,17 @@
+Usage: graft grep [options] <pattern> [dir]
+
+Regex search over indexed files, hits grouped by enclosing symbol and ranked by
+coupling ($0, no LLM)
+
+Arguments:
+  pattern            regex pattern (or literal string with --fixed)
+  dir                repository root (default: nearest ancestor with a graft/
+                     index)
+
+Options:
+  -i, --ignore-case  case-insensitive match
+  --fixed            treat pattern as a literal string, not a regex
+  --in <path>        narrow to files at or under this path prefix
+  --json             output as JSON
+  --no-refresh       skip the freshness check — answer from the graph as-is
+  -h, --help         display help for command

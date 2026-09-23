@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
 )
 
 // WiringOptions holds the init choices replayed when agent wiring is refreshed.
@@ -38,7 +40,7 @@ func ReconcileWiring(
 	if wired == nil || rewrite == nil {
 		return ""
 	}
-	cacheDir := filepath.Dir(brainRulesCachePath(repo, contextDir))
+	cacheDir := contextCacheDir(repo, contextDir)
 	stamp := readWiringStamp(cacheDir)
 	if stamp != nil && stamp.Version != nil && *stamp.Version == current {
 		return ""
@@ -82,18 +84,7 @@ func ReconcileWiring(
 	if err := rewrite(repo, slices.Clone(hosts), options); err != nil {
 		return ""
 	}
-	data, _ := json.Marshal(struct {
-		Version string        `json:"version"`
-		Hosts   []string      `json:"hosts"`
-		Opts    WiringOptions `json:"opts"`
-		At      string        `json:"at"`
-	}{
-		Version: current,
-		Hosts:   hosts,
-		Opts:    options,
-		At:      now.UTC().Truncate(time.Millisecond).Format("2006-01-02T15:04:05.000Z"),
-	}) // every stamp field is JSON-safe
-	_ = writeAtomicCache(filepath.Join(cacheDir, "wiring-stamp.json"), data, "wiring stamp") // retry on the next startup if persistence fails
+	_ = WriteWiringStamp(repo, contextDir, current, hosts, options, now) // retry on the next startup if persistence fails
 	scope := ""
 	if options.Global && slices.Contains(hosts, "agents") {
 		scope = " (including this machine's ~/.codex config)"
@@ -103,6 +94,44 @@ func ReconcileWiring(
 		from = *stamp.Version
 	}
 	return fmt.Sprintf("· graft refreshed this repo's agent wiring%s (written by %s, now %s): %s.", scope, from, current, strings.Join(hosts, ", "))
+}
+
+// WriteWiringStamp records which graft version wired which hosts, and with
+// which init choices, in <context>/.cache/wiring-stamp.json. The layout is the
+// TypeScript writeStamp's: pretty-printed, hosts sorted, no trailing newline.
+func WriteWiringStamp(repo, contextDir, version string, hosts []string, options WiringOptions, now time.Time) error {
+	sorted := slices.Clone(hosts)
+	slices.Sort(sorted)
+	stamp := jsonjs.NewObject()
+	stamp.Set("version", version)
+	hostValues := make([]jsonjs.Value, len(sorted))
+	for i, host := range sorted {
+		hostValues[i] = host
+	}
+	stamp.Set("hosts", hostValues)
+	opts := jsonjs.NewObject()
+	opts.Set("global", options.Global)
+	opts.Set("mcp", options.MCP)
+	opts.Set("hooks", options.Hooks)
+	opts.Set("statusline", options.Statusline)
+	stamp.Set("opts", opts)
+	stamp.Set("at", now.UTC().Truncate(time.Millisecond).Format("2006-01-02T15:04:05.000Z"))
+	path := filepath.Join(contextCacheDir(repo, contextDir), "wiring-stamp.json")
+	return writeAtomicFile(path, []byte(jsonjs.Stringify(stamp, 2)), "wiring stamp")
+}
+
+// contextCacheDir is <context>/.cache: contextDir when given, else GRAFT_DIR
+// (relative to repo), else <repo>/graft.
+func contextCacheDir(repo, contextDir string) string {
+	if contextDir == "" {
+		contextDir = os.Getenv("GRAFT_DIR")
+	}
+	if contextDir == "" {
+		contextDir = filepath.Join(repo, "graft")
+	} else if !filepath.IsAbs(contextDir) {
+		contextDir = filepath.Join(repo, contextDir)
+	}
+	return filepath.Join(contextDir, ".cache")
 }
 
 func readWiringStamp(cacheDir string) *wiringStamp {

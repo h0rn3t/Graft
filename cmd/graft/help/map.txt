@@ -1,0 +1,15 @@
+Usage: graft map [options] [dir]
+
+Token-budgeted repo orientation — directory clusters, per-directory hubs, and
+global hotspots from the wiring graph ($0, no LLM)
+
+Arguments:
+  dir             repository root (default: nearest ancestor with a graft/
+                  index)
+
+Options:
+  --max-dirs <n>  max directory entries shown, rest counted into dropped
+                  (default 16)
+  --json          output as JSON
+  --no-refresh    skip the freshness check — answer from the graph as-is
+  -h, --help      display help for command

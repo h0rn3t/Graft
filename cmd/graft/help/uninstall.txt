@@ -1,0 +1,14 @@
+Usage: graft uninstall [options] [dir]
+
+Remove every file and config entry graft has written to this repo (the inverse
+of init)
+
+Arguments:
+  dir           target repo directory (default: ".")
+
+Options:
+  -y, --yes     actually remove (without this, prints what it would remove and
+                exits)
+  --keep-cache  keep graft/ and the .gitignore entries — wiring only
+  --no-global   leave out-of-repo files alone (~/.codex, ~/.gemini)
+  -h, --help    display help for command

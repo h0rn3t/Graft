@@ -1,0 +1,6 @@
+Usage: graft upgrade [options]
+
+Upgrade the globally installed graft to the latest version on npm
+
+Options:
+  -h, --help  display help for command

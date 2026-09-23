@@ -1,0 +1,11 @@
+Usage: graft mcp [options] [dir]
+
+Serve the graph over MCP (stdio) — exposes graft_find_code, graft_trace_calls,
+graft_find_all, graft_file_api, graft_repo_map and graft_check_freshness as
+tools
+
+Arguments:
+  dir         repository root (default: nearest ancestor with a graft/ index)
+
+Options:
+  -h, --help  display help for command

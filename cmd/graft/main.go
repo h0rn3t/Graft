@@ -3,7 +3,7 @@ package main
 
 import (
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -14,7 +14,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/NanoNets/context-graph-engine/internal/brain"
 	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/NanoNets/context-graph-engine/internal/telemetry"
 	"github.com/NanoNets/context-graph-engine/internal/upkeep"
 )
 
@@ -46,6 +49,11 @@ type callersOptions struct {
 	followSubmodules   *bool
 	followNestedRepos  *bool
 	workspaceChildName string
+	base               *string
+	format             string
+	name               bool
+	noOwners           bool
+	prAuthors          []string
 }
 
 type callersResult struct {
@@ -63,12 +71,12 @@ type symbolOutput struct {
 
 type hitOutput struct {
 	ID       string         `json:"id"`
+	Relation graph.Relation `json:"relation"`
+	Depth    int            `json:"depth"`
 	Name     string         `json:"name,omitempty"`
 	Kind     graph.Kind     `json:"kind,omitempty"`
 	Path     string         `json:"path,omitempty"`
 	Span     string         `json:"span,omitempty"`
-	Relation graph.Relation `json:"relation"`
-	Depth    int            `json:"depth"`
 }
 
 type matchOutput struct {
@@ -95,34 +103,92 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
-	if (len(args) == 2 || len(args) == 3) && args[0] == "_brain-refresh" {
-		contextDir := ""
-		if len(args) == 3 {
-			contextDir = args[2]
+	queryNote.repo, queryNote.hit = "", ""
+	parsed, err := parseCommandLine(programSpec(), args)
+	var help *helpRequest
+	var failure *cliError
+	switch {
+	case errors.As(err, &help):
+		if help.toErr {
+			writeDiagnostic(stderr, "%s", helpText(help.command))
+			return 1
 		}
-		_ = upkeep.RefreshBrainRules(context.Background(), args[1], contextDir, time.Now()) // keep cache on refresh errors
-		return 0
-	}
-	if len(args) == 1 && args[0] == "_update-check" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return 0
+		if _, err := io.WriteString(stdout, helpText(help.command)); err != nil {
+			return 1
 		}
-		upkeep.RefreshUpdateCache(home, time.Now())
 		return 0
-	}
-	opts, err := parseArgs(args)
-	if err != nil {
+	case errors.As(err, &versionRequest{}):
+		if _, err := io.WriteString(stdout, currentVersion()+"\n"); err != nil {
+			return 1
+		}
+		return 0
+	case errors.As(err, &failure):
+		writeDiagnostic(stderr, "%s\n", failure.message)
+		return 1
+	case err != nil:
 		writeDiagnostic(stderr, "%v\n", err)
-		return 2
+		return 1
 	}
+	command := parsed.command.name
+	pendingAction = func() { preAction(command, stderr) }
+	status := dispatch(parsed, stdout, stderr)
+	postAction(command, status)
+	return status
+}
+
+func dispatch(parsed invocation, stdout, stderr io.Writer) int {
+	args := parsed.args
+	switch parsed.command.path() {
+	case "_brain-refresh":
+		// Spawned detached by upkeep: nothing here is user-visible, and a failure
+		// leaves the cached rules serving until the next session tries again.
+		dir := "."
+		if len(args) > 0 {
+			dir = args[0]
+		}
+		if repo, err := filepath.Abs(dir); err == nil {
+			_, _, _ = brain.Pull(context.Background(), repo, homeDir(), nil, time.Now())
+		}
+		return 0
+	case "_update-check":
+		if home := homeDir(); home != "" {
+			upkeep.RefreshUpdateCache(home, time.Now())
+		}
+		return 0
+	case "_telemetry-flush":
+		actionStarted()
+		telemetry.RunFlush(homeDir())
+		return 0
+	case "version":
+		return runVersion(stdout)
+	case "upgrade":
+		return runUpgrade(stdout, stderr)
+	case "telemetry":
+		return runTelemetry(parsed.flags, stdout, stderr)
+	case "init":
+		return runInit(parsed.flags, stdout, stderr)
+	case "uninstall":
+		return runUninstall(parsed.flags, stderr)
+	case "brain connect", "brain pull", "brain push", "brain status", "brain disconnect":
+		return runBrain(parsed.command.name, parsed.flags, stdout, stderr)
+	}
+	opts := queryOptions(parsed)
+	actionStarted()
 	switch opts.command {
 	case "build":
+		if value, ok := parsed.flags.value("--concurrency"); ok {
+			if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil || strings.TrimSpace(value) == "" {
+				writeDiagnostic(stderr, "✗ --concurrency must be a number, got \"%s\"\n", value)
+				return 1
+			}
+		}
 		return runBuild(opts, stdout, stderr)
 	case "check":
 		return runCheck(opts, stdout, stderr)
 	case "stats":
-		return runStats(opts, stdout)
+		return runStats(opts, stdout, stderr)
+	case "blast":
+		return runBlast(opts, stdout, stderr)
 	case "callers":
 		return runCallers(opts, stdout, stderr)
 	case "skeleton":
@@ -136,222 +202,102 @@ func run(args []string, stdout, stderr io.Writer) int {
 	case "ask":
 		return runAsk(opts, stdout, stderr)
 	default:
-		writeDiagnostic(stderr, "unsupported command %q\n", opts.command)
-		return 2
+		writeDiagnostic(stderr, "error: unknown command '%s'\n", opts.command)
+		return 1
 	}
 }
 
-func parseArgs(args []string) (callersOptions, error) {
-	var opts callersOptions
-	positionals := make([]string, 0, 3)
-	for index := 0; index < len(args); index++ {
-		arg := args[index]
+// queryOptions maps a parsed query or build command onto callersOptions.
+func queryOptions(parsed invocation) callersOptions {
+	flags := parsed.flags
+	value := func(name string) string {
+		text, _ := flags.value(name)
+		return text
+	}
+	opts := callersOptions{
+		command:     parsed.command.name,
+		contextDir:  value("--dir"),
+		in:          value("--in"),
+		ignoreCase:  flags.bools["--ignore-case"],
+		fixed:       flags.bools["--fixed"],
+		maxDirs:     value("--max-dirs"),
+		limit:       value("--limit"),
+		direction:   value("--direction"),
+		depth:       value("--depth"),
+		source:      flags.bools["--source"],
+		full:        flags.bools["--full"],
+		noGraphRank: flags.bools["--no-graph-rank"],
+		jsonOutput:  flags.bools["--json"],
+		noRefresh:   flags.bools["--no-refresh"],
+		noReuse:     flags.bools["--no-reuse"],
+		lsp:         flags.bools["--lsp"],
+		noGitignore: flags.bools["--no-gitignore"],
+		noIgnore:    flags.bools["--no-ignore"],
+		onlyDirs:    flags.values["--only-dir"],
+		extensions:  flags.values["--extensions"],
+		includeDirs: flags.values["--include-dir"],
+		format:      value("--format"),
+		name:        flags.bools["--name"],
+		noOwners:    flags.bools["--no-owners"],
+		prAuthors:   flags.values["--pr-author"],
+	}
+	if base, ok := flags.value("--base"); ok {
+		opts.base = &base
+	}
+	for _, pair := range []struct {
+		name   string
+		target **bool
+	}{{"follow-submodules", &opts.followSubmodules}, {"follow-nested-repos", &opts.followNestedRepos}} {
 		switch {
-		case arg == "--json":
-			opts.jsonOutput = true
-		case arg == "-i" || arg == "--ignore-case":
-			opts.ignoreCase = true
-		case arg == "--fixed":
-			opts.fixed = true
-		case arg == "--max-dirs":
-			value, err := nextOptionValue(args, &index, arg)
-			if err != nil {
-				return callersOptions{}, err
-			}
-			opts.maxDirs = value
-		case strings.HasPrefix(arg, "--max-dirs="):
-			opts.maxDirs = strings.TrimPrefix(arg, "--max-dirs=")
-		case arg == "--limit" || arg == "-n":
-			value, err := nextOptionValue(args, &index, arg)
-			if err != nil {
-				return callersOptions{}, err
-			}
-			opts.limit = value
-		case strings.HasPrefix(arg, "--limit="):
-			opts.limit = strings.TrimPrefix(arg, "--limit=")
-		case strings.HasPrefix(arg, "-n="):
-			opts.limit = strings.TrimPrefix(arg, "-n=")
-		case arg == "--source":
-			opts.source = true
-		case arg == "--full":
-			opts.full = true
-		case arg == "--no-graph-rank":
-			opts.noGraphRank = true
-		case arg == "--no-refresh":
-			opts.noRefresh = true
-		case arg == "--no-reuse":
-			opts.noReuse = true
-		case arg == "--lsp":
-			opts.lsp = true
-		case arg == "--no-gitignore":
-			opts.noGitignore = true
-		case arg == "--no-ignore":
-			opts.noIgnore = true
-		case arg == "--only-dir":
-			value, err := nextOptionValue(args, &index, arg)
-			if err != nil {
-				return callersOptions{}, err
-			}
-			opts.onlyDirs = append(opts.onlyDirs, value)
-		case strings.HasPrefix(arg, "--only-dir="):
-			opts.onlyDirs = append(opts.onlyDirs, strings.TrimPrefix(arg, "--only-dir="))
-		case arg == "-e" || arg == "--extensions":
-			if index+1 >= len(args) || strings.HasPrefix(args[index+1], "-") {
-				return callersOptions{}, fmt.Errorf("option %s requires a value", arg)
-			}
-			for index+1 < len(args) && !strings.HasPrefix(args[index+1], "-") {
-				index++
-				opts.extensions = append(opts.extensions, args[index])
-			}
-		case strings.HasPrefix(arg, "--extensions="):
-			opts.extensions = append(opts.extensions, strings.TrimPrefix(arg, "--extensions="))
-		case arg == "--include-dir":
-			value, err := nextOptionValue(args, &index, arg)
-			if err != nil {
-				return callersOptions{}, err
-			}
-			opts.includeDirs = append(opts.includeDirs, value)
-		case strings.HasPrefix(arg, "--include-dir="):
-			opts.includeDirs = append(opts.includeDirs, strings.TrimPrefix(arg, "--include-dir="))
-		case arg == "--follow-submodules" || arg == "--no-follow-submodules":
-			follow := arg == "--follow-submodules"
-			opts.followSubmodules = &follow
-		case arg == "--follow-nested-repos" || arg == "--no-follow-nested-repos":
-			follow := arg == "--follow-nested-repos"
-			opts.followNestedRepos = &follow
-		case arg == "--dir":
-			value, err := nextOptionValue(args, &index, arg)
-			if err != nil {
-				return callersOptions{}, err
-			}
-			opts.contextDir = value
-		case strings.HasPrefix(arg, "--dir="):
-			opts.contextDir = strings.TrimPrefix(arg, "--dir=")
-		case arg == "--direction":
-			value, err := nextOptionValue(args, &index, arg)
-			if err != nil {
-				return callersOptions{}, err
-			}
-			opts.direction = value
-		case strings.HasPrefix(arg, "--direction="):
-			opts.direction = strings.TrimPrefix(arg, "--direction=")
-		case arg == "--depth" || arg == "-d":
-			value, err := nextOptionValue(args, &index, arg)
-			if err != nil {
-				return callersOptions{}, err
-			}
-			opts.depth = value
-		case strings.HasPrefix(arg, "--depth="):
-			opts.depth = strings.TrimPrefix(arg, "--depth=")
-		case strings.HasPrefix(arg, "-d="):
-			opts.depth = strings.TrimPrefix(arg, "-d=")
-		case arg == "--in":
-			value, err := nextOptionValue(args, &index, arg)
-			if err != nil {
-				return callersOptions{}, err
-			}
-			opts.in = value
-		case strings.HasPrefix(arg, "--in="):
-			opts.in = strings.TrimPrefix(arg, "--in=")
-		case arg == "--provider" || arg == "--model" || arg == "--api-key" || arg == "--base-url":
-			if _, err := nextOptionValue(args, &index, arg); err != nil {
-				return callersOptions{}, err
-			}
-		case strings.HasPrefix(arg, "-"):
-			return callersOptions{}, fmt.Errorf("unknown option %q", arg)
-		default:
-			positionals = append(positionals, arg)
+		case flags.bools["--"+pair.name]:
+			follow := true
+			*pair.target = &follow
+		case flags.bools["--no-"+pair.name]:
+			follow := false
+			*pair.target = &follow
 		}
 	}
-	if len(positionals) == 0 || (positionals[0] != "build" && positionals[0] != "check" && positionals[0] != "stats" && positionals[0] != "callers" && positionals[0] != "skeleton" && positionals[0] != "grep" && positionals[0] != "map" && positionals[0] != "ask" && positionals[0] != "mcp") {
-		return callersOptions{}, fmt.Errorf("usage: graft build [dir] [options], graft check [dir] [options], graft <ask|callers|skeleton|grep> <query> [dir] [options], graft map [dir] [options], or graft mcp [dir]")
+	args := parsed.args
+	switch opts.command {
+	case "ask", "callers", "skeleton", "grep":
+		opts.query = args[0]
+		args = args[1:]
 	}
-	if positionals[0] == "build" {
-		if len(positionals) > 2 {
-			return callersOptions{}, fmt.Errorf("unexpected argument %q", positionals[2])
-		}
-		opts.command = "build"
-		opts.root = "."
-		opts.rootSet = true
-		if len(positionals) == 2 {
-			opts.root = positionals[1]
-		}
-		return opts, nil
+	if len(args) > 0 {
+		opts.root, opts.rootSet = args[0], true
+	} else if opts.command == "build" {
+		opts.root, opts.rootSet = ".", true
 	}
-	if positionals[0] == "check" {
-		if len(positionals) > 2 {
-			return callersOptions{}, fmt.Errorf("unexpected argument %q", positionals[2])
-		}
-		opts.command = "check"
-		if len(positionals) == 2 {
-			opts.root = positionals[1]
-			opts.rootSet = true
-		}
-		return opts, nil
-	}
-	if positionals[0] == "stats" {
-		if len(positionals) > 2 {
-			return callersOptions{}, fmt.Errorf("unexpected argument %q", positionals[2])
-		}
-		opts.command = "stats"
-		if len(positionals) == 2 {
-			opts.root = positionals[1]
-			opts.rootSet = true
-		}
-		return opts, nil
-	}
-	if positionals[0] == "mcp" {
-		if len(positionals) > 2 {
-			return callersOptions{}, fmt.Errorf("unexpected argument %q", positionals[2])
-		}
-		opts.command = "mcp"
-		if len(positionals) == 2 {
-			opts.root = positionals[1]
-			opts.rootSet = true
-		}
-		return opts, nil
-	}
-	if positionals[0] == "map" {
-		if len(positionals) > 2 {
-			return callersOptions{}, fmt.Errorf("unexpected argument %q", positionals[2])
-		}
-		opts.command = "map"
-		if len(positionals) == 2 {
-			opts.root = positionals[1]
-			opts.rootSet = true
-		}
-		return opts, nil
-	}
-	if len(positionals) < 2 {
-		return callersOptions{}, fmt.Errorf("usage: graft <ask|callers|skeleton|grep> <query> [dir] [options]")
-	}
-	if len(positionals) > 3 {
-		return callersOptions{}, fmt.Errorf("unexpected argument %q", positionals[3])
-	}
-	opts.command = positionals[0]
-	opts.query = positionals[1]
-	if len(positionals) == 3 {
-		opts.root = positionals[2]
-		opts.rootSet = true
-	}
-	return opts, nil
-}
-
-func nextOptionValue(args []string, index *int, name string) (string, error) {
-	if *index+1 >= len(args) {
-		return "", fmt.Errorf("option %s requires a value", name)
-	}
-	*index++
-	return args[*index], nil
+	return opts
 }
 
 func runCallers(opts callersOptions, stdout, stderr io.Writer) int {
-	root, contextDir, err := resolvePaths(opts)
+	root, contextDir, err := resolvePaths(opts, queryPathRules, stderr)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
+	noteQueryRoot(opts)
 	refreshBeforeQuery(root, contextDir, opts, stderr)
+	if _, workspace := graph.ReadWorkspaceChildren(contextDir); workspace && !opts.jsonOutput {
+		direction := graph.DirectionIn
+		if opts.direction == "out" {
+			direction = graph.DirectionOut
+		}
+		text, found, err := federateCallers(root, contextDir, opts.query, direction, workspaceCallersDepth(opts.depth), opts.in)
+		switch {
+		case err != nil:
+			writeDiagnostic(stderr, "%v\n", err)
+			return 1
+		case !found:
+			writeDiagnostic(stderr, "✗ %s\n", text)
+			return 1
+		}
+		if _, err := io.WriteString(stdout, text+"\n"); err != nil {
+			return 1
+		}
+		return 0
+	}
 
 	loaded, err := graph.Read(graph.WiringPath(contextDir))
 	if err != nil {
@@ -364,7 +310,7 @@ func runCallers(opts callersOptions, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if len(matches) == 0 {
-		writeDiagnostic(stderr, "✗ no symbol %q in the graph — check spelling or run graft build\n", opts.query)
+		writeDiagnostic(stderr, "✗ no symbol \"%s\" in the graph — check spelling or run graft build\n", opts.query)
 		return 1
 	}
 
@@ -386,39 +332,65 @@ func runCallers(opts callersOptions, stdout, stderr io.Writer) int {
 	if opts.jsonOutput {
 		return writeJSON(stdout, stderr, opts.query, *loaded, results, direction)
 	}
-	return writeHuman(stdout, root, results, direction, depth)
+	return writeHuman(stdout, root, *loaded, results, direction, depth)
 }
 
-func resolvePaths(opts callersOptions) (string, string, error) {
+// pathRules says how a command finds its repository and graph, as the
+// TypeScript command does: query commands walk up to the nearest indexed
+// ancestor (queryRoot), and only the commands whose TypeScript engine reads
+// GRAFT_DIR honor it — the others, and every pre-query refresh, read --dir only.
+type pathRules struct {
+	walkUp   bool
+	honorEnv bool
+}
+
+var (
+	// queryPathRules serves grep, callers, map, skeleton and mcp.
+	queryPathRules = pathRules{walkUp: true}
+	// enginePathRules serves ask and check, which read their graph through the engine.
+	enginePathRules = pathRules{walkUp: true, honorEnv: true}
+	// buildPathRules serves build, which never walks up.
+	buildPathRules = pathRules{honorEnv: true}
+)
+
+// resolvePaths returns a command's absolute root and graph directory. A walk
+// up to an ancestor's graph is announced on stderr, never silent.
+func resolvePaths(opts callersOptions, rules pathRules, stderr io.Writer) (string, string, error) {
 	root := opts.root
 	if root == "" {
-		var err error
-		root, err = os.Getwd()
+		cwd, err := os.Getwd()
 		if err != nil {
 			return "", "", fmt.Errorf("failed to resolve working directory: %w", err)
+		}
+		root = cwd
+		if rules.walkUp {
+			root = nearestGraftRoot(cwd, opts.contextDir)
+			if root != cwd {
+				writeDiagnostic(stderr, "[graft] no graft/ here — answering from %s/graft\n", root)
+			}
 		}
 	}
 	absoluteRoot, err := filepath.Abs(root)
 	if err != nil {
 		return "", "", fmt.Errorf("failed to resolve repository root %q: %w", root, err)
 	}
-	contextDir := opts.contextDir
-	if contextDir == "" && opts.workspaceChildName == "" {
-		contextDir = os.Getenv("GRAFT_DIR")
+	return absoluteRoot, graphDir(absoluteRoot, opts, rules.honorEnv), nil
+}
+
+// graphDir is --dir, else GRAFT_DIR where honored (relative to the working
+// directory, as the TypeScript engine passes it through), else <root>/graft.
+func graphDir(root string, opts callersOptions, honorEnv bool) string {
+	dir := opts.contextDir
+	if dir == "" && honorEnv && opts.workspaceChildName == "" {
+		dir = os.Getenv("GRAFT_DIR")
 	}
-	if contextDir == "" {
-		if opts.rootSet {
-			contextDir = filepath.Join(absoluteRoot, "graft")
-		} else {
-			contextDir = nearestContextDir(absoluteRoot)
-		}
-		return absoluteRoot, contextDir, nil
+	if dir == "" {
+		return filepath.Join(root, "graft")
 	}
-	absoluteContext, err := filepath.Abs(contextDir)
-	if err != nil {
-		return "", "", fmt.Errorf("failed to resolve context directory %q: %w", opts.contextDir, err)
+	if absolute, err := filepath.Abs(dir); err == nil {
+		return absolute
 	}
-	return absoluteRoot, absoluteContext, nil
+	return dir
 }
 
 func refreshBeforeQuery(root, contextDir string, opts callersOptions, stderr io.Writer) {
@@ -457,22 +429,6 @@ func refreshableGraph(contextDir string) bool {
 	return err == nil && len(paths) > 0
 }
 
-func nearestContextDir(start string) string {
-	for dir := start; ; dir = filepath.Dir(dir) {
-		contextDir := filepath.Join(dir, "graft")
-		if _, err := os.Stat(graph.WiringPath(contextDir)); err == nil {
-			return contextDir
-		}
-		if _, err := os.Stat(filepath.Join(contextDir, "workspace.json")); err == nil {
-			return contextDir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return filepath.Join(start, "graft")
-		}
-	}
-}
-
 func resolveDirection(raw string) (graph.Direction, error) {
 	switch raw {
 	case "":
@@ -482,7 +438,7 @@ func resolveDirection(raw string) (graph.Direction, error) {
 	case string(graph.DirectionOut):
 		return graph.DirectionOut, nil
 	default:
-		return "", fmt.Errorf(`--direction must be "in" or "out", got %q`, raw)
+		return "", fmt.Errorf(`--direction must be "in" or "out", got "%s"`, raw)
 	}
 }
 
@@ -493,10 +449,14 @@ func resolveDepth(raw string) (int, error) {
 	if strings.EqualFold(raw, "all") || strings.EqualFold(raw, "full") || strings.EqualFold(raw, "max") {
 		return int(^uint(0) >> 1), nil
 	}
-	value, err := strconv.ParseFloat(raw, 64)
-	maxInt := float64(int(^uint(0) >> 1))
-	if err != nil || math.IsNaN(value) || math.IsInf(value, 0) || value < 1 || value > maxInt {
-		return 0, fmt.Errorf(`--depth must be a positive number or "all", got %q`, raw)
+	// Number(raw), as the TypeScript CLI reads it: hex, exponents and
+	// surrounding white space are numbers too.
+	value := jsonjs.ToNumber(raw)
+	if math.IsNaN(value) || math.IsInf(value, 0) || value < 1 {
+		return 0, fmt.Errorf(`--depth must be a positive number or "all", got "%s"`, raw)
+	}
+	if maxInt := float64(int(^uint(0) >> 1)); value >= maxInt {
+		return int(^uint(0) >> 1), nil
 	}
 	return int(math.Floor(value)), nil
 }
@@ -513,7 +473,7 @@ func writeJSON(w, stderr io.Writer, query string, wiring graph.GraphV1, results 
 		}
 		payload.Matches = append(payload.Matches, match)
 	}
-	data, err := json.MarshalIndent(payload, "", "  ")
+	data, err := jsonjs.Marshal(payload, "  ")
 	if err != nil {
 		writeDiagnostic(stderr, "✗ failed to encode callers result: %v\n", err)
 		return 1
@@ -530,7 +490,7 @@ func writeDiagnostic(w io.Writer, format string, args ...any) {
 	}
 }
 
-func writeHuman(w io.Writer, root string, results []callersResult, direction graph.Direction, depth int) int {
+func writeHuman(w io.Writer, root string, wiring graph.GraphV1, results []callersResult, direction graph.Direction, depth int) int {
 	var body strings.Builder
 	for _, result := range results {
 		fmt.Fprintf(&body, "%s · %s · %s:%s\n", result.symbol.Name, result.symbol.Kind, result.symbol.Path, result.symbol.Span)
@@ -559,7 +519,7 @@ func writeHuman(w io.Writer, root string, results []callersResult, direction gra
 		}
 		body.WriteByte('\n')
 	}
-	text := strings.TrimRight(body.String(), "\n") + "\n"
+	text := mcpWithSavings(strings.TrimRight(body.String(), "\n")+"\n", callersSavings(wiring, results))
 	if _, err := io.WriteString(w, text); err != nil {
 		return 1
 	}

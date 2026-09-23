@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -58,17 +57,8 @@ func ResolveSymbol(graph GraphV1, query string, opts ResolveSymbolOptions) ([]No
 		return matches, nil
 	}
 	prefix := normalizePathPrefix(opts.In)
-	if prefix != "" {
-		indexed := false
-		for _, node := range graph.Nodes {
-			if pathUnderPrefix(node.Path, prefix) {
-				indexed = true
-				break
-			}
-		}
-		if !indexed {
-			return nil, fmt.Errorf("nothing indexed under %q (or any path prefix)", prefix+"/")
-		}
+	if err := assertPrefixIndexed(graph, prefix); err != nil {
+		return nil, err
 	}
 	filtered := make([]NodeV1, 0, len(matches))
 	for _, node := range matches {

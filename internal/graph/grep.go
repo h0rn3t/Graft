@@ -11,6 +11,8 @@ import (
 	"strings"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
 )
 
 const (
@@ -112,17 +114,8 @@ func Grep(wiring GraphV1, repoRoot, pattern string, opts GrepOptions) (GrepResul
 	}
 
 	inPrefix := normalizePathPrefix(opts.In)
-	if inPrefix != "" {
-		indexed := false
-		for _, node := range wiring.Nodes {
-			if pathUnderPrefix(node.Path, inPrefix) {
-				indexed = true
-				break
-			}
-		}
-		if !indexed {
-			return GrepResult{}, fmt.Errorf("nothing indexed under %q (or any path prefix)", inPrefix+"/")
-		}
+	if err := assertPrefixIndexed(wiring, inPrefix); err != nil {
+		return GrepResult{}, err
 	}
 
 	inDegree := grepInDegree(wiring.Edges)
@@ -164,7 +157,7 @@ func Grep(wiring GraphV1, repoRoot, pattern string, opts GrepOptions) (GrepResul
 				groupIndexes[key] = len(result.Groups)
 				result.Groups = append(result.Groups, group)
 			}
-			trimmed := strings.TrimSpace(raw)
+			trimmed := jsonjs.TrimSpace(raw)
 			result.Groups[groupIndexes[key]].Hits = append(result.Groups[groupIndexes[key]].Hits, GrepHit{
 				Line: lineIndex + 1,
 				Text: truncateGrepText(trimmed),
@@ -173,8 +166,9 @@ func Grep(wiring GraphV1, repoRoot, pattern string, opts GrepOptions) (GrepResul
 		}
 	}
 
+	compare := localeCompare()
 	slices.SortStableFunc(result.Groups, func(left, right GrepGroup) int {
-		return cmp.Or(cmp.Compare(right.InDegree, left.InDegree), cmp.Compare(left.Path, right.Path))
+		return cmp.Or(cmp.Compare(right.InDegree, left.InDegree), compare(left.Path, right.Path))
 	})
 	result.Saved = grepSavings(wiring.Nodes, hitPaths)
 	return result, nil

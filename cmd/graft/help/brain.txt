@@ -1,0 +1,18 @@
+Usage: graft brain [options] [command]
+
+The Trail brain attached to this repo: the rules mined from its own history
+
+Options:
+  -h, --help               display help for command
+
+Commands:
+  connect <handoff> [dir]  Attach a brain to this repo and pull its rules
+  pull [dir]               Re-pull the attached brain's rules and rewrite the
+                           agent instruction files
+  push [options] [dir]     Read THIS repo on your machine and build its brain —
+                           no GitHub App, works on private repos
+  status [options] [dir]   Show the attached brain, how many rules are cached,
+                           and how many still match the code
+  disconnect [dir]         Forget the attached brain (its rules stay in the
+                           instruction files until the next init)
+  help [command]           display help for command

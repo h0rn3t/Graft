@@ -1,0 +1,29 @@
+Usage: graft blast [options] [dir]
+
+Blast radius of a diff: what depends on the lines this change touched ($0, no
+LLM). Built for CI — `--format markdown` is a PR comment with a Mermaid diagram.
+
+Arguments:
+  dir                   repository root (default: nearest ancestor with a graft/
+                        index)
+
+Options:
+  --base <ref>          diff against this ref's merge base with HEAD (e.g.
+                        origin/main); default: the working tree vs HEAD
+  -d, --depth <n>       hops to walk over incoming edges, or "all" for the full
+                        closure (default 2)
+  --format <fmt>        text (default) | markdown | mermaid | json
+  --name                name the affected areas with one cached LLM call (needs
+                        GRAFT_API_KEY); without it, areas are named after their
+                        hub symbol
+  --export-viz <dir>    also write the interactive page for this radius (one
+                        self-contained index.html — for CI, GitHub Pages, or an
+                        artifact)
+  --title <text>        subtitle beside the repo name on the exported page (e.g.
+                        "PR #171")
+  --no-owners           do not suggest who to tag (by default, git history names
+                        the people behind each affected area)
+  --pr-author <who...>  GitHub login, git name or email of the PR author, so
+                        they are left out of their own suggestions
+  --no-refresh          skip the freshness check — answer from the graph as-is
+  -h, --help            display help for command

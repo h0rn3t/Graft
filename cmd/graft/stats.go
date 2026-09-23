@@ -7,40 +7,29 @@ import (
 	"io"
 	"math"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
-	"time"
+
+	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/NanoNets/context-graph-engine/internal/savings"
 )
 
-func runStats(opts callersOptions, stdout io.Writer) int {
+func runStats(opts callersOptions, stdout, stderr io.Writer) int {
 	root := opts.root
 	if root == "" {
-		root = "."
-	}
-	contextDir := os.Getenv("GRAFT_DIR")
-	if contextDir == "" {
-		contextDir = filepath.Join(root, "graft")
-	} else if !filepath.IsAbs(contextDir) {
-		contextDir = filepath.Join(root, contextDir)
-	}
-	sessionDir := filepath.Join(contextDir, ".cache", "session")
-	entries, err := os.ReadDir(sessionDir)
-	if err != nil {
-		entries = nil
-	}
-	var bestName string
-	var bestTime time.Time
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".json") {
-			continue
+		cwd, err := os.Getwd()
+		if err != nil {
+			writeDiagnostic(stderr, "✗ failed to resolve working directory: %v\n", err)
+			return 1
 		}
-		info, err := entry.Info()
-		if err == nil && (bestName == "" || info.ModTime().After(bestTime)) {
-			bestName, bestTime = entry.Name(), info.ModTime()
+		root = nearestGraftRoot(cwd, opts.contextDir)
+		if root != cwd {
+			writeDiagnostic(stderr, "[graft] no graft/ here — answering from %s/graft\n", root)
 		}
 	}
-	if bestName == "" {
+	id, data, found := savings.LatestSession(root)
+	if !found {
+		var err error
 		if opts.jsonOutput {
 			_, err = io.WriteString(stdout, "null\n")
 		} else {
@@ -51,31 +40,29 @@ func runStats(opts callersOptions, stdout io.Writer) int {
 		}
 		return 0
 	}
-	id := strings.TrimSuffix(bestName, ".json")
-	data, err := os.ReadFile(filepath.Join(sessionDir, bestName))
-	if err != nil || !json.Valid(data) || len(bytes.TrimSpace(data)) == 0 || bytes.TrimSpace(data)[0] != '{' {
-		data = []byte(`{"lastQuery":null,"perAgentQuery":{},"graftReads":0,"sourceReads":0,"savedTokens":0,"injectedPointers":[],"nudges":0}`)
+	raw := data
+	if !json.Valid(data) || len(bytes.TrimSpace(data)) == 0 || bytes.TrimSpace(data)[0] != '{' {
+		data = []byte(emptySessionJSON)
 	}
 	var values map[string]json.RawMessage
 	if err := json.Unmarshal(data, &values); err != nil {
 		return 1
 	}
 	if opts.jsonOutput {
-		idJSON, _ := json.Marshal(id)
-		body := bytes.TrimSpace(data)
-		merged := append([]byte(`{"id":`), idJSON...)
-		if len(body) > 2 {
-			merged = append(merged, ',')
-			merged = append(merged, body[1:]...)
-		} else {
-			merged = append(merged, '}')
+		// { id, ...session }: a parse failure or a literal null reads as the
+		// empty session, as the TypeScript readSession does.
+		session, err := jsonjs.Parse(raw)
+		if err != nil || session == nil {
+			session, _ = jsonjs.Parse([]byte(emptySessionJSON))
 		}
-		var formatted bytes.Buffer
-		if err := json.Indent(&formatted, merged, "", "  "); err != nil {
-			return 1
+		merged := jsonjs.NewObject()
+		merged.Set("id", id)
+		spread := jsonjs.Spread(session, true)
+		for _, key := range spread.Keys() {
+			value, _ := spread.Get(key)
+			merged.Set(key, value)
 		}
-		_, err := fmt.Fprintln(stdout, formatted.String())
-		if err != nil {
+		if _, err := fmt.Fprintln(stdout, jsonjs.Stringify(merged, 2)); err != nil {
 			return 1
 		}
 		return 0
@@ -97,15 +84,8 @@ func runStats(opts callersOptions, stdout io.Writer) int {
 		"  mix:           " + mix,
 		"  tokens saved:  ~" + groupedNumber(saved),
 	}
-	if cost, billed := readNumber("inputCostMicros"), readNumber("inputTokensBilled"); cost != 0 && billed != 0 && saved > 0 {
-		usd := saved * (cost / billed) / 1e6
-		if !math.IsInf(usd, 0) && !math.IsNaN(usd) {
-			value := "<$0.01"
-			if usd >= 0.01 {
-				value = fmt.Sprintf("$%.2f", usd)
-			}
-			lines = append(lines, "  value saved:   ~"+value)
-		}
+	if usd, ok := savings.DollarsSaved(saved, readNumber("inputCostMicros"), readNumber("inputTokensBilled")); ok {
+		lines = append(lines, "  value saved:   ~"+savings.FormatDollars(usd))
 	}
 	var lastQuery string
 	if json.Unmarshal(values["lastQuery"], &lastQuery) == nil && lastQuery != "" {
@@ -116,6 +96,9 @@ func runStats(opts callersOptions, stdout io.Writer) int {
 	}
 	return 0
 }
+
+// emptySessionJSON is the state of a session nothing has been recorded for.
+const emptySessionJSON = `{"lastQuery":null,"perAgentQuery":{},"graftReads":0,"sourceReads":0,"savedTokens":0,"injectedPointers":[],"nudges":0}`
 
 func groupedNumber(value float64) string {
 	plain := strconv.FormatFloat(value, 'f', 0, 64)

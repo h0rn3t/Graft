@@ -73,7 +73,8 @@ func TestWalkContract(t *testing.T) {
 				OutDir:     "graft",
 				Extensions: []string{"TS"},
 			},
-			want: []string{"src/a.ts", "src/a/c.ts", "src/ab/b.ts"},
+			// Depth-first in directory order, as the TypeScript filesystem walk visits.
+			want: []string{"src/a/c.ts", "src/a.ts", "src/ab/b.ts"},
 		},
 		{
 			name:  "only-dir prefix is segment-aware",
@@ -111,7 +112,8 @@ func TestWalkContract(t *testing.T) {
 				MaxFileBytes: 1,
 				OnlyDirs:     []string{"src"},
 			},
-			want: []string{"src/a.ts", "src/a/c.ts", "src/ab/b.ts"},
+			// Depth-first in directory order, as the TypeScript filesystem walk visits.
+			want: []string{"src/a/c.ts", "src/a.ts", "src/ab/b.ts"},
 		},
 		{
 			name: "tracked untracked and ignored git files",

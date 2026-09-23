@@ -105,7 +105,7 @@ func TestRunCheckExcludesCustomContextDirectoryWithoutWriting(t *testing.T) {
 		t.Fatalf("run(%v) status = %d, want 0; stderr = %q", buildArgs, status, stderr.String())
 	}
 	writeCheckSource(t, contextDir, "generated.ts", "export function generated() {}\n")
-	cachePath := filepath.Join(contextDir, ".cache", "extract.go-v5.json")
+	cachePath := filepath.Join(contextDir, ".cache", "extract."+graph.ExtractorID+".json")
 	fingerprintPath, err := graph.FingerprintPath(contextDir, graph.ExtractorID)
 	if err != nil {
 		t.Fatal(err)

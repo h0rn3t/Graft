@@ -1,0 +1,10 @@
+Usage: graft brain disconnect [options] [dir]
+
+Forget the attached brain (its rules stay in the instruction files until the
+next init)
+
+Arguments:
+  dir         target repo directory (default: ".")
+
+Options:
+  -h, --help  display help for command

@@ -17,7 +17,7 @@ import (
 // ExtractorID names the native extractor in its cache and fingerprint sidecars.
 // Bump it whenever extraction output or a grammar version changes, so a graph
 // built by an older extractor is never trusted as fresh.
-const ExtractorID = "go-v5"
+const ExtractorID = "go-v6"
 
 var goModuleLine = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)
 

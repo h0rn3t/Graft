@@ -1,0 +1,19 @@
+Usage: graft viz [options] [dir]
+
+Serve an interactive visualization of the context graph (and graph.json when
+present)
+
+Arguments:
+  dir                repository root (default: nearest ancestor with a graft/
+                     index)
+
+Options:
+  -p, --port <port>  port to serve on (default: "4400")
+  --no-open          don't open the browser
+  --export <dir>     write one self-contained index.html instead of serving (for
+                     CI, GitHub Pages, or a build artifact)
+  --title <text>     subtitle shown beside the repo name in an exported page
+                     (e.g. "PR #151")
+  --tabs <list>      tabs the exported page offers, comma separated:
+                     context,code,outline (default: all three)
+  -h, --help         display help for command

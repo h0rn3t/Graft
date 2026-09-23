@@ -1,0 +1,6 @@
+Usage: graft _update-check [options]
+
+internal: refresh the cached latest-version answer
+
+Options:
+  -h, --help  display help for command

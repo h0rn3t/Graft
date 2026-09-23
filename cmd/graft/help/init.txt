@@ -1,0 +1,29 @@
+Usage: graft init [options] [dir]
+
+Wire Graft into the AI coding agents used with this repo (instruction files +
+MCP server; full hooks + statusline + MCP for Claude Code)
+
+Arguments:
+  dir                target repo directory (default: ".")
+
+Options:
+  --no-build         skip building the graph (wire files only)
+  --agents <ids...>  only these agents (agents, adal, cursor, gemini, grok,
+                     hermes, antigravity, copilot, kiro, windsurf, claude)
+  --all-agents       write instruction files for every known agent, detected or
+                     not
+  --no-agents        Claude Code wiring only; skip other agents
+  --list-agents      list known agent ids and exit
+  --no-mcp           skip MCP server registration for other agents
+  --no-hooks         skip hook installation for other agents
+  --no-statusline    skip writing Claude Code statusLine (keep a user-defined
+                     one)
+  --dry-run          print every file init would touch, then exit without
+                     writing
+  -y, --yes          skip the picker and wire every detected agent (the pre-0.8
+                     default)
+  --no-global        skip writes outside this repo (the ~/.codex/ config +
+                     hooks)
+  --brain <handoff>  attach a Trail brain: <brainId>:<token> (or a bare brain id
+                     with GRAFT_BRAIN_TOKEN set)
+  -h, --help         display help for command

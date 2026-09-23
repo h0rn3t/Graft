@@ -5,7 +5,6 @@ import (
 	jsonv2 "encoding/json/v2"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -19,22 +18,13 @@ type checkJSONOutput struct {
 }
 
 func runCheck(opts callersOptions, stdout, stderr io.Writer) int {
-	root, contextDir, err := resolvePaths(opts)
+	root, contextDir, err := resolvePaths(opts, enginePathRules, stderr)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
-	if !opts.rootSet && opts.contextDir == "" {
-		defaultContextDir := nearestContextDir(root)
-		root = filepath.Dir(defaultContextDir)
-		if os.Getenv("GRAFT_DIR") == "" {
-			contextDir = defaultContextDir
-		}
-	}
-	workspaceDir := contextDir
-	if opts.contextDir == "" {
-		workspaceDir = filepath.Join(root, "graft")
-	}
+	noteQueryRoot(opts)
+	workspaceDir := graphDir(root, opts, false)
 	if _, workspace := graph.ReadWorkspaceChildren(workspaceDir); workspace {
 		return runWorkspaceCheck(root, workspaceDir, stdout, stderr)
 	}

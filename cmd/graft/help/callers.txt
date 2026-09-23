@@ -1,0 +1,20 @@
+Usage: graft callers [options] <symbol> [dir]
+
+Who calls/references a symbol ($0, no LLM). --direction out gives callees (what
+it calls); --depth N (or all) walks transitively for full blast radius
+
+Arguments:
+  symbol                bare name, qualified (Class.method), or
+                        package-qualified (pkg.Fn)
+  dir                   repository root (default: nearest ancestor with a graft/
+                        index)
+
+Options:
+  --direction <in|out>  edge direction: "in" = callers (default), "out" =
+                        callees
+  -d, --depth <n>       walk transitively up to N hops for blast radius, or
+                        "all" for the full connected closure (default 1)
+  --in <path>           narrow matches to nodes at or under this path prefix
+  --json                output as JSON
+  --no-refresh          skip the freshness check — answer from the graph as-is
+  -h, --help            display help for command

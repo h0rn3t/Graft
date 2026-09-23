@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/NanoNets/context-graph-engine/internal/hosts"
 )
 
 func TestWiredHostIDsContract(t *testing.T) {
@@ -59,12 +61,8 @@ func TestWiredHostIDsContract(t *testing.T) {
 	}
 }
 
-func TestRewriteWiringGeminiContract(t *testing.T) {
-	golden, err := os.ReadFile("templates/gemini-instructions.md")
-	if err != nil {
-		t.Fatalf("ReadFile(%q) error = %v", "templates/gemini-instructions.md", err)
-	}
-	wantBlock := "<!-- graft:start -->\n" + strings.TrimSuffix(string(golden), "\n") + "\n<!-- graft:end -->"
+func TestRewriteWiringContract(t *testing.T) {
+	wantBlock := "<!-- graft:start -->\n" + hosts.InstructionBody() + "\n<!-- graft:end -->"
 	tests := []struct {
 		name         string
 		hosts        []string
@@ -74,6 +72,7 @@ func TestRewriteWiringGeminiContract(t *testing.T) {
 		wantError    bool
 		wantNoWrite  bool
 		nilContext   bool
+		wantCursor   bool
 	}{
 		{
 			name:         "replace the section and preserve other JSON config",
@@ -97,12 +96,12 @@ func TestRewriteWiringGeminiContract(t *testing.T) {
 			wantSettings: false,
 		},
 		{
-			name:        "unsupported host aborts before writing any target",
-			hosts:       []string{"gemini", "cursor"},
-			options:     WiringOptions{Global: true, MCP: true, Hooks: true, Statusline: true},
-			settings:    `{"mcpServers":{"other":{"command":"other"}}}`,
-			wantError:   true,
-			wantNoWrite: true,
+			name:         "every registered host is rewritten, not only Gemini",
+			hosts:        []string{"gemini", "cursor"},
+			options:      WiringOptions{Global: true, MCP: true, Hooks: true, Statusline: true},
+			settings:     `{"theme":"dark","mcpServers":{"other":{"command":"other"}}}`,
+			wantSettings: true,
+			wantCursor:   true,
 		},
 		{
 			name:        "nil context is rejected before writing any target",
@@ -138,7 +137,11 @@ func TestRewriteWiringGeminiContract(t *testing.T) {
 			if tt.nilContext {
 				ctx = nil
 			}
-			err := RewriteWiring(ctx, root, tt.hosts, tt.options)
+			env := hosts.Env{Home: home, BakedDir: "/pkg/dist/claude", Launch: hosts.ServerEntry()}
+			err := RewriteWiring(ctx, root, tt.hosts, tt.options, env)
+			if _, statErr := os.Stat(filepath.Join(root, ".cursor", "rules", "graft.mdc")); (statErr == nil) != tt.wantCursor {
+				t.Errorf("RewriteWiring(%q, %v) Cursor rule present = %t, want %t", root, tt.hosts, statErr == nil, tt.wantCursor)
+			}
 			if (err != nil) != tt.wantError {
 				t.Fatalf("RewriteWiring(%q, %q, %v, %+v) error = %v, want error presence %t", root, home, tt.hosts, tt.options, err, tt.wantError)
 			}

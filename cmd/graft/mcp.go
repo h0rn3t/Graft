@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"bytes"
-	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
@@ -12,18 +11,17 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"runtime"
-	"runtime/debug"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
-	"unicode/utf16"
 
-	"github.com/NanoNets/context-graph-engine/internal/climeta"
+	"github.com/NanoNets/context-graph-engine/internal/contextcheck"
 	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
+	"github.com/NanoNets/context-graph-engine/internal/hosts"
+	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/NanoNets/context-graph-engine/internal/savings"
+	"github.com/NanoNets/context-graph-engine/internal/telemetry"
 	"github.com/NanoNets/context-graph-engine/internal/upkeep"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -115,7 +113,7 @@ const mcpInstructionsText = `This repo is indexed by graft: a prebuilt graph of 
 span, and who calls what. Prefer these tools over grep/read — one call usually
 replaces several file reads.
 
-**If these tools are deferred (names shown, schemas withheld), load them all in ONE lookup:** ToolSearch "select:mcp__graft__graft_find_code,mcp__graft__graft_find_all,mcp__graft__graft_trace_calls,mcp__graft__graft_file_api,mcp__graft__graft_repo_map,mcp__graft__graft_check_freshness" — one round trip for the whole session. Never load them one at a time.
+**If these tools are deferred (names shown, schemas withheld), load them all in ONE lookup:** ToolSearch "select:mcp__graft__graft_find_code,mcp__graft__graft_find_all,mcp__graft__graft_trace_calls,mcp__graft__graft_file_api,mcp__graft__graft_repo_map" — one round trip for the whole session. Never load them one at a time.
 
 - graft_find_code — "how does X work" / "where is Y": ranked hits, code inlined.
 - graft_find_all — when you need EVERY occurrence; find_code is top-N and misses some.
@@ -127,13 +125,22 @@ Results already reflect uncommitted edits — the graph refreshes before each qu
 
 // runMCP serves the retrieval tools over newline-delimited JSON-RPC 2.0.
 func runMCP(opts callersOptions, stdin io.Reader, stdout, stderr io.Writer) int {
-	root, contextDir, err := resolvePaths(opts)
+	root, contextDir, err := resolvePaths(opts, queryPathRules, stderr)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
 
-	server := newMCPServer(opts, root, contextDir)
+	version := currentVersion()
+	lines := mcpUpkeepLines(root, contextDir, version)
+	for _, line := range lines {
+		writeDiagnostic(stderr, "%s\n", line)
+	}
+	// Flushed from a detached child at boot, so a user who never runs the CLI
+	// still gets their events out. The first-run notice stays for the CLI: this
+	// stderr goes to an editor log nobody reads.
+	telemetry.MaybeFlushInBackground(homeDir(), time.Now())
+	server := newMCPServerWith(opts, root, contextDir, version, mcpInstructionsFrom(lines))
 	if err := server.Run(context.Background(), &mcpTransport{reader: stdin, writer: stdout}); err != nil && !errors.Is(err, io.EOF) {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
@@ -142,8 +149,11 @@ func runMCP(opts callersOptions, stdin io.Reader, stdout, stderr io.Writer) int 
 }
 
 func newMCPServer(opts callersOptions, root, contextDir string) *mcp.Server {
-	version := mcpVersion()
-	instructions := mcpStartupInstructions(root, contextDir, version)
+	version := currentVersion()
+	return newMCPServerWith(opts, root, contextDir, version, mcpStartupInstructions(root, contextDir, version))
+}
+
+func newMCPServerWith(opts callersOptions, root, contextDir, version, instructions string) *mcp.Server {
 	server := mcp.NewServer(
 		&mcp.Implementation{Name: "graft", Version: version},
 		&mcp.ServerOptions{
@@ -160,7 +170,9 @@ func newMCPServer(opts callersOptions, root, contextDir string) *mcp.Server {
 			},
 			func(_ context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				args := mcpToolArguments(request.Params.Arguments)
-				return mcpSDKResult(mcpCall(root, contextDir, opts.contextDir, request.Params.Name, args)), nil
+				result := mcpCall(root, contextDir, opts.contextDir, request.Params.Name, args)
+				trackMCPQuery(root, request.Params.Name)
+				return mcpSDKResult(result), nil
 			},
 		)
 	}
@@ -202,7 +214,9 @@ func newMCPServer(opts callersOptions, root, contextDir string) *mcp.Server {
 					return next(ctx, method, request)
 				}
 				args := mcpToolArguments(call.Params.Arguments)
-				return mcpSDKResult(mcpCall(root, contextDir, opts.contextDir, call.Params.Name, args)), nil
+				result := mcpCall(root, contextDir, opts.contextDir, call.Params.Name, args)
+				trackMCPQuery(root, call.Params.Name)
+				return mcpSDKResult(result), nil
 			default:
 				return next(ctx, method, request)
 			}
@@ -212,26 +226,54 @@ func newMCPServer(opts callersOptions, root, contextDir string) *mcp.Server {
 }
 
 func mcpStartupInstructions(root, contextDir, current string) string {
-	now := time.Now()
-	lines := make([]string, 0, 2)
-	if note := upkeep.ReconcileWiring(root, contextDir, current, now,
-		func(repo string) ([]string, error) { return upkeep.WiredHostIDs(repo), nil },
-		func(repo string, hosts []string, options upkeep.WiringOptions) error {
-			return upkeep.RewriteWiring(context.Background(), repo, hosts, options)
-		},
-	); note != "" {
-		lines = append(lines, note)
-	}
-	upkeep.MaybeRefreshBrainRules(root, contextDir, now)
-	home, err := os.UserHomeDir()
-	if err == nil && home != "" {
-		upkeep.MaybeRefreshInBackground(home, now)
-		lines = append(lines, upkeep.StartupLines(current, home)...)
-	}
+	return mcpInstructionsFrom(mcpUpkeepLines(root, contextDir, current))
+}
+
+func mcpInstructionsFrom(lines []string) string {
 	if len(lines) == 0 {
 		return mcpInstructionsText
 	}
 	return strings.Join(lines, "\n") + "\n\n" + mcpInstructionsText
+}
+
+// mcpToolCommand maps canonical tool names to the command a query event reports.
+var mcpToolCommand = map[string]string{
+	"graft_find_code": "ask", "graft_find_all": "grep", "graft_trace_calls": "callers",
+	"graft_file_api": "skeleton", "graft_repo_map": "map", "graft_check_freshness": "check",
+}
+
+// trackMCPQuery queues one `query` event per tool call. An alias or unknown
+// name reports no command, and no hit: a tool error is not "no answer".
+func trackMCPQuery(root, name string) {
+	properties := []telemetry.Property{{Key: "surface", Value: "mcp"}}
+	if command, ok := mcpToolCommand[name]; ok {
+		properties = []telemetry.Property{{Key: "command", Value: command}, properties[0]}
+	}
+	telemetry.Track("query", properties, telemetry.Context{Repo: root, Host: "mcp", Home: homeDir(), Version: currentVersion()})
+}
+
+// mcpUpkeepLines runs the boot-time upkeep and returns the lines worth showing.
+// The stamp and the rule cache live under GRAFT_DIR or <root>/graft, as the
+// TypeScript cacheDir resolves them, whatever --dir the server was given.
+func mcpUpkeepLines(root, _, current string) []string {
+	now := time.Now()
+	home := homeDir()
+	env := hosts.Env{Home: home, BakedDir: filepath.Join(packageRoot(), "dist", "claude"), Launch: hosts.ServerEntry()}
+	lines := make([]string, 0, 2)
+	if note := upkeep.ReconcileWiring(root, "", current, now,
+		func(repo string) ([]string, error) { return upkeep.WiredHostIDs(repo), nil },
+		func(repo string, ids []string, options upkeep.WiringOptions) error {
+			return upkeep.RewriteWiring(context.Background(), repo, ids, options, env)
+		},
+	); note != "" {
+		lines = append(lines, note)
+	}
+	upkeep.MaybeRefreshBrainRules(root, "", now)
+	if home != "" {
+		upkeep.MaybeRefreshInBackground(home, now)
+		lines = append(lines, upkeep.StartupLines(current, home)...)
+	}
+	return lines
 }
 
 func mcpToolArguments(raw json.RawMessage) map[string]any {
@@ -273,12 +315,12 @@ func normalizeMCPResponse(data []byte) []byte {
 	}
 	delete(result, "ttlMs")
 	delete(result, "cacheScope")
-	resultData, err := json.Marshal(result)
+	resultData, err := jsonjs.Marshal(result, "")
 	if err != nil {
 		return data
 	}
 	response["result"] = resultData
-	data, err = json.Marshal(response)
+	data, err = jsonjs.Marshal(response, "")
 	if err != nil {
 		return original
 	}
@@ -422,7 +464,7 @@ func (c *mcpConnection) Close() error {
 }
 
 func (c *mcpConnection) writeValue(value any) error {
-	data, err := json.Marshal(value)
+	data, err := jsonjs.Marshal(value, "")
 	if err != nil {
 		return err
 	}
@@ -436,6 +478,9 @@ func (c *mcpConnection) writeValue(value any) error {
 type mcpResult struct {
 	text    string
 	isError bool
+	// thrown marks a failure the TypeScript tool raises as an exception; its
+	// catch answers with the message alone, dropping any refresh note.
+	thrown bool
 }
 
 func mcpCall(root, contextDir, dirOverride, requestedName string, args map[string]any) (result mcpResult) {
@@ -445,6 +490,8 @@ func mcpCall(root, contextDir, dirOverride, requestedName string, args map[strin
 	}
 	known := name == "graft_find_code" || name == "graft_file_api" || name == "graft_check_freshness" ||
 		name == "graft_trace_calls" || name == "graft_find_all" || name == "graft_repo_map"
+	// Price this session's tokens once per call, so the savings line can carry dollars.
+	savings.SetInputRate(savings.SessionInputRate(root))
 	if !known {
 		return mcpResult{text: "unknown tool: " + requestedName, isError: true}
 	}
@@ -467,7 +514,11 @@ func mcpCall(root, contextDir, dirOverride, requestedName string, args map[strin
 			refresh = graph.EnsureFreshGraph(root, options)
 		}
 		if note := graph.RefreshNote(refresh); note != "" {
-			defer func() { result.text = note + "\n" + result.text }()
+			defer func() {
+				if !result.thrown {
+					result.text = note + "\n" + result.text
+				}
+			}()
 		}
 	}
 	if name != "graft_check_freshness" && !mcpGraphAvailable(contextDir) {
@@ -497,11 +548,12 @@ func mcpCall(root, contextDir, dirOverride, requestedName string, args map[strin
 		if file == "" {
 			return mcpResult{text: "graft_file_api requires a file", isError: true}
 		}
-		loaded, err := graph.Read(graph.WiringPath(contextDir))
-		if err != nil {
-			return mcpResult{text: "no graph found — run `graft build` first", isError: true}
+		// Skeleton never federates: at a workspace root it reports the missing
+		// graph through its own note, as the TypeScript tool does.
+		result := graph.SkeletonResult{File: file, Entries: make([]graph.SkeletonEntry, 0), Note: "no wiring graph — run `graft build` first"}
+		if loaded, err := graph.Read(graph.WiringPath(contextDir)); err == nil {
+			result = graph.Skeleton(*loaded, file)
 		}
-		result := graph.Skeleton(*loaded, file)
 		var text bytes.Buffer
 		writeSkeletonHuman(&text, result)
 		return mcpResult{text: text.String(), isError: len(result.Entries) == 0 && result.Note != ""}
@@ -538,11 +590,11 @@ func mcpCall(root, contextDir, dirOverride, requestedName string, args map[strin
 		var stdout, stderr bytes.Buffer
 		status := run(append(command, "--no-refresh"), &stdout, &stderr)
 		if status != 0 {
-			return mcpResult{text: mcpErrorText(stderr.String()), isError: true}
+			return mcpResult{text: mcpErrorText(stderr.String()), isError: true, thrown: true}
 		}
 		var result graph.GrepResult
 		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
-			return mcpResult{text: err.Error(), isError: true}
+			return mcpResult{text: err.Error(), isError: true, thrown: true}
 		}
 		if result.TotalHits == 0 {
 			return mcpResult{text: grepZeroHitNote(result), isError: false}
@@ -577,7 +629,7 @@ func mcpRunCLI(args []string, dirOverride string) mcpResult {
 	}
 	var stdout, stderr bytes.Buffer
 	if status := run(args, &stdout, &stderr); status != 0 {
-		return mcpResult{text: mcpErrorText(stderr.String()), isError: true}
+		return mcpResult{text: mcpErrorText(stderr.String()), isError: true, thrown: true}
 	}
 	return mcpResult{text: stdout.String(), isError: false}
 }
@@ -593,10 +645,10 @@ func mcpTraceCalls(root, contextDir, symbol string, args map[string]any) mcpResu
 	}
 	matches, err := graph.ResolveSymbol(*loaded, symbol, graph.ResolveSymbolOptions{In: mcpString(args["in"])})
 	if err != nil {
-		return mcpResult{text: err.Error(), isError: true}
+		return mcpResult{text: err.Error(), isError: true, thrown: true}
 	}
 	if len(matches) == 0 {
-		return mcpResult{text: fmt.Sprintf(`no symbol %q in the graph — check spelling or run graft build`, symbol), isError: true}
+		return mcpResult{text: "no symbol \"" + symbol + "\" in the graph — check spelling or run `graft build`", isError: true}
 	}
 	depth := mcpDepthValue(args["depth"])
 	results := make([]callersResult, len(matches))
@@ -634,114 +686,32 @@ func mcpTraceCalls(root, contextDir, symbol string, args map[string]any) mcpResu
 }
 
 func mcpWorkspaceTraceCalls(root, contextDir, symbol string, args map[string]any) mcpResult {
-	workspace := graph.LoadWorkspaceGraphs(root, contextDir)
 	direction := graph.DirectionIn
 	if mcpString(args["direction"]) == "out" {
 		direction = graph.DirectionOut
 	}
-	depth := mcpDepthValue(args["depth"])
-	in := mcpString(args["in"])
-	blocks := make([]string, 0, len(workspace.Loaded))
-	found := false
-	for _, child := range workspace.Loaded {
-		matches, err := graph.ResolveSymbol(child.Graph, symbol, graph.ResolveSymbolOptions{In: in})
-		if err != nil {
-			return mcpResult{text: err.Error(), isError: true}
-		}
-		if len(matches) == 0 {
-			continue
-		}
-		found = true
-		results := make([]callersResult, len(matches))
-		lines := []string{"## " + child.Name + "/"}
-		for index, match := range matches {
-			results[index] = callersResult{symbol: match, hits: graph.EdgeWalk(child.Graph, match, direction, depth)}
-			lines = append(lines, fmt.Sprintf("%s · %s · %s:%s", match.Name, match.Kind, match.Path, match.Span))
-			if len(results[index].hits) == 0 {
-				lines = append(lines, looseNote(direction, match.Name, len(matches)))
-				continue
-			}
-			for _, hit := range results[index].hits {
-				arrow := "←"
-				if direction == graph.DirectionOut {
-					arrow = "→"
-				}
-				label := fmt.Sprintf("%s (unresolved import)", hit.ID)
-				if hit.Node != nil {
-					label = fmt.Sprintf("%s (%s:%s)", hit.Node.Name, hit.Node.Path, hit.Node.Span)
-				}
-				depthLabel := ""
-				if depth > 1 {
-					depthLabel = fmt.Sprintf(" [depth %d]", hit.Depth)
-				}
-				lines = append(lines, fmt.Sprintf("  %s %s %s%s", hit.Relation, arrow, label, depthLabel))
-			}
-		}
-		blocks = append(blocks, mcpWithSavings(strings.Join(lines, "\n"), callersSavings(child.Graph, results)))
+	text, found, err := federateCallers(root, contextDir, symbol, direction, mcpDepthValue(args["depth"]), mcpString(args["in"]))
+	if err != nil {
+		return mcpResult{text: err.Error(), isError: true, thrown: true}
 	}
-	if !found {
-		text := fmt.Sprintf("no symbol %q in any of the %d workspace repo(s) — check spelling or run graft build", symbol, len(workspace.Loaded))
-		if coverage := mcpWorkspaceCoverage(workspace); coverage != "" {
-			text += "\n" + coverage
-		}
-		return mcpResult{text: text, isError: true}
-	}
-	text := strings.Join(blocks, "\n\n")
-	if coverage := mcpWorkspaceCoverage(workspace); coverage != "" {
-		text += "\n\n" + coverage
-	}
-	return mcpResult{text: text, isError: false}
+	return mcpResult{text: text, isError: !found}
 }
 
 func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any) mcpResult {
-	workspace := graph.LoadWorkspaceGraphs(root, contextDir)
-	result := graph.GrepResult{Pattern: pattern, Groups: make([]graph.GrepGroup, 0)}
-	saved := &graph.GrepSavings{}
-	for _, child := range workspace.Loaded {
-		command := []string{"grep", pattern, filepath.Join(root, child.Name), "--json"}
-		if args["ignore_case"] == true {
-			command = append(command, "--ignore-case")
+	result, coverage, err := federateGrep(root, contextDir, pattern, args["ignore_case"] == true, args["fixed"] == true)
+	if err != nil {
+		// The TypeScript tool reports a thrown error by its bare message.
+		text := err.Error()
+		if message, ok := grepSyntaxMessage(err, pattern, args["ignore_case"] == true); ok {
+			text = message
 		}
-		if args["fixed"] == true {
-			command = append(command, "--fixed")
-		}
-		var stdout, stderr bytes.Buffer
-		if status := run(command, &stdout, &stderr); status != 0 {
-			return mcpResult{text: mcpErrorText(stderr.String()), isError: true}
-		}
-		var childResult graph.GrepResult
-		if err := json.Unmarshal(stdout.Bytes(), &childResult); err != nil {
-			return mcpResult{text: err.Error(), isError: true}
-		}
-		result.FilesSearched += childResult.FilesSearched
-		result.TotalHits += childResult.TotalHits
-		result.Truncated.Files += childResult.Truncated.Files
-		result.Truncated.Hits += childResult.Truncated.Hits
-		if childResult.Saved != nil {
-			saved.Files += childResult.Saved.Files
-			saved.BaselineChars += childResult.Saved.BaselineChars
-		}
-		for _, group := range childResult.Groups {
-			group.Path = filepath.ToSlash(filepath.Join(child.Name, group.Path))
-			if group.Symbol != nil {
-				symbol := *group.Symbol
-				symbol.Path = filepath.ToSlash(filepath.Join(child.Name, symbol.Path))
-				group.Symbol = &symbol
-			}
-			result.Groups = append(result.Groups, group)
-		}
-	}
-	slices.SortStableFunc(result.Groups, func(a, b graph.GrepGroup) int {
-		return cmp.Or(cmp.Compare(b.InDegree, a.InDegree), cmp.Compare(a.Path, b.Path))
-	})
-	if saved.Files > 0 {
-		result.Saved = saved
+		return mcpResult{text: text, isError: true, thrown: true}
 	}
 	text := grepZeroHitNote(result)
 	if result.TotalHits > 0 {
 		text = formatGrepResult(result)
 	}
-	if coverage := mcpWorkspaceCoverage(workspace); coverage != "" {
+	if coverage != "" {
 		text += "\n" + coverage
 	}
 	return mcpResult{text: text, isError: false}
@@ -763,18 +733,10 @@ func mcpDepthValue(value any) int {
 }
 
 func mcpWithSavings(body string, saved *savedOutput) string {
-	if saved == nil || saved.BaselineChars <= 0 {
+	if saved == nil {
 		return body
 	}
-	pack := int(math.Round(float64(len(utf16.Encode([]rune(body)))) / 4))
-	base := int(math.Round(float64(saved.BaselineChars) / 4))
-	if base <= pack {
-		return body
-	}
-	delta := base - pack
-	pct := int(math.Round(float64(delta) / float64(base) * 100))
-	line := fmt.Sprintf("[graft] tokens saved ≈ %d (%d%%) — this output ≈ %d tok vs reading the %d file(s) it covers whole ≈ %d tok (estimate). At the end of your reply, tell the user the total graft tokens saved this turn — sum each such line across your graft calls — e.g. \"🌱 graft saved ~N tokens this turn\".", delta, pct, pack, saved.Files, base)
-	return line + "\n\n" + body
+	return savings.With(body, saved.Files, saved.BaselineChars)
 }
 
 func mcpGraphAvailable(contextDir string) bool {
@@ -785,150 +747,21 @@ func mcpGraphAvailable(contextDir string) bool {
 	return err == nil
 }
 
+// mcpCheckFreshness reports the context and graph checks exactly as the
+// TypeScript tool does: the context report, then the graph report when a graph
+// exists, never refreshing first.
 func mcpCheckFreshness(root, contextDir string) string {
-	loaded, err := graph.Read(graph.WiringPath(contextDir))
+	contextResult, err := contextcheck.Check(root, contextcheck.Options{ContextDir: contextDir})
 	if err != nil {
-		return "graft check: NO GRAPH\n\nNo graft/.graph/wiring.json found. Run `graft build` first."
+		return err.Error()
 	}
-	parts := make([]string, 0, 2)
-	if _, err := os.Stat(filepath.Join(contextDir, "manifest.json")); err != nil {
-		parts = append(parts, "graft check: NO GRAPH\n\nNo graft/manifest.json found. Run `graft build --deep` first.")
-	} else {
-		parts = append(parts, "graft check: OK — the graph is in sync with the code.")
-	}
-	fingerprint, err := graph.ReadFingerprint(contextDir, graph.ExtractorID)
-	graphStatus, graphClean := "graph check: UNKNOWN\n\nNo Go freshness fingerprint found. Run `graft build` first.", false
+	graphResult, err := graph.CheckGraph(root, contextDir)
 	if err != nil {
-		graphStatus = fmt.Sprintf("graph check: UNKNOWN\n\nCannot read graph fingerprint: %v", err)
-	} else if fingerprint != nil {
-		built, err := graph.BuildGraph(root, sourcefiles.Options{OnlyDirs: fingerprint.OnlyDirs})
-		if err != nil {
-			graphStatus = fmt.Sprintf("graph check: UNKNOWN\n\nCannot extract current graph: %v", err)
-		} else {
-			baseline := make(map[string]string, len(loaded.Nodes))
-			for _, node := range loaded.Nodes {
-				baseline[node.ID] = node.BodyHash
-			}
-			current := make(map[string]string, len(built.Graph.Nodes))
-			for _, node := range built.Graph.Nodes {
-				current[node.ID] = node.BodyHash
-			}
-			var added, removed, changed []string
-			for id, hash := range baseline {
-				currentHash, ok := current[id]
-				if !ok {
-					removed = append(removed, id)
-				} else if currentHash != hash {
-					changed = append(changed, id)
-				}
-			}
-			for id := range current {
-				if _, ok := baseline[id]; !ok {
-					added = append(added, id)
-				}
-			}
-			slices.Sort(added)
-			slices.Sort(removed)
-			slices.Sort(changed)
-			var addedFiles, removedFiles, changedFiles []string
-			for path, file := range built.Fingerprints {
-				previous, ok := fingerprint.Files[path]
-				if !ok {
-					addedFiles = append(addedFiles, path)
-				} else if file.Hash != previous.Hash {
-					changedFiles = append(changedFiles, path)
-				}
-			}
-			for path := range fingerprint.Files {
-				if _, ok := built.Fingerprints[path]; !ok {
-					removedFiles = append(removedFiles, path)
-				}
-			}
-			slices.Sort(addedFiles)
-			slices.Sort(removedFiles)
-			slices.Sort(changedFiles)
-			stale := len(added)+len(removed)+len(changed)+len(addedFiles)+len(removedFiles)+len(changedFiles) > 0
-			partial := len(built.Unsupported)+len(built.Errors) > 0
-			if !stale && !partial {
-				graphStatus, graphClean = "graph check: OK — the wiring graph is in sync with the code.", true
-			} else {
-				lines := []string{"graph check: STALE", ""}
-				if !stale {
-					lines = []string{"graph check: PARTIAL", ""}
-				}
-				for _, group := range []struct {
-					name   string
-					paths  []string
-					marker string
-				}{
-					{name: "changed", paths: changed, marker: "~"},
-					{name: "added", paths: added, marker: "+"},
-					{name: "removed", paths: removed, marker: "-"},
-				} {
-					if len(group.paths) == 0 {
-						continue
-					}
-					lines = append(lines, fmt.Sprintf("%s (%d):", group.name, len(group.paths)))
-					for _, path := range group.paths {
-						lines = append(lines, "  "+group.marker+" "+path)
-					}
-				}
-				if len(added)+len(removed)+len(changed) == 0 {
-					for _, group := range []struct {
-						name   string
-						paths  []string
-						marker string
-					}{
-						{name: "changed source files", paths: changedFiles, marker: "~"},
-						{name: "added source files", paths: addedFiles, marker: "+"},
-						{name: "removed source files", paths: removedFiles, marker: "-"},
-					} {
-						if len(group.paths) == 0 {
-							continue
-						}
-						lines = append(lines, fmt.Sprintf("%s (%d):", group.name, len(group.paths)))
-						for _, path := range group.paths {
-							lines = append(lines, "  "+group.marker+" "+path)
-						}
-					}
-				}
-				if len(built.Unsupported) > 0 {
-					lines = append(lines, fmt.Sprintf("unsupported source files (%d):", len(built.Unsupported)))
-					for _, path := range built.Unsupported {
-						lines = append(lines, "  ! "+path)
-					}
-				}
-				if len(built.Errors) > 0 {
-					lines = append(lines, fmt.Sprintf("source extraction errors (%d):", len(built.Errors)))
-					for _, message := range built.Errors {
-						lines = append(lines, "  ! "+message)
-					}
-				}
-				if stale {
-					lines = append(lines, "", "Run `graft build` to refresh the graph.")
-				} else {
-					lines = append(lines, "", "Native freshness checks cover TypeScript and JavaScript only.")
-				}
-				graphStatus = strings.Join(lines, "\n")
-			}
-		}
+		return err.Error()
 	}
-	pending := make([]string, 0)
-	for _, node := range loaded.Nodes {
-		if node.SummaryState == graph.SummaryState("pending") {
-			pending = append(pending, node.ID)
-		}
-	}
-	slices.Sort(pending)
-	if len(pending) > 0 && graphClean {
-		pct := int(math.Round(float64(len(loaded.Nodes)-len(pending)) / float64(len(loaded.Nodes)) * 100))
-		parts = append(parts, fmt.Sprintf(
-			"%s (meaning tier %d%% complete — %d of %d node(s) pending: %s. Run `graft build --deep` to summarize them; if a deep build already left these pending, that meaning pass failed — see that build's errors (re-running alone will not clear them))",
-			graphStatus,
-			pct, len(pending), len(loaded.Nodes), strings.Join(pending, ", "),
-		))
-	} else {
-		parts = append(parts, graphStatus)
+	parts := []string{formatContextCheckReport(contextResult)}
+	if !graphResult.Missing {
+		parts = append(parts, graph.FormatGraphCheckReport(graphResult))
 	}
 	return strings.Join(parts, "\n\n")
 }
@@ -989,32 +822,6 @@ func mcpWorkspaceCoverage(workspace graph.WorkspaceGraphs) string {
 		return ""
 	}
 	return fmt.Sprintf("%d of %d workspace repos have graphs; run graft build to cover %s", len(workspace.Loaded), len(workspace.Loaded)+len(workspace.Missing), strings.Join(workspace.Missing, ", "))
-}
-
-func mcpVersion() string {
-	if executable, err := os.Executable(); err == nil {
-		if version, err := climeta.ReadCurrentVersion(executable); err == nil {
-			return version
-		}
-	}
-	if _, source, _, ok := runtime.Caller(0); ok {
-		data, err := os.ReadFile(filepath.Join(filepath.Dir(source), "..", "..", "package.json"))
-		if err == nil {
-			var metadata struct {
-				Version string `json:"version"`
-			}
-			if json.Unmarshal(data, &metadata) == nil && metadata.Version != "" {
-				return metadata.Version
-			}
-		}
-	}
-	if info, ok := debug.ReadBuildInfo(); ok {
-		version := strings.TrimPrefix(info.Main.Version, "v")
-		if version != "" && version != "(devel)" {
-			return version
-		}
-	}
-	return "0.0.0"
 }
 
 func mcpString(value any) string {

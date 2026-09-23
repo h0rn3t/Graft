@@ -1,0 +1,10 @@
+Usage: graft brain connect [options] <handoff> [dir]
+
+Attach a brain to this repo and pull its rules
+
+Arguments:
+  handoff     <brainId>:<token>, or a bare brain id with GRAFT_BRAIN_TOKEN set
+  dir         target repo directory (default: ".")
+
+Options:
+  -h, --help  display help for command

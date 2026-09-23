@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/NanoNets/context-graph-engine/internal/brain"
 )
 
 func TestUpdateCacheContract(t *testing.T) {
@@ -122,30 +122,6 @@ func TestMaybeRefreshInBackgroundDoesNotWriteFromTestBinary(t *testing.T) {
 	}
 }
 
-func TestBrainRulesCacheStaleContract(t *testing.T) {
-	now := time.UnixMilli(10_000_000)
-	checkedAt := now.Add(-time.Hour).UnixMilli()
-	for _, tt := range []struct {
-		name  string
-		cache *brainRulesCache
-		want  bool
-	}{
-		{name: "missing cache", want: true},
-		{name: "recent populated cache", cache: &brainRulesCache{FetchedAt: now.Add(-5 * time.Hour).UnixMilli(), Rules: []graph.BrainRule{{Rule: "rule"}}}},
-		{name: "populated cache exactly at ttl", cache: &brainRulesCache{FetchedAt: now.Add(-6 * time.Hour).UnixMilli(), Rules: []graph.BrainRule{{Rule: "rule"}}}},
-		{name: "populated cache past ttl", cache: &brainRulesCache{FetchedAt: now.Add(-6*time.Hour - time.Millisecond).UnixMilli(), Rules: []graph.BrainRule{{Rule: "rule"}}}, want: true},
-		{name: "empty cache exactly at ttl", cache: &brainRulesCache{FetchedAt: now.Add(-2 * time.Minute).UnixMilli(), Rules: make([]graph.BrainRule, 0)}},
-		{name: "empty cache past ttl", cache: &brainRulesCache{FetchedAt: now.Add(-2*time.Minute - time.Millisecond).UnixMilli(), Rules: make([]graph.BrainRule, 0)}, want: true},
-		{name: "checked time overrides fetch time", cache: &brainRulesCache{FetchedAt: now.Add(-24 * time.Hour).UnixMilli(), CheckedAt: &checkedAt, Rules: []graph.BrainRule{{Rule: "rule"}}}},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := brainRulesCacheStale(tt.cache, now); got != tt.want {
-				t.Errorf("brainRulesCacheStale(%#v, %v) = %t, want %t", tt.cache, now, got, tt.want)
-			}
-		})
-	}
-}
-
 func TestMaybeRefreshBrainRulesContract(t *testing.T) {
 	now := time.UnixMilli(10_000_000)
 	for _, tt := range []struct {
@@ -197,7 +173,7 @@ func TestMaybeRefreshBrainRulesContract(t *testing.T) {
 				t.Fatalf("ReadFile(%q) error = %v, want nil", cachePath, err)
 			}
 			if tt.wantChecked {
-				var cache brainRulesCache
+				var cache brain.RulesCache
 				if err := json.Unmarshal(data, &cache); err != nil {
 					t.Fatalf("json.Unmarshal(brain cache) error = %v, want nil", err)
 				}

@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/NanoNets/context-graph-engine/internal/savings"
 )
 
 const maxAskSpanLines = 80
@@ -20,19 +22,18 @@ const maxAskSpanLines = 80
 var askPointerPattern = regexp.MustCompile(`^(.*):L(\d+)-L(\d+)$`)
 
 func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
-	root, contextDir, err := resolvePaths(opts)
+	root, contextDir, err := resolvePaths(opts, enginePathRules, stderr)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
-	limit, err := askLimit(opts.limit)
-	if err != nil {
-		writeDiagnostic(stderr, "✗ %v\n", err)
-		return 1
-	}
-	refreshBeforeQuery(root, contextDir, opts, stderr)
-	if children, ok := graph.ReadWorkspaceChildren(contextDir); ok {
-		return runWorkspaceAsk(root, contextDir, children, opts, limit, stdout, stderr)
+	noteQueryRoot(opts)
+	limit := askLimit(opts.limit)
+	// The refresh and the workspace check read --dir only, as in TypeScript.
+	queryDir := graphDir(root, opts, false)
+	refreshBeforeQuery(root, queryDir, opts, stderr)
+	if children, ok := graph.ReadWorkspaceChildren(queryDir); ok {
+		return runWorkspaceAsk(root, queryDir, children, opts, limit, stdout, stderr)
 	}
 	loaded, err := graph.Read(graph.WiringPath(contextDir))
 	if err != nil {
@@ -48,7 +49,7 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 		return writeAskHuman(stdout, result)
 	}
 	result, err := graph.Ask(*loaded, opts.query, graph.AskOptions{
-		Limit:       limit,
+		Limit:       &limit,
 		In:          opts.in,
 		NoGraphRank: opts.noGraphRank,
 		Index:       readAskIndex(filepath.Join(contextDir, ".cache", "ask-index.json")),
@@ -73,7 +74,7 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 	return writeAskHuman(stdout, result)
 }
 
-func runWorkspaceAsk(root, contextDir string, children []string, opts callersOptions, limit int, stdout, stderr io.Writer) int {
+func runWorkspaceAsk(root, contextDir string, children []string, opts callersOptions, limit float64, stdout, stderr io.Writer) int {
 	children = slices.Clone(children)
 	onlyChild := ""
 	childIn := ""
@@ -120,7 +121,7 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 			continue
 		}
 		childResult, err := graph.Ask(*loaded, opts.query, graph.AskOptions{
-			Limit:                  max(limit*4, 20),
+			Limit:                  new(max(limit*4, 20)),
 			In:                     childIn,
 			NoGraphRank:            opts.noGraphRank,
 			Index:                  readAskIndex(filepath.Join(childContext, ".cache", "ask-index.json")),
@@ -131,6 +132,12 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 		})
 		if err != nil || len(childResult.Hits) == 0 {
 			continue
+		}
+		if opts.source {
+			// Each child inlines its own spans, crux included, before fusion.
+			childRoot := filepath.Join(root, child)
+			inlineAskSource(childRoot, *loaded, &childResult, opts.full)
+			inlineAskRanking(childRoot, *loaded, childResult.Ranking, opts.full)
 		}
 		ranking := childResult.Ranking
 		groups := make([]workspaceGroup, 0)
@@ -186,89 +193,118 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 		best := candidate.groups[0].hits[0]
 		gatedOut = append(gatedOut, graph.AskScopeMatch{Scope: candidate.child, BestID: prefixAskPointer(candidate.child, best.Pointer)})
 	}
+	// A child's hit fuses under <child>/<scope>, or <child> for its root scope.
+	fusionScope := func(child string, hit graph.AskHit) string {
+		if hit.Scope != nil && *hit.Scope != "" {
+			return child + "/" + *hit.Scope
+		}
+		return child
+	}
 
-	baselineRuns := make([]graph.AskWorkspaceRun, 0, len(baselineCandidates))
+	// Baseline stream: the all-span fusion that decides the locked top hit.
 	type baselineBack struct {
 		child string
 		group string
+		hit   graph.AskHit
 	}
-	baselineByHit := make(map[string]baselineBack)
+	baselineDocs := make([]graph.ScopedDoc, 0)
+	baselineByID := make(map[string]baselineBack)
 	for _, candidate := range baselineCandidates {
-		entries := make([]graph.AskHit, 0)
+		type entry struct {
+			group string
+			hit   graph.AskHit
+		}
+		entries := make([]entry, 0)
 		if candidate.ranking != nil {
-			entries = make([]graph.AskHit, 0, len(candidate.ranking.Baseline))
-			for _, entry := range candidate.ranking.Baseline {
-				entries = append(entries, entry.Hit)
-				baselineByHit[workspaceHitIdentity(candidate.child, entry.Hit)] = baselineBack{child: candidate.child, group: candidate.child + "\x00" + entry.Group}
+			for _, item := range candidate.ranking.Baseline {
+				entries = append(entries, entry{group: item.Group, hit: item.Hit})
+			}
+		} else {
+			for index, hit := range candidate.result.Hits {
+				entries = append(entries, entry{group: "singleton:" + strconv.Itoa(index), hit: hit})
 			}
 		}
-		if len(entries) == 0 {
-			entries = candidate.result.Hits
-			for _, hit := range entries {
-				baselineByHit[workspaceHitIdentity(candidate.child, hit)] = baselineBack{child: candidate.child, group: candidate.child + "\x00" + workspaceHitGroup(hit)}
-			}
+		for index, item := range entries {
+			id := candidate.child + " " + strconv.Itoa(index)
+			baselineDocs = append(baselineDocs, graph.ScopedDoc{ID: id, Scope: fusionScope(candidate.child, item.hit), Score: item.hit.Score})
+			baselineByID[id] = baselineBack{child: candidate.child, group: candidate.child + "\x00" + item.group, hit: item.hit}
 		}
-		baselineRuns = append(baselineRuns, graph.AskWorkspaceRun{Scope: candidate.child, Hits: entries})
 	}
-	baselineResult := graph.FuseAsk(opts.query, baselineRuns, 0)
+	baselineFused := graph.FuseScopes(baselineDocs)
 	var baselineTop graph.AskHit
 	var baselineTopBack baselineBack
-	hasBaselineTop := len(baselineResult.Hits) > 0
-	if hasBaselineTop {
-		baselineTop = baselineResult.Hits[0]
-		baselineTopBack, hasBaselineTop = baselineByHit[workspaceHitIdentity(baselineTop.Scope, baselineTop)]
+	hasBaselineTop := false
+	if len(baselineFused.Ranked) > 0 {
+		ranked := baselineFused.Ranked[0]
+		if back, ok := baselineByID[ranked.ID]; ok {
+			baselineTopBack, hasBaselineTop = back, true
+			baselineTop = qualifyWorkspaceHit(back.child, back.hit, ranked.Score, ranked.Scope)
+		}
 	}
 
-	fileRuns := make([]graph.AskWorkspaceRun, 0, len(survivors))
-	fileBack := make(map[string]workspaceGroup)
+	// File stream: one leader per child file (or concept) takes part in fusion.
+	fileDocs := make([]graph.ScopedDoc, 0)
+	fileByID := make(map[string]workspaceGroup)
 	for _, candidate := range survivors {
-		leaders := make([]graph.AskHit, 0, len(candidate.groups))
-		for _, group := range candidate.groups {
+		for index, group := range candidate.groups {
+			if len(group.hits) == 0 {
+				continue
+			}
 			leader := group.hits[0]
-			leaders = append(leaders, leader)
-			fileBack[workspaceHitIdentity(candidate.child, leader)] = group
-		}
-		if len(leaders) > 0 {
-			fileRuns = append(fileRuns, graph.AskWorkspaceRun{Scope: candidate.child, Hits: leaders})
+			id := fmt.Sprintf("%s file %08d", candidate.child, index)
+			fileDocs = append(fileDocs, graph.ScopedDoc{ID: id, Scope: fusionScope(candidate.child, leader), Score: leader.Score})
+			baselineHits := group.baselineHits
+			if baselineHits == nil {
+				baselineHits = []graph.AskHit{leader}
+			}
+			fileByID[id] = workspaceGroup{key: group.key, child: candidate.child, hits: group.hits, baselineHits: baselineHits}
 		}
 	}
-	fileResult := graph.FuseAsk(opts.query, fileRuns, 0)
-	rankedGroups := make([]workspaceGroup, 0, len(fileResult.Hits))
-	for _, ranked := range fileResult.Hits {
-		group, ok := fileBack[workspaceHitIdentity(ranked.Scope, ranked)]
+	fileFused := graph.FuseScopes(fileDocs)
+	rankedGroups := make([]workspaceGroup, 0, len(fileFused.Ranked))
+	for _, ranked := range fileFused.Ranked {
+		group, ok := fileByID[ranked.ID]
 		if !ok {
 			continue
 		}
-		group.hits = qualifyWorkspaceHits(group.child, group.hits, ranked.Score)
-		group.baselineHits = qualifyWorkspaceHits(group.child, group.baselineHits, 0)
+		hits := make([]graph.AskHit, 0, len(group.hits))
+		for _, hit := range group.hits {
+			hits = append(hits, qualifyWorkspaceHit(group.child, hit, ranked.Score, fusionScope(group.child, hit)))
+		}
+		baselineHits := make([]graph.AskHit, 0, len(group.baselineHits))
+		for _, hit := range group.baselineHits {
+			baselineHits = append(baselineHits, qualifyWorkspaceHit(group.child, hit, hit.Score, fusionScope(group.child, hit)))
+		}
+		group.hits, group.baselineHits = hits, baselineHits
 		rankedGroups = append(rankedGroups, group)
 	}
+	projectedGroups := rankedGroups
 	if hasBaselineTop {
-		baselineTop = qualifyWorkspaceHit(baselineTopBack.child, baselineTop, baselineTop.Score)
-	}
-	projectedGroups := slices.Clone(rankedGroups)
-	if hasBaselineTop {
-		groupIndex := slices.IndexFunc(projectedGroups, func(group workspaceGroup) bool {
-			return group.key == baselineTopBack.group
-		})
-		baselineQueue := []graph.AskHit{baselineTop}
-		projectedScore := baselineTop.Score
+		key := baselineTopBack.group
+		groupIndex := slices.IndexFunc(rankedGroups, func(group workspaceGroup) bool { return group.key == key })
+		var locked workspaceGroup
 		if groupIndex >= 0 {
-			baselineQueue = append([]graph.AskHit(nil), projectedGroups[groupIndex].baselineHits...)
-			projectedScore = projectedGroups[groupIndex].hits[0].Score
-		}
-		lockedHits := []graph.AskHit{baselineTop}
-		for _, hit := range baselineQueue {
-			if !sameWorkspaceHit(hit, baselineTop) {
-				hit.Score = projectedScore
-				lockedHits = append(lockedHits, hit)
+			existing := rankedGroups[groupIndex]
+			projectedScore := baselineTop.Score
+			if len(existing.hits) > 0 {
+				projectedScore = existing.hits[0].Score
 			}
-		}
-		locked := workspaceGroup{key: baselineTopBack.group, child: baselineTopBack.child, hits: lockedHits, baselineHits: baselineQueue}
-		if groupIndex >= 0 {
-			projectedGroups = append([]workspaceGroup{locked}, append(projectedGroups[:groupIndex], projectedGroups[groupIndex+1:]...)...)
+			locked = existing
+			locked.hits = []graph.AskHit{baselineTop}
+			for _, hit := range existing.baselineHits {
+				if !sameWorkspaceHit(hit, baselineTop) {
+					hit.Score = projectedScore
+					locked.hits = append(locked.hits, hit)
+				}
+			}
 		} else {
-			projectedGroups = append([]workspaceGroup{locked}, projectedGroups...)
+			locked = workspaceGroup{key: key, child: baselineTopBack.child, hits: []graph.AskHit{baselineTop}, baselineHits: []graph.AskHit{baselineTop}}
+		}
+		projectedGroups = []workspaceGroup{locked}
+		for _, group := range rankedGroups {
+			if group.key != key {
+				projectedGroups = append(projectedGroups, group)
+			}
 		}
 	}
 	projectedHits := make([][]graph.AskHit, 0, len(projectedGroups))
@@ -280,25 +316,16 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 	if len(hits) > 0 {
 		result.Mode = "lexical"
 		federated := make([]string, 0)
-		if hasBaselineTop {
-			federated = append(federated, baselineTop.Scope)
+		if hasBaselineTop && baselineTop.Scope != nil && *baselineTop.Scope != "" {
+			federated = append(federated, *baselineTop.Scope)
 		}
-		if fileResult.Scopes != nil {
-			federated = appendUniqueStrings(federated, fileResult.Scopes.Federated...)
-		}
+		federated = appendUniqueStrings(federated, fileFused.Federated...)
 		federatedSet := make(map[string]struct{}, len(federated))
 		for _, scope := range federated {
 			federatedSet[scope] = struct{}{}
 		}
 		alsoMatched := make([]graph.AskScopeMatch, 0)
-		if fileResult.Scopes != nil {
-			for _, match := range fileResult.Scopes.AlsoMatched {
-				if _, ok := federatedSet[match.Scope]; !ok {
-					alsoMatched = append(alsoMatched, match)
-				}
-			}
-		}
-		for _, match := range gatedOut {
+		for _, match := range append(slices.Clone(fileFused.AlsoMatched), gatedOut...) {
 			if _, ok := federatedSet[match.Scope]; !ok {
 				alsoMatched = append(alsoMatched, match)
 			}
@@ -316,9 +343,6 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 		} else {
 			result.Note = coverage
 		}
-	}
-	if opts.source {
-		inlineAskSource(root, graph.GraphV1{}, &result, opts.full)
 	}
 	if opts.jsonOutput {
 		return writeAskJSON(stdout, stderr, result)
@@ -347,25 +371,17 @@ func askOptionalCoverage(value *float64) float64 {
 	return *value
 }
 
-func workspaceHitIdentity(scope string, hit graph.AskHit) string {
-	return scope + "\x00" + hit.Kind + "\x00" + hit.Title + "\x00" + hit.Pointer
-}
-
-func qualifyWorkspaceHit(child string, hit graph.AskHit, score float64) graph.AskHit {
+// qualifyWorkspaceHit is TypeScript's { ...hit, score, scope, pointer }: the
+// pointer gains the child prefix, and a scope the child hit lacked is appended
+// after its other keys.
+func qualifyWorkspaceHit(child string, hit graph.AskHit, score float64, scope string) graph.AskHit {
 	hit.Pointer = prefixAskPointer(child, hit.Pointer)
-	hit.Scope = child
-	if score != 0 {
-		hit.Score = score
+	if hit.Scope == nil {
+		hit.ScopeAfterCode = true
 	}
+	hit.Scope = new(scope)
+	hit.Score = score
 	return hit
-}
-
-func qualifyWorkspaceHits(child string, hits []graph.AskHit, score float64) []graph.AskHit {
-	qualified := make([]graph.AskHit, 0, len(hits))
-	for _, hit := range hits {
-		qualified = append(qualified, qualifyWorkspaceHit(child, hit, score))
-	}
-	return qualified
 }
 
 func sameWorkspaceHit(left, right graph.AskHit) bool {
@@ -412,8 +428,12 @@ func workspaceHitGroup(hit graph.AskHit) string {
 	return hit.Pointer
 }
 
-func workspaceRoundRobin(groups [][]graph.AskHit, limit int) []graph.AskHit {
+func workspaceRoundRobin(groups [][]graph.AskHit, limit float64) []graph.AskHit {
 	selected := make([]graph.AskHit, 0)
+	capacity := graph.JSQueueCap(limit)
+	if capacity == 0 {
+		return selected
+	}
 	for depth := 0; ; depth++ {
 		added := false
 		for _, group := range groups {
@@ -422,7 +442,7 @@ func workspaceRoundRobin(groups [][]graph.AskHit, limit int) []graph.AskHit {
 			}
 			selected = append(selected, group[depth])
 			added = true
-			if limit > 0 && len(selected) >= limit {
+			if capacity > 0 && len(selected) >= capacity {
 				return selected
 			}
 		}
@@ -629,19 +649,18 @@ func askIndexPairs(pairs [][]json.RawMessage) (map[string]int, bool) {
 	return counts, true
 }
 
-func askLimit(raw string) (int, error) {
+// askLimit reads --limit as the TypeScript CLI does, with Number(): garbage is
+// NaN, and NaN, zero, fractions and negatives flow into ranking unchanged.
+func askLimit(raw string) float64 {
 	if raw == "" {
-		return 8, nil
+		return 8
 	}
-	value, err := strconv.Atoi(raw)
-	if err != nil || value <= 0 {
-		return 0, fmt.Errorf("--limit must be a positive integer, got %q", raw)
-	}
-	return value, nil
+	return jsonjs.ToNumber(raw)
 }
 
 func writeAskJSON(stdout, stderr io.Writer, result graph.AskResult) int {
-	data, err := json.MarshalIndent(result, "", "  ")
+	noteHit(len(result.Hits) > 0)
+	data, err := jsonjs.Marshal(result, "  ")
 	if err != nil {
 		writeDiagnostic(stderr, "✗ failed to encode ask result: %v\n", err)
 		return 1
@@ -653,18 +672,22 @@ func writeAskJSON(stdout, stderr io.Writer, result graph.AskResult) int {
 }
 
 func writeAskHuman(stdout io.Writer, result graph.AskResult) int {
-	head := fmt.Sprintf("graft ask — %q  (%s)", result.Query, result.Mode)
+	noteHit(len(result.Hits) > 0)
+	_, err := io.WriteString(stdout, formatAskText(result))
+	return writeAskError(err)
+}
+
+// formatAskText renders an ask result exactly as the TypeScript formatAsk does.
+func formatAskText(result graph.AskResult) string {
+	head := `graft ask — "` + result.Query + `"  (` + result.Mode + ")"
 	note := askNoteBlock(result.Note)
 	if len(result.Hits) == 0 {
 		body := note
 		if body == "" {
 			body = "no matches."
 		}
-		body += askEscalationNudge(result)
-		_, err := fmt.Fprintf(stdout, "%s\n\n%s\n", head, body)
-		return writeAskError(err)
+		return head + "\n\n" + body + askEscalationNudge(result) + "\n"
 	}
-
 	lines := []string{head, ""}
 	if note != "" {
 		lines = append(lines, note, "")
@@ -683,19 +706,23 @@ func writeAskHuman(stdout io.Writer, result graph.AskResult) int {
 	} else {
 		for index, hit := range result.Hits {
 			label := ""
-			if hit.Scope != "" {
-				label = "[" + hit.Scope + "/] "
+			if result.Scopes != nil && hit.Scope != nil && *hit.Scope != "" {
+				label = "[" + *hit.Scope + "/] "
 			}
 			lines = append(lines, fmt.Sprintf("%d. %s%s  [%s]", index+1, label, hit.Title, hit.Kind))
 			lines = append(lines, "   "+hit.Pointer)
 			if hit.Snippet != "" {
 				lines = append(lines, "   "+hit.Snippet)
 			}
+			if len(hit.Related) > 0 {
+				lines = append(lines, "   related: "+strings.Join(hit.Related, ", "))
+			}
 			if hit.Code != "" {
 				lines = append(lines, "", "```", hit.Code, "```")
 			}
 			lines = append(lines, "")
 		}
+		lines = append(lines, askScopeFooterLines(result)...)
 	}
 	if len(result.Rules) > 0 {
 		lines = append(lines, "", "rules that govern these symbols")
@@ -712,47 +739,47 @@ func writeAskHuman(stdout io.Writer, result graph.AskResult) int {
 			lines = append(lines, "  "+pointer)
 		}
 	}
-	body := strings.TrimRight(strings.Join(lines, "\n"), "\n")
+	body := jsonjs.TrimEnd(strings.Join(lines, "\n"))
 	if savings := askSavingsLine(result, body); savings != "" {
 		body = savings + "\n\n" + body
 	}
-	if result.Scopes != nil {
-		type scopeCount struct {
-			name  string
-			count int
-		}
-		counts := make(map[string]int)
-		for _, hit := range result.Hits {
-			if hit.Scope != "" {
-				counts[hit.Scope]++
-			}
-		}
-		scopes := make([]scopeCount, 0, len(counts))
-		for name, count := range counts {
-			scopes = append(scopes, scopeCount{name: name, count: count})
-		}
-		slices.SortFunc(scopes, func(a, b scopeCount) int {
-			return cmp.Or(cmp.Compare(b.count, a.count), strings.Compare(a.name, b.name))
-		})
-		footers := make([]string, 0, 1+len(result.Scopes.AlsoMatched))
-		if len(scopes) > 0 {
-			parts := make([]string, 0, len(scopes))
-			for _, scope := range scopes {
-				parts = append(parts, fmt.Sprintf("%s/ (%d)", scope.name, scope.count))
-			}
-			footers = append(footers, "matched in: "+strings.Join(parts, " · "))
-		}
-		for _, scope := range result.Scopes.AlsoMatched {
-			name := strings.TrimSuffix(scope.Scope, "/")
-			footers = append(footers, fmt.Sprintf("also matched: %s/ — narrow with --in %s/", name, name))
-		}
-		if len(footers) > 0 {
-			body += "\n\n" + strings.Join(footers, "\n")
-		}
+	return body + askEscalationNudge(result) + "\n"
+}
+
+// askScopeFooterLines is the multi-scope footer: displayed hits per scope,
+// biggest first, then every scope gated out of fusion.
+func askScopeFooterLines(result graph.AskResult) []string {
+	if result.Scopes == nil {
+		return nil
 	}
-	body += askEscalationNudge(result)
-	_, err := io.WriteString(stdout, body+"\n")
-	return writeAskError(err)
+	order := make([]string, 0)
+	counts := make(map[string]int)
+	for _, hit := range result.Hits {
+		if hit.Scope == nil {
+			continue
+		}
+		if _, ok := counts[*hit.Scope]; !ok {
+			order = append(order, *hit.Scope)
+		}
+		counts[*hit.Scope]++
+	}
+	compare := graph.LocaleCompare()
+	slices.SortStableFunc(order, func(a, b string) int {
+		return cmp.Or(cmp.Compare(counts[b], counts[a]), compare(a, b))
+	})
+	out := make([]string, 0, 1+len(result.Scopes.AlsoMatched))
+	if len(order) > 0 {
+		parts := make([]string, 0, len(order))
+		for _, scope := range order {
+			parts = append(parts, fmt.Sprintf("%s (%d)", graph.ScopeLabel(scope), counts[scope]))
+		}
+		out = append(out, "matched in: "+strings.Join(parts, " · "))
+	}
+	for _, match := range result.Scopes.AlsoMatched {
+		label := graph.ScopeLabel(match.Scope)
+		out = append(out, "also matched: "+label+" — narrow with --in "+label)
+	}
+	return out
 }
 
 func writeAskError(err error) int {
@@ -790,14 +817,35 @@ func askEscalationNudge(result graph.AskResult) string {
 }
 
 func inlineAskSource(root string, wiring graph.GraphV1, result *graph.AskResult, full bool) {
+	inlineAskHits(root, wiring, result.Hits, full)
+}
+
+// inlineAskRanking inlines source into a child's internal ranking queues too,
+// as the TypeScript ask does before a workspace parent fuses them.
+func inlineAskRanking(root string, wiring graph.GraphV1, ranking *graph.AskRankingMetadata, full bool) {
+	if ranking == nil {
+		return
+	}
+	for index := range ranking.Groups {
+		inlineAskHits(root, wiring, ranking.Groups[index].Hits, full)
+		inlineAskHits(root, wiring, ranking.Groups[index].BaselineHits, full)
+	}
+	for index := range ranking.Baseline {
+		hits := []graph.AskHit{ranking.Baseline[index].Hit}
+		inlineAskHits(root, wiring, hits, full)
+		ranking.Baseline[index].Hit = hits[0]
+	}
+}
+
+func inlineAskHits(root string, wiring graph.GraphV1, hits []graph.AskHit, full bool) {
 	cruxByPointer := make(map[string]string)
 	for _, node := range wiring.Nodes {
 		if node.Crux != nil && node.Crux.Code != "" {
 			cruxByPointer[node.Path+":"+node.Span] = node.Crux.Code
 		}
 	}
-	for index := range result.Hits {
-		hit := &result.Hits[index]
+	for index := range hits {
+		hit := &hits[index]
 		path, from, to, ok := parseAskPointer(hit.Pointer)
 		if !ok {
 			continue
@@ -865,38 +913,24 @@ func askSavings(wiring graph.GraphV1, hits []graph.AskHit) *graph.AskSavings {
 			}
 		}
 	}
-	savings := &graph.AskSavings{}
+	saved := &graph.AskSavings{}
 	for path := range paths {
 		chars, ok := charsByPath[path]
 		if !ok {
 			continue
 		}
-		savings.Files++
-		savings.BaselineChars += chars
+		saved.Files++
+		saved.BaselineChars += chars
 	}
-	if savings.Files == 0 {
+	if saved.Files == 0 {
 		return nil
 	}
-	return savings
+	return saved
 }
 
 func askSavingsLine(result graph.AskResult, body string) string {
-	if result.Saved == nil || result.Saved.BaselineChars <= 0 {
+	if result.Saved == nil {
 		return ""
 	}
-	pack := (len(body) + 2) / 4
-	base := (result.Saved.BaselineChars + 2) / 4
-	if base <= pack {
-		return ""
-	}
-	saved := base - pack
-	pct := saved * 100 / base
-	return fmt.Sprintf("[graft] tokens saved ≈ %s (%d%%) — this pack ≈ %s tok vs reading the %d source file(s) whole ≈ %s tok. Estimate (baseline = those files read in full).", formatAskNumber(saved), pct, formatAskNumber(pack), result.Saved.Files, formatAskNumber(base))
-}
-
-func formatAskNumber(value int) string {
-	if value < 1000 {
-		return strconv.Itoa(value)
-	}
-	return fmt.Sprintf("%d,%03d", value/1000, value%1000)
+	return savings.AskLine(body, result.Saved.Files, result.Saved.BaselineChars)
 }

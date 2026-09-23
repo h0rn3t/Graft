@@ -1,0 +1,9 @@
+Usage: graft telemetry [options] [action]
+
+Show, inspect, or turn off the anonymous usage stats (see TELEMETRY.md)
+
+Arguments:
+  action      status (default) | enable | disable | debug (default: "status")
+
+Options:
+  -h, --help  display help for command

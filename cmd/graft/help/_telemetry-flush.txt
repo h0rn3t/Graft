@@ -1,0 +1,6 @@
+Usage: graft _telemetry-flush [options]
+
+internal: POST the queued anonymous usage events
+
+Options:
+  -h, --help  display help for command

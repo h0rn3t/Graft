@@ -1,0 +1,6 @@
+Usage: graft version [options]
+
+Print the installed version and the latest published on npm
+
+Options:
+  -h, --help  display help for command

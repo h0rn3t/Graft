@@ -1,0 +1,13 @@
+Usage: graft skeleton [options] <file> [dir]
+
+Signatures-only view of one file from the wiring graph — the cheapest way to see
+a file's API surface
+
+Arguments:
+  file          repo-relative path (or unique basename) of the file
+  dir           repository root (default: nearest ancestor with a graft/ index)
+
+Options:
+  --json        output the result as JSON
+  --no-refresh  skip the freshness check — answer from the graph as-is
+  -h, --help    display help for command

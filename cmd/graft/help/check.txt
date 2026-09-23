@@ -1,0 +1,12 @@
+Usage: graft check [options] [dir]
+
+Fail if graft/ is stale relative to the code (for CI)
+
+Arguments:
+  dir                         repository root (default: nearest ancestor with a
+                              graft/ index)
+
+Options:
+  -e, --extensions <exts...>  code extensions to include
+  --json                      output the drift as JSON
+  -h, --help                  display help for command

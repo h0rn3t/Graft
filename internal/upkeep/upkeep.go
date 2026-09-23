@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/NanoNets/context-graph-engine/internal/climeta"
+	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
 )
 
 // UpdateTTL is the period for which a registry answer remains current.
@@ -38,13 +39,16 @@ func ReadUpdateCache(home string) (*UpdateCache, bool) {
 	return &cache, true
 }
 
-// WriteUpdateCache atomically replaces the machine-global update cache.
+// WriteUpdateCache atomically replaces the machine-global update cache, in the
+// TypeScript writer's layout: pretty-printed, no trailing newline.
 func WriteUpdateCache(home string, cache UpdateCache) error {
-	data, err := json.Marshal(cache)
-	if err != nil {
-		return fmt.Errorf("encode update cache: %w", err)
+	object := jsonjs.NewObject()
+	object.Set("latest", nil)
+	if cache.Latest != nil {
+		object.Set("latest", *cache.Latest)
 	}
-	return writeAtomicCache(updateCachePath(home), data, "update")
+	object.Set("checkedAt", float64(cache.CheckedAt))
+	return writeAtomicFile(updateCachePath(home), []byte(jsonjs.Stringify(object, 2)), "update")
 }
 
 // NeedsRefresh reports whether the registry answer is missing or expired.
@@ -116,7 +120,8 @@ func updateCachePath(home string) string {
 	return filepath.Join(home, ".graft", "update-check.json")
 }
 
-func writeAtomicCache(path string, data []byte, name string) error {
+// writeAtomicFile replaces path with data through a temporary file and a rename.
+func writeAtomicFile(path string, data []byte, name string) error {
 	directory := filepath.Dir(path)
 	if err := os.MkdirAll(directory, 0o755); err != nil {
 		return fmt.Errorf("create %s cache directory: %w", name, err)
@@ -127,7 +132,7 @@ func writeAtomicCache(path string, data []byte, name string) error {
 	}
 	temporary := tmp.Name()
 	defer func() { _ = os.Remove(temporary) }()
-	if _, err := tmp.Write(append(data, '\n')); err != nil {
+	if _, err := tmp.Write(data); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("write %s cache: %w", name, err)
 	}

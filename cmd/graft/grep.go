@@ -1,22 +1,27 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/NanoNets/context-graph-engine/internal/savings"
 )
 
 func runGrep(opts callersOptions, stdout, stderr io.Writer) int {
-	root, contextDir, err := resolvePaths(opts)
+	root, contextDir, err := resolvePaths(opts, queryPathRules, stderr)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
+	noteQueryRoot(opts)
 	refreshBeforeQuery(root, contextDir, opts, stderr)
+	if _, workspace := graph.ReadWorkspaceChildren(contextDir); workspace {
+		return runWorkspaceGrep(root, contextDir, opts, stdout, stderr)
+	}
 	loaded, err := graph.Read(graph.WiringPath(contextDir))
 	if err != nil {
 		writeDiagnostic(stderr, "✗ no graph — run graft build first\n")
@@ -28,21 +33,8 @@ func runGrep(opts callersOptions, stdout, stderr io.Writer) int {
 		In:         opts.in,
 	})
 	if err != nil {
-		if patternErr, ok := errors.AsType[*graph.GrepPatternError](err); ok {
-			message := patternErr.Error()
-			switch {
-			case strings.Contains(message, "missing closing ]"):
-				message = "Unterminated character class"
-			case strings.Contains(message, "missing closing )"):
-				message = "Unterminated group"
-			case strings.Contains(message, "missing argument to repetition operator"):
-				message = "Nothing to repeat"
-			}
-			flag := ""
-			if opts.ignoreCase {
-				flag = "i"
-			}
-			writeDiagnostic(stderr, "✗ invalid pattern %q: Invalid regular expression: /%s/%s: %s\n", opts.query, opts.query, flag, message)
+		if message, ok := grepSyntaxMessage(err, opts.query, opts.ignoreCase); ok {
+			writeDiagnostic(stderr, "✗ invalid pattern \"%s\": %s\n", opts.query, message)
 		} else {
 			writeDiagnostic(stderr, "✗ %v\n", err)
 		}
@@ -61,8 +53,65 @@ func runGrep(opts callersOptions, stdout, stderr io.Writer) int {
 	return 0
 }
 
+// grepSyntaxMessage is JavaScript's SyntaxError message for a pattern Go's
+// regexp rejects, or false for any other failure.
+func grepSyntaxMessage(err error, pattern string, ignoreCase bool) (string, bool) {
+	patternErr, ok := errors.AsType[*graph.GrepPatternError](err)
+	if !ok {
+		return "", false
+	}
+	message := patternErr.Error()
+	switch {
+	case strings.Contains(message, "missing closing ]"):
+		message = "Unterminated character class"
+	case strings.Contains(message, "missing closing )"):
+		message = "Unterminated group"
+	case strings.Contains(message, "missing argument to repetition operator"):
+		message = "Nothing to repeat"
+	}
+	flag := ""
+	if ignoreCase {
+		flag = "i"
+	}
+	return fmt.Sprintf("Invalid regular expression: /%s/%s: %s", pattern, flag, message), true
+}
+
+// runWorkspaceGrep greps every child of a workspace, as the TypeScript
+// runWorkspaceGrep does; --in does not apply there.
+func runWorkspaceGrep(root, contextDir string, opts callersOptions, stdout, stderr io.Writer) int {
+	result, coverage, err := federateGrep(root, contextDir, opts.query, opts.ignoreCase, opts.fixed)
+	if err != nil {
+		// Thrown in TypeScript, so the top-level handler prints the bare message.
+		if message, ok := grepSyntaxMessage(err, opts.query, opts.ignoreCase); ok {
+			writeDiagnostic(stderr, "%s\n", message)
+		} else {
+			writeDiagnostic(stderr, "%v\n", err)
+		}
+		return 1
+	}
+	if opts.jsonOutput {
+		return writeGrepJSON(stdout, stderr, result)
+	}
+	if result.TotalHits == 0 {
+		note := grepZeroHitNote(result)
+		if coverage != "" {
+			note += "\n" + coverage
+		}
+		writeDiagnostic(stderr, "%s\n", note)
+		return 0
+	}
+	text := formatGrepResult(result)
+	if coverage != "" {
+		text += coverage + "\n"
+	}
+	if _, err := io.WriteString(stdout, text); err != nil {
+		return 1
+	}
+	return 0
+}
+
 func writeGrepJSON(stdout, stderr io.Writer, result graph.GrepResult) int {
-	data, err := json.MarshalIndent(result, "", "  ")
+	data, err := jsonjs.Marshal(result, "  ")
 	if err != nil {
 		writeDiagnostic(stderr, "✗ failed to encode grep result: %v\n", err)
 		return 1
@@ -91,7 +140,11 @@ func formatGrepResult(result graph.GrepResult) string {
 		}
 		output.WriteByte('\n')
 	}
-	return strings.TrimRight(output.String(), "\n") + "\n"
+	body := strings.TrimRight(output.String(), "\n") + "\n"
+	if result.Saved == nil {
+		return body
+	}
+	return savings.With(body, result.Saved.Files, result.Saved.BaselineChars)
 }
 
 func grepHeader(result graph.GrepResult) string {

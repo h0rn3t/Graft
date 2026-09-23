@@ -1,20 +1,21 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"strconv"
 
 	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
 )
 
 func runMap(opts callersOptions, stdout, stderr io.Writer) int {
-	root, contextDir, err := resolvePaths(opts)
+	root, contextDir, err := resolvePaths(opts, queryPathRules, stderr)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
+	noteQueryRoot(opts)
 	maxDirs, err := mapMaxDirs(opts.maxDirs)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
@@ -35,7 +36,7 @@ func runMap(opts callersOptions, stdout, stderr io.Writer) int {
 	}
 	result := graph.BuildRepoMap(*loaded, graph.RepoMapOptions{MaxDirs: maxDirs})
 	if opts.jsonOutput {
-		data, err := json.MarshalIndent(result, "", "  ")
+		data, err := jsonjs.Marshal(result, "  ")
 		if err != nil {
 			writeDiagnostic(stderr, "✗ failed to encode map result: %v\n", err)
 			return 1
