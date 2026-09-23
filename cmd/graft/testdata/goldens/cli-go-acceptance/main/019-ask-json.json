@@ -1,0 +1,15 @@
+{
+  "args": [
+    "ask",
+    "normalize text",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"normalize text\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"normalize · function\",\n      \"pointer\": \"py/util.py:L1-L2\",\n      \"snippet\": \"def normalize(text)\",\n      \"score\": 1.3514938629287117\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"handle · method\",\n      \"pointer\": \"py/service.py:L4-L5\",\n      \"snippet\": \"def handle(self, text)\",\n      \"score\": 0.8984312010885862\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"format · function\",\n      \"pointer\": \"src/format.js:L1-L1\",\n      \"snippet\": \"function format(text)\",\n      \"score\": 0.4095898679242837\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"prefix · method\",\n      \"pointer\": \"py/service.py:L7-L8\",\n      \"snippet\": \"def prefix(self, text)\",\n      \"score\": 0.47336870127837094\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"trim · function\",\n      \"pointer\": \"src/format.js:L2-L2\",\n      \"snippet\": \"function trim(text)\",\n      \"score\": 0.35849480086652574\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"Service · class\",\n      \"pointer\": \"py/service.py:L3-L8\",\n      \"snippet\": \"class Service\",\n      \"score\": 0.4230981147869514\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"service.py · file\",\n      \"pointer\": \"py/service.py\",\n      \"snippet\": \"\",\n      \"score\": 0.25695232758949293\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 0.5227383177565618\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

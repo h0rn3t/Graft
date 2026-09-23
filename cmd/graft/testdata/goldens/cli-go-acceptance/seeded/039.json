@@ -1,0 +1,17 @@
+{
+  "args": [
+    "grep",
+    "lexicalAnchorOrder"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "[graft] tokens saved ≈ 1,985 (96%) — this output ≈ 87 tok vs reading the 1 file(s) it covers whole ≈ 2,072 tok (estimate). At the end of your reply, tell the user the total graft tokens saved this turn — sum each such line across your graft calls — e.g. \"🌱 graft saved ~N tokens this turn\".\n\n\"lexicalAnchorOrder\" — 2 hits in 2 symbols across 1 files (searched 90 indexed files)\n\nlexicalAnchorOrder · function · src/ask/file-rank.ts:L111-L123 · 1 in-edges\n  L111: function lexicalAnchorOrder(\n\nrankFilesBounded · function · src/ask/file-rank.ts:L138-L246 · 1 in-edges\n  L159: donors.sort((a, b) => lexicalAnchorOrder(a, b, queryWeights));\n",
+  "stderr": "",
+  "files": {}
+}

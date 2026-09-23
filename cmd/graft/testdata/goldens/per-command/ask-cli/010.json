@@ -1,0 +1,26 @@
+{
+  "args": [
+    "ask",
+    "needle guide",
+    "<REPO>",
+    "--no-graph-rank",
+    "--json",
+    "--no-refresh"
+  ],
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {
+    "graft/.graph/wiring.json": "{\"meta\":{\"version\":1,\"nodeCount\":4,\"edgeCount\":1,\"languages\":[\"ts\"]},\"nodes\":[{\"id\":\"src/root.ts\",\"name\":\"root.ts\",\"kind\":\"file\",\"path\":\"src/root.ts\",\"span\":\"L1-L3\",\"signature\":null,\"exported\":true,\"origin\":\"ast\",\"body_hash\":\"\",\"chars\":54,\"summary_state\":\"pending\",\"summary\":null,\"crux\":null},{\"id\":\"src/root.ts#root\",\"name\":\"root\",\"kind\":\"function\",\"path\":\"src/root.ts\",\"span\":\"L1-L3\",\"signature\":\"root(): string\",\"exported\":true,\"origin\":\"ast\",\"body_hash\":\"\",\"chars\":54,\"body_text\":\"return needle\",\"summary_state\":\"pending\",\"summary\":null,\"crux\":null},{\"id\":\"src/caller.ts\",\"name\":\"caller.ts\",\"kind\":\"file\",\"path\":\"src/caller.ts\",\"span\":\"L1-L3\",\"signature\":null,\"exported\":true,\"origin\":\"ast\",\"body_hash\":\"\",\"chars\":54,\"summary_state\":\"pending\",\"summary\":null,\"crux\":null},{\"id\":\"src/caller.ts#caller\",\"name\":\"caller\",\"kind\":\"function\",\"path\":\"src/caller.ts\",\"span\":\"L1-L3\",\"signature\":\"caller(): string\",\"exported\":true,\"origin\":\"ast\",\"body_hash\":\"\",\"chars\":54,\"body_text\":\"return root\",\"summary_state\":\"pending\",\"summary\":null,\"crux\":null}],\"edges\":[{\"source\":\"src/caller.ts#caller\",\"target\":\"src/root.ts#root\",\"relation\":\"calls\",\"confidence\":\"extracted\"}]}",
+    "graft/needle-guide.md": "---\nslug: needle-guide\nname: Needle Guide\ntype: concept\nsources:\n  - path: src/root.ts\n    hash: fixture\nlinks:\n  - to: root\n    relation: covers\n---\nNeedle guide explains the root retrieval path.\n",
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.0\",\n  \"checkedAt\": 9999999999999\n}",
+    "src/caller.ts": "export function caller(): string {\n  return root();\n}\n",
+    "src/root.ts": "export function root(): string {\n  return \"needle\";\n}\n"
+  },
+  "status": 0,
+  "stdout": "{\n  \"query\": \"needle guide\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"concept\",\n      \"title\": \"Needle Guide\",\n      \"pointer\": \"src/root.ts\",\n      \"snippet\": \"Needle guide explains the root retrieval path.\",\n      \"related\": [\n        \"root\"\n      ],\n      \"score\": 1\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"root · function\",\n      \"pointer\": \"src/root.ts:L1-L3\",\n      \"snippet\": \"root(): string\",\n      \"score\": 1\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stderr": "",
+  "files": {}
+}

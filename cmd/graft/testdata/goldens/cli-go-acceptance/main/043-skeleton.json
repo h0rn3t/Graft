@@ -1,0 +1,14 @@
+{
+  "args": [
+    "skeleton",
+    "src/store.ts"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "[graft] tokens saved ≈ 32 (36%) — this output ≈ 56 tok vs reading the 1 file(s) it covers whole ≈ 88 tok (estimate). At the end of your reply, tell the user the total graft tokens saved this turn — sum each such line across your graft calls — e.g. \"🌱 graft saved ~N tokens this turn\".\n\ngraft skeleton — src/store.ts\n- L2-L6  class Store  class Store\n- L4-L4  method get  get(key: string): string\n- L5-L5  method put  put(key: string, value: string): void\n- L7-L7  function openStore  function openStore(): Store\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

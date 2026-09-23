@@ -1,0 +1,16 @@
+{
+  "args": [
+    "<REPO>/wiring.json",
+    "--json"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {
+    "wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 0,\n    \"edgeCount\": 0,\n    \"languages\": []\n  },\n  \"nodes\": [],\n  \"edges\": []\n}\n"
+  },
+  "status": 0,
+  "stdout": "{\n  \"graph\": \"<REPO>/wiring.json\",\n  \"nodes\": 0,\n  \"symbolNodes\": 0,\n  \"edges\": 0,\n  \"byKind\": {},\n  \"byOrigin\": {},\n  \"byRelation\": {},\n  \"byConfidence\": {},\n  \"resolution\": {\n    \"calls\": 0,\n    \"resolvedToNode\": 0,\n    \"resolvedPct\": null,\n    \"unresolvedExternalImports\": 0\n  },\n  \"connectivity\": {\n    \"orphanSymbolNodes\": 0,\n    \"orphanPct\": null\n  },\n  \"invariants\": {\n    \"ok\": true,\n    \"danglingEdges\": 0,\n    \"selfLoopCalls\": 0,\n    \"violations\": 0,\n    \"sample\": []\n  }\n}\n",
+  "stderr": "",
+  "files": {}
+}

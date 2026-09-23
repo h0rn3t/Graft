@@ -1,0 +1,18 @@
+{
+  "args": [
+    "ask",
+    "jsDiff",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"jsDiff\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"jsDiff · function\",\n      \"pointer\": \"internal/graph/ask_lexical.go:L141-L150\",\n      \"snippet\": \"func jsDiff(a, b float64) int\",\n      \"score\": 1.5\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"jsFields · function\",\n      \"pointer\": \"internal/graph/extract.go:L809-L811\",\n      \"snippet\": \"func jsFields(text string) []string\",\n      \"score\": 0.6145918780436286\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"build.ts · file\",\n      \"pointer\": \"src/graph/build.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.4456487699060837\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"workspace.ts · file\",\n      \"pointer\": \"src/graph/workspace.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.4249675452722475\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"onSignal · function\",\n      \"pointer\": \"src/graph/refresh.ts:L95-L99\",\n      \"snippet\": \"onSignal = (sig: NodeJS.Signals)\",\n      \"score\": 0.39953772717091024\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"types.ts · file\",\n      \"pointer\": \"src/graph/types.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.31565460628406106\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"fingerprint.ts · file\",\n      \"pointer\": \"src/graph/fingerprint.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.30101693959381914\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"check.ts · file\",\n      \"pointer\": \"src/graph/check.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.2843642544163477\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stderr": "",
+  "files": {}
+}

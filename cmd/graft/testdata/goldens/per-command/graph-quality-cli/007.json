@@ -1,0 +1,16 @@
+{
+  "args": [
+    "<REPO>/wiring.json",
+    "--strict"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {
+    "wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 2,\n    \"edgeCount\": 4,\n    \"languages\": [\n      \"typescript\"\n    ]\n  },\n  \"nodes\": [\n    {\n      \"id\": \"a.ts#main\",\n      \"name\": \"main\",\n      \"kind\": \"function\",\n      \"path\": \"a.ts\",\n      \"span\": \"L1-L3\",\n      \"origin\": \"ast\"\n    },\n    {\n      \"id\": \"a.ts#main\",\n      \"name\": \" \",\n      \"kind\": \"widget\",\n      \"path\": \"a.ts\",\n      \"span\": \"L9-L2\",\n      \"origin\": \"ast\"\n    }\n  ],\n  \"edges\": [\n    {\n      \"source\": \"a.ts#main\",\n      \"target\": \"a.ts#main\",\n      \"relation\": \"bogus\",\n      \"confidence\": \"guessed\"\n    },\n    {\n      \"source\": \"missing\",\n      \"target\": \"a.ts#main\",\n      \"relation\": \"references\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"a.ts#main\",\n      \"target\": \"ghost\",\n      \"relation\": \"calls\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"a.ts#main\",\n      \"target\": \"a.ts#main\",\n      \"relation\": \"calls\",\n      \"confidence\": \"extracted\"\n    }\n  ]\n}\n"
+  },
+  "status": 1,
+  "stdout": "graph-quality — <REPO>/wiring.json\n  nodes 2 (2 symbols) · edges 4\n  kinds:      function=1 widget=1\n  origin:     ast=2\n  relations:  bogus=1 references=1 calls=2\n  confidence: guessed=1 extracted=3\n  calls resolved: 1/2 (50%)\n  orphan symbols: 0/2 (0%)\n  INVARIANTS: FAIL ✗ (8 violations, 2 dangling)\n     - dup id: a.ts#main\n     - empty name: a.ts#main\n     - bad kind 'widget': a.ts#main\n     - inverted span L9-L2: a.ts#main\n     - bad relation 'bogus'\n     - bad confidence 'guessed'\n     - dangling source: missing\n     - dangling calls target: a.ts#main → ghost\n  note: 1 self-loop calls\n",
+  "stderr": "",
+  "files": {}
+}

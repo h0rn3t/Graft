@@ -1,0 +1,18 @@
+{
+  "args": [
+    "ask",
+    "encode value",
+    "--source",
+    "--full",
+    "-n",
+    "2"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"encode value\"  (lexical)\n\n1. encode_twice · function  [symbol]\n   native/codec.c:L3-L3\n   int encode_twice(int value) { return encode(encode(value)); }\n\n```\nint encode_twice(int value) { return encode(encode(value)); }\n```\n\n2. encode · function  [symbol]\n   native/codec.h:L1-L1\n   int encode(int value);\n\n```\nint encode(int value);\n```\n\n[graft] only 2 hits — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

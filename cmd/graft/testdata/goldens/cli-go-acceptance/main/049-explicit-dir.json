@@ -1,0 +1,16 @@
+{
+  "args": [
+    "ask",
+    "run",
+    ".",
+    "--source"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"run\"  (lexical)\n\n1. run · method  [symbol]\n   java/Worker.java:L1-L1\n   int run()\n\n```\nclass Worker { int run() { return compute(); } int compute() { return 1; } }\n```\n\n2. run · function  [symbol]\n   rust/lib.rs:L2-L2\n   pub fn run() -> i32 { parse::parse_line() }\n\n```\npub fn run() -> i32 { parse::parse_line() }\n```\n\n3. parse_line · function  [symbol]\n   rust/parse.rs:L1-L1\n   pub fn parse_line() -> i32 { 1 }\n\n```\npub fn parse_line() -> i32 { 1 }\n```\n\n4. compute · method  [symbol]\n   java/Worker.java:L1-L1\n   int compute()\n\n```\nclass Worker { int run() { return compute(); } int compute() { return 1; } }\n```\n\n5. Worker · class  [symbol]\n   java/Worker.java:L1-L1\n   class Worker\n\n```\nclass Worker { int run() { return compute(); } int compute() { return 1; } }\n```\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

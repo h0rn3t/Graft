@@ -1,0 +1,16 @@
+{
+  "args": [
+    "grep",
+    "Store"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ no graph — run graft build first\n",
+  "files": {},
+  "checkFiles": false
+}

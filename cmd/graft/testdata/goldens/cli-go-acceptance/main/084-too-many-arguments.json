@@ -1,0 +1,15 @@
+{
+  "args": [
+    "map",
+    ".",
+    "extra"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "error: too many arguments for 'map'. Expected 1 argument but got 2: ., extra.\n",
+  "files": {},
+  "checkFiles": false
+}

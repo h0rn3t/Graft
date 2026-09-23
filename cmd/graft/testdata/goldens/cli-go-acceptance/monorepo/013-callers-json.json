@@ -1,0 +1,15 @@
+{
+  "args": [
+    "callers",
+    "storeGet3",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"storeGet3\",\n  \"matches\": [\n    {\n      \"symbol\": {\n        \"id\": \"packages/core/src/store.ts#storeGet3\",\n        \"name\": \"storeGet3\",\n        \"kind\": \"function\",\n        \"path\": \"packages/core/src/store.ts\",\n        \"span\": \"L4-L4\"\n      },\n      \"hits\": [\n        {\n          \"id\": \"packages/ui/src/view.ts#renderStore3\",\n          \"relation\": \"calls\",\n          \"depth\": 1,\n          \"name\": \"renderStore3\",\n          \"kind\": \"function\",\n          \"path\": \"packages/ui/src/view.ts\",\n          \"span\": \"L8-L8\"\n        }\n      ]\n    }\n  ],\n  \"saved\": {\n    \"files\": 2,\n    \"baselineChars\": 1183\n  }\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

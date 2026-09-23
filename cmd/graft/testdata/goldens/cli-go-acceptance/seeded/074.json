@@ -1,0 +1,18 @@
+{
+  "args": [
+    "ask",
+    "askHasTermTS",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"askHasTermTS\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"askHasTermTS · function\",\n      \"pointer\": \"internal/graph/ask_lexical.go:L223-L235\",\n      \"snippet\": \"func askHasTermTS(field map[string]int, term string) bool\",\n      \"score\": 1.0842639219128056\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"hasTerm · function\",\n      \"pointer\": \"src/ask/ask.ts:L424-L426\",\n      \"snippet\": \"function hasTerm(f: Map<string, number>, t: string): boolean\",\n      \"score\": 0.9025060620433123\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"askTermCounts · function\",\n      \"pointer\": \"internal/graph/ask.go:L435-L441\",\n      \"snippet\": \"func askTermCounts(text string) map[string]int\",\n      \"score\": 0.751389315595326\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"askOrderedCounts · function\",\n      \"pointer\": \"internal/graph/ask_index.go:L25-L31\",\n      \"snippet\": \"func askOrderedCounts(text string) askBag\",\n      \"score\": 0.47232060192300596\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"AskIndex · interface\",\n      \"pointer\": \"src/ask/index-file.ts:L63-L69\",\n      \"snippet\": \"interface AskIndex\",\n      \"score\": 0.44480963196963175\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"federateAsk · function\",\n      \"pointer\": \"src/graph/workspace.ts:L240-L558\",\n      \"snippet\": \"function federateAsk( root: string, override: string | undefined, query: string, opts: FederateAskOptions = {}, ): AskResult\",\n      \"score\": 0.38835134204892696\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"fuse.ts · file\",\n      \"pointer\": \"src/ask/fuse.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.35942299895740376\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"hasGraftIndex · function\",\n      \"pointer\": \"src/graph/root.ts:L23-L25\",\n      \"snippet\": \"function hasGraftIndex(dir: string): boolean\",\n      \"score\": 0.31320753914889304\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stderr": "",
+  "files": {}
+}

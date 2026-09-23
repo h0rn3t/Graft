@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "importSpecifier"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"importSpecifier\"  (lexical)\n\n1. importSpecifier · method  [symbol]\n   internal/graph/extract.go:L639-L662\n   func (x *extractor) importSpecifier(node *sitter.Node, lang language) string\n\n2. goImportSpecifier · method  [symbol]\n   internal/graph/lang_go.go:L91-L97\n   func (x *extractor) goImportSpecifier(node *sitter.Node) string\n\n3. phpImportSpecifier · method  [symbol]\n   internal/graph/lang_php.go:L155-L160\n   func (x *extractor) phpImportSpecifier(node *sitter.Node) string\n\n4. pythonImportSpecifier · method  [symbol]\n   internal/graph/lang_python.go:L59-L69\n   func (x *extractor) pythonImportSpecifier(node *sitter.Node) string\n\n5. importSpecifier · function  [symbol]\n   src/graph/extract.ts:L2490-L2541\n   function importSpecifier(node: Parser.SyntaxNode, lang: Language): string | null\n\n6. rImportSpecifier · method  [symbol]\n   internal/graph/lang_r.go:L324-L335\n   func (x *extractor) rImportSpecifier(node *sitter.Node) string\n\n7. resolveImportTarget · method  [symbol]\n   internal/graph/resolve.go:L190-L204\n   func (ix *resolveIndex) resolveImportTarget(edge rawEdge) string\n\n8. resolveJavaImport · function  [symbol]\n   src/graph/resolve.ts:L527-L542\n   function resolveJavaImport(spec: string, filesBySuffix: Map<string, string[]>): string\n",
+  "stderr": "",
+  "files": {}
+}

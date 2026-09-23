@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "personalizedPageRank"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"personalizedPageRank\"  (lexical)\n\n1. personalizedPageRank · function  [symbol]\n   src/ask/graphrank.ts:L123-L133\n   function personalizedPageRank( graph: GraphV1, seeds: Map<string, number>, opts: PageRankOptions = {}, ): Map<string, number>\n\n2. askPageRankTS · function  [symbol]\n   internal/graph/ask_lexical.go:L413-L477\n   func askPageRankTS(topology askTopology, seeds *askScores) *askScores\n\n3. lexical · function  [symbol]\n   src/ask/ask.ts:L488-L1203\n   function lexical( query: string, corpus: Corpus, limit: number, graphRank: boolean, inPrefix?: string, fileFirst = true, fileComplement = false, fileTopLock = false, includeRankingMetadata = false, ): AskResult\n\n4. rankFilesBounded · function  [symbol]\n   src/ask/file-rank.ts:L138-L246\n   function rankFilesBounded( candidates: readonly FileRankCandidate[], queryWeights: ReadonlyMap<string, number>, ): RankedFile[]\n\n5. relations.ts · file  [symbol]\n   src/graph/relations.ts\n\n6. rankScopesAndFuse · function  [symbol]\n   src/ask/fuse.ts:L325-L415\n   function rankScopesAndFuse( scopes: string[], ops: ScopeRankOps, graphWeight: number, rescueFloor: number, ): FusionResult\n\n7. types.ts · file  [symbol]\n   src/graph/types.ts\n\n8. workspace.ts · file  [symbol]\n   src/graph/workspace.ts\n",
+  "stderr": "",
+  "files": {}
+}

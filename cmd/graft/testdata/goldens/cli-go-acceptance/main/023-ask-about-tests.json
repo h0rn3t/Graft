@@ -1,0 +1,14 @@
+{
+  "args": [
+    "ask",
+    "store tests"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"store tests\"  (lexical)\n\n1. openStore · function  [symbol]\n   src/store.ts:L7-L7\n   function openStore(): Store\n\n2. testStore · function  [symbol]\n   src/store.test.ts:L2-L2\n   function testStore()\n\n3. storeKeys · function  [symbol]\n   src/store_util.ts:L2-L2\n   function storeKeys(): string[]\n\n4. app.tsx · file  [symbol]\n   src/app.tsx\n\n5. format.js · file  [symbol]\n   src/format.js\n\n6. store.ts · file  [symbol]\n   src/store.ts\n\n7. store.test.ts · file  [symbol]\n   src/store.test.ts\n\n8. store_util.ts · file  [symbol]\n   src/store_util.ts\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

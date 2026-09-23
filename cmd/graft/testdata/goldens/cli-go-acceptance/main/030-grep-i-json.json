@@ -1,0 +1,16 @@
+{
+  "args": [
+    "grep",
+    "WIDGET",
+    "-i",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"pattern\": \"WIDGET\",\n  \"filesSearched\": 18,\n  \"totalHits\": 4,\n  \"groups\": [\n    {\n      \"symbol\": {\n        \"id\": \"native/widget.cpp#draw\",\n        \"name\": \"draw\",\n        \"kind\": \"method\",\n        \"path\": \"native/widget.cpp\",\n        \"span\": \"L2-L2\"\n      },\n      \"path\": \"native/widget.cpp\",\n      \"inDegree\": 1,\n      \"hits\": [\n        {\n          \"line\": 2,\n          \"text\": \"int Widget::draw() { return 1; }\"\n        }\n      ]\n    },\n    {\n      \"symbol\": null,\n      \"path\": \"native/widget.cpp\",\n      \"inDegree\": 0,\n      \"hits\": [\n        {\n          \"line\": 1,\n          \"text\": \"#include \\\"widget.hpp\\\"\"\n        }\n      ]\n    },\n    {\n      \"symbol\": {\n        \"id\": \"native/widget.cpp#render\",\n        \"name\": \"render\",\n        \"kind\": \"function\",\n        \"path\": \"native/widget.cpp\",\n        \"span\": \"L3-L3\"\n      },\n      \"path\": \"native/widget.cpp\",\n      \"inDegree\": 0,\n      \"hits\": [\n        {\n          \"line\": 3,\n          \"text\": \"int render() { Widget w; return w.draw(); }\"\n        }\n      ]\n    },\n    {\n      \"symbol\": {\n        \"id\": \"native/widget.hpp#Widget\",\n        \"name\": \"Widget\",\n        \"kind\": \"class\",\n        \"path\": \"native/widget.hpp\",\n        \"span\": \"L1-L1\"\n      },\n      \"path\": \"native/widget.hpp\",\n      \"inDegree\": 0,\n      \"hits\": [\n        {\n          \"line\": 1,\n          \"text\": \"class Widget { public: int draw(); };\"\n        }\n      ]\n    }\n  ],\n  \"truncated\": {\n    \"files\": 0,\n    \"hits\": 0\n  },\n  \"saved\": {\n    \"files\": 2,\n    \"baselineChars\": 137\n  }\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

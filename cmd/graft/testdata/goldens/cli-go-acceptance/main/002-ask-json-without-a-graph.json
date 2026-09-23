@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "store",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"store\",\n  \"mode\": \"empty\",\n  \"hits\": [],\n  \"note\": \"no matching nodes — try different words, or `graft build` if graft/ is empty\"\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

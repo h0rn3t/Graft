@@ -1,0 +1,14 @@
+{
+  "args": [
+    "skeleton",
+    "src/missing.ts"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft skeleton — src/missing.ts\n\nno definitions indexed for this file\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

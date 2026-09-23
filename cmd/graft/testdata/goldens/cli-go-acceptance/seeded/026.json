@@ -1,0 +1,18 @@
+{
+  "args": [
+    "ask",
+    "Hub",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"Hub\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"formatDirHub · function\",\n      \"pointer\": \"src/graph/map.ts:L294-L296\",\n      \"snippet\": \"function formatDirHub(h: Hub): string\",\n      \"score\": 1.5\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"Hub · struct\",\n      \"pointer\": \"internal/graph/map.go:L22-L28\",\n      \"snippet\": \"Hub\",\n      \"score\": 1.1659624276207434\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"relations.ts · file\",\n      \"pointer\": \"src/graph/relations.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.2788217073463515\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"Hub · interface\",\n      \"pointer\": \"src/graph/map.ts:L27-L33\",\n      \"snippet\": \"interface Hub\",\n      \"score\": 1.1794644100269376\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"FormatRepoMap · function\",\n      \"pointer\": \"internal/graph/map.go:L369-L399\",\n      \"snippet\": \"func FormatRepoMap(repoMap RepoMap) string\",\n      \"score\": 0.5320730752996738\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"formatHotspot · function\",\n      \"pointer\": \"src/graph/map.ts:L309-L311\",\n      \"snippet\": \"function formatHotspot(h: Hub): string\",\n      \"score\": 0.44228560278205625\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"formatMapDirLine · function\",\n      \"pointer\": \"internal/graph/map.go:L401-L418\",\n      \"snippet\": \"func formatMapDirLine(dir DirEntry) string\",\n      \"score\": 0.4986549866845903\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"topHubs · function\",\n      \"pointer\": \"src/graph/map.ts:L122-L128\",\n      \"snippet\": \"function topHubs(nodes: NodeV1[], inDegree: Map<string, number>, cap: number): Hub[]\",\n      \"score\": 0.40017795833645864\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stderr": "",
+  "files": {}
+}

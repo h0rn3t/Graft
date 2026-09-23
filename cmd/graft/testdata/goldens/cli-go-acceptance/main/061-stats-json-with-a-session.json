@@ -1,0 +1,14 @@
+{
+  "args": [
+    "stats",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"id\": \"s1\",\n  \"lastQuery\": \"store get\",\n  \"perAgentQuery\": {},\n  \"graftReads\": 3,\n  \"sourceReads\": 1,\n  \"savedTokens\": 12345,\n  \"injectedPointers\": [],\n  \"nudges\": 0,\n  \"inputCostMicros\": 3000000,\n  \"inputTokensBilled\": 1000000\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

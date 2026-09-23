@@ -1,0 +1,15 @@
+{
+  "args": [
+    "ask",
+    "store",
+    "--in"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "error: option '--in <path>' argument missing\n",
+  "files": {},
+  "checkFiles": false
+}

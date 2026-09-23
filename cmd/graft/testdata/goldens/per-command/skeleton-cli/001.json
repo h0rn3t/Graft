@@ -1,0 +1,27 @@
+{
+  "args": [
+    "skeleton",
+    "src/api.ts",
+    "<REPO>",
+    "--json"
+  ],
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {
+    ".gitignore": "# graft's local graph cache — regenerable, not committed (run `graft build`).\n/graft/\n",
+    ".ignore": "# graft's cards are gitignored but should stay greppable: ripgrep reads\n# .ignore before .gitignore, so this re-admits the tree to search only.\n!graft/\ngraft/.cache/\ngraft/.graph/\n",
+    "graft/.cache/ask-index.json": "{\"version\":1,\"avgBodyLen\":6,\"df\":[[\"api\",3],[\"ts\",3],[\"src\",3],[\"first\",1],[\"function\",2],[\"number\",1],[\"return\",2],[\"second\",1],[\"string\",1]],\"docCount\":3,\"docs\":[{\"id\":\"src/api.ts\",\"name\":[[\"api\",1],[\"ts\",1]],\"path\":[[\"src\",1],[\"api\",1],[\"ts\",1]],\"body\":[]},{\"id\":\"src/api.ts#first\",\"name\":[[\"first\",1]],\"path\":[[\"src\",1],[\"api\",1],[\"ts\",1]],\"body\":[[\"function\",2],[\"first\",2],[\"number\",4],[\"return\",1]]},{\"id\":\"src/api.ts#second\",\"name\":[[\"second\",1]],\"path\":[[\"src\",1],[\"api\",1],[\"ts\",1]],\"body\":[[\"function\",2],[\"second\",2],[\"string\",4],[\"return\",1]]}]}\n",
+    "graft/.graph/wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 3,\n    \"edgeCount\": 2,\n    \"languages\": [\n      \"typescript\"\n    ],\n    \"scopes\": [\n      {\n        \"prefix\": \"\",\n        \"label\": \"\",\n        \"markers\": []\n      }\n    ]\n  },\n  \"nodes\": [\n    {\n      \"id\": \"src/api.ts\",\n      \"name\": \"api.ts\",\n      \"kind\": \"file\",\n      \"path\": \"src/api.ts\",\n      \"span\": \"L1-L8\",\n      \"signature\": null,\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"a415e70ae02499ffd504802ca96dfe2c3c0afd425db3f7dedd68b0f7a5543ec4\",\n      \"chars\": 116,\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/api.ts#first\",\n      \"name\": \"first\",\n      \"kind\": \"function\",\n      \"path\": \"src/api.ts\",\n      \"span\": \"L1-L3\",\n      \"signature\": \"function first(a: number): number\",\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"5fc45bb90343ecc838d2b6289c7ed6352ef3a9973a0ac52887757756b04e4c49\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/api.ts#second\",\n      \"name\": \"second\",\n      \"kind\": \"function\",\n      \"path\": \"src/api.ts\",\n      \"span\": \"L5-L7\",\n      \"signature\": \"function second(b: string): string\",\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"9fcf1402760317cd9637dddf40e1b84214b0af6a7368d8e3f1d481dbe2573d2b\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    }\n  ],\n  \"edges\": [\n    {\n      \"source\": \"src/api.ts\",\n      \"target\": \"src/api.ts#first\",\n      \"relation\": \"contains\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"src/api.ts\",\n      \"target\": \"src/api.ts#second\",\n      \"relation\": \"contains\",\n      \"confidence\": \"extracted\"\n    }\n  ]\n}\n",
+    "graft/INDEX.md": "# graft — repo map\n\nSmall markdown nodes summarising this repo. `grep` any term, symbol, or\nfilename here, or run `graft ask \"<task>\"`. Each node carries prose plus exact\n`file:line`; open a source file only to edit the named span.\n\nThe same graph is queryable as MCP tools (`graft_find_code`, `graft_find_all`,\n`graft_trace_calls`, `graft_file_api`, `graft_repo_map`) where a host exposes them, and\nas the `graft` CLI everywhere else. Edges — who calls what — live only in the\ngraph, not in these files: `graft callers <symbol>` is the only way to read them.\n\n## Files\n\n1 per-file wiring cards mirror the source tree under `graft/` (1 carry extracted symbols). They are deliberately not enumerated here —\n`grep` a symbol or `find`/`ls` a filename under `graft/` to land on the card for that file.\n",
+    "graft/src/api.md": "# src/api.ts\n\n- first · function · L1-L3 — function first(a: number): number\n- second · function · L5-L7 — function second(b: string): string\n",
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.0\",\n  \"checkedAt\": 9999999999999\n}",
+    "src/api.ts": "export function first(a: number): number {\n  return a;\n}\n\nexport function second(b: string): string {\n  return b;\n}\n"
+  },
+  "status": 0,
+  "stdout": "{\n  \"file\": \"src/api.ts\",\n  \"entries\": [\n    {\n      \"name\": \"first\",\n      \"kind\": \"function\",\n      \"span\": \"L1-L3\",\n      \"signature\": \"function first(a: number): number\"\n    },\n    {\n      \"name\": \"second\",\n      \"kind\": \"function\",\n      \"span\": \"L5-L7\",\n      \"signature\": \"function second(b: string): string\"\n    }\n  ],\n  \"saved\": {\n    \"files\": 1,\n    \"baselineChars\": 116\n  }\n}\n",
+  "stderr": "",
+  "files": {}
+}

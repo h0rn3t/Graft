@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { dirname } from "node:path";
+import { captureGolden, snapshotGoldenFiles } from "./goldens.js";
 
 function writeGraphFixture(invalid: boolean): string {
   const dir = mkdtempSync(join(tmpdir(), invalid ? "graft-quality-invalid-" : "graft-quality-valid-"));
@@ -56,31 +58,17 @@ function builtGoCli(): string {
 }
 
 function runTypeScript(args: string[]): { stdout: string; stderr: string; status: number } {
-  try {
-    const stdout = execFileSync(process.execPath, ["scripts/graph-quality.mjs", ...args], {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { stdout, stderr: "", status: 0 };
-  } catch (err) {
-    const error = err as { stdout?: string; stderr?: string; status?: number };
-    return { stdout: error.stdout ?? "", stderr: error.stderr ?? "", status: error.status ?? 1 };
-  }
+  const result = spawnSync(process.execPath, ["scripts/graph-quality.mjs", ...args], {
+    cwd: process.cwd(),
+    encoding: "utf8",
+    env: { ...process.env, DO_NOT_TRACK: "1" },
+  });
+  return { stdout: result.stdout, stderr: result.stderr, status: result.status ?? 1 };
 }
 
 function runGo(binary: string, args: string[]): { stdout: string; stderr: string; status: number } {
-  try {
-    const stdout = execFileSync(binary, args, {
-      cwd: process.cwd(),
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { stdout, stderr: "", status: 0 };
-  } catch (err) {
-    const error = err as { stdout?: string; stderr?: string; status?: number };
-    return { stdout: error.stdout ?? "", stderr: error.stderr ?? "", status: error.status ?? 1 };
-  }
+  const result = spawnSync(binary, args, { cwd: process.cwd(), encoding: "utf8", env: { ...process.env, DO_NOT_TRACK: "1" } });
+  return { stdout: result.stdout, stderr: result.stderr, status: result.status ?? 1 };
 }
 
 test("Go graph-quality matches the TypeScript report and CLI contract", () => {
@@ -101,9 +89,23 @@ test("Go graph-quality matches the TypeScript report and CLI contract", () => {
     { args: [missing], json: false },
   ];
 
-  for (const { args, json } of cases) {
+  for (const [index, { args, json }] of cases.entries()) {
+    const root = args[0].endsWith(".json") ? dirname(args[0]) : args[0];
+    const inputs = snapshotGoldenFiles(root);
     const typescript = runTypeScript(args);
     const go = runGo(binary, args);
+    if (process.env.GRAFT_CAPTURE_GOLDENS === "1") {
+      captureGolden(`per-command/graph-quality-cli/${String(index + 1).padStart(3, "0")}`, {
+        args,
+        env: { DO_NOT_TRACK: "1" },
+        inputs,
+        status: typescript.status,
+        stdout: typescript.stdout,
+        stderr: typescript.stderr,
+        files: {},
+        normalize: { [root]: "<REPO>" },
+      });
+    }
     assert.equal(go.status, typescript.status, `status mismatch for ${args.join(" ")}`);
     assert.equal(go.stderr, typescript.stderr, `stderr mismatch for ${args.join(" ")}`);
     if (json && typescript.stdout !== "") {

@@ -1,0 +1,14 @@
+{
+  "args": [
+    "stats",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "null\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

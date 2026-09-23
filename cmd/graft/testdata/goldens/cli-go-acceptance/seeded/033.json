@@ -1,0 +1,18 @@
+{
+  "args": [
+    "grep",
+    "AskWorkspaceRun",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"pattern\": \"AskWorkspaceRun\",\n  \"filesSearched\": 90,\n  \"totalHits\": 4,\n  \"groups\": [\n    {\n      \"symbol\": {\n        \"id\": \"internal/graph/ask.go#FuseAsk\",\n        \"name\": \"FuseAsk\",\n        \"kind\": \"function\",\n        \"path\": \"internal/graph/ask.go\",\n        \"span\": \"L192-L286\"\n      },\n      \"path\": \"internal/graph/ask.go\",\n      \"inDegree\": 1,\n      \"hits\": [\n        {\n          \"line\": 192,\n          \"text\": \"func FuseAsk(query string, runs []AskWorkspaceRun, limit int) AskResult {\"\n        }\n      ]\n    },\n    {\n      \"symbol\": {\n        \"id\": \"internal/graph/ask_contract_test.go#TestFuseAskGatesWeakWorkspaceScope\",\n        \"name\": \"TestFuseAskGatesWeakWorkspaceScope\",\n        \"kind\": \"function\",\n        \"path\": \"internal/graph/ask_contract_test.go\",\n        \"span\": \"L125-L139\"\n      },\n      \"path\": \"internal/graph/ask_contract_test.go\",\n      \"inDegree\": 0,\n      \"hits\": [\n        {\n          \"line\": 126,\n          \"text\": \"result := FuseAsk(\\\"query\\\", []AskWorkspaceRun{\"\n        }\n      ]\n    },\n    {\n      \"symbol\": null,\n      \"path\": \"internal/graph/ask.go\",\n      \"inDegree\": 0,\n      \"hits\": [\n        {\n          \"line\": 185,\n          \"text\": \"// AskWorkspaceRun is one child repository's ranked Ask result.\"\n        }\n      ]\n    },\n    {\n      \"symbol\": {\n        \"id\": \"internal/graph/ask.go#AskWorkspaceRun\",\n        \"name\": \"AskWorkspaceRun\",\n        \"kind\": \"struct\",\n        \"path\": \"internal/graph/ask.go\",\n        \"span\": \"L186-L189\"\n      },\n      \"path\": \"internal/graph/ask.go\",\n      \"inDegree\": 0,\n      \"hits\": [\n        {\n          \"line\": 186,\n          \"text\": \"type AskWorkspaceRun struct {\"\n        }\n      ]\n    }\n  ],\n  \"truncated\": {\n    \"files\": 0,\n    \"hits\": 0\n  },\n  \"saved\": {\n    \"files\": 2,\n    \"baselineChars\": 21680\n  }\n}\n",
+  "stderr": "",
+  "files": {}
+}

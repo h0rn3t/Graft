@@ -1,0 +1,30 @@
+{
+  "args": [
+    "grep",
+    "[",
+    "<REPO>",
+    "--json",
+    "--no-refresh"
+  ],
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {
+    ".gitignore": "# graft's local graph cache — regenerable, not committed (run `graft build`).\n/graft/\n",
+    ".ignore": "# graft's cards are gitignored but should stay greppable: ripgrep reads\n# .ignore before .gitignore, so this re-admits the tree to search only.\n!graft/\ngraft/.cache/\ngraft/.graph/\n",
+    "graft/.cache/ask-index.json": "{\"version\":1,\"avgBodyLen\":6,\"df\":[[\"ts\",4],[\"src\",4],[\"console\",3],[\"log\",3],[\"needle\",3],[\"module\",1],[\"root\",1],[\"function\",2],[\"void\",2],[\"other\",1]],\"docCount\":4,\"docs\":[{\"id\":\"src/a.ts\",\"name\":[[\"ts\",1]],\"path\":[[\"src\",1],[\"ts\",1]],\"body\":[[\"console\",1],[\"log\",1],[\"needle\",1],[\"module\",1]]},{\"id\":\"src/a.ts#root\",\"name\":[[\"root\",1]],\"path\":[[\"src\",1],[\"ts\",1]],\"body\":[[\"function\",2],[\"root\",3],[\"void\",2],[\"console\",1],[\"log\",1],[\"needle\",1]]},{\"id\":\"src/b.ts\",\"name\":[[\"ts\",1]],\"path\":[[\"src\",1],[\"ts\",1]],\"body\":[]},{\"id\":\"src/b.ts#other\",\"name\":[[\"other\",1]],\"path\":[[\"src\",1],[\"ts\",1]],\"body\":[[\"function\",2],[\"other\",3],[\"void\",2],[\"console\",1],[\"log\",1],[\"needle\",1]]}]}\n",
+    "graft/.graph/wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 4,\n    \"edgeCount\": 2,\n    \"languages\": [\n      \"typescript\"\n    ],\n    \"scopes\": [\n      {\n        \"prefix\": \"\",\n        \"label\": \"\",\n        \"markers\": []\n      }\n    ]\n  },\n  \"nodes\": [\n    {\n      \"id\": \"src/a.ts\",\n      \"name\": \"a.ts\",\n      \"kind\": \"file\",\n      \"path\": \"src/a.ts\",\n      \"span\": \"L1-L6\",\n      \"signature\": null,\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"1b53a081f019a93380e99617b79b8174ba5dae67c03c25d58ef4a4cde8ee7c39\",\n      \"chars\": 94,\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/a.ts#root\",\n      \"name\": \"root\",\n      \"kind\": \"function\",\n      \"path\": \"src/a.ts\",\n      \"span\": \"L3-L5\",\n      \"signature\": \"function root(): void\",\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"005ef9790a4f534ec1dd6b324b8d23d859046d607ec42b79f594693612a85056\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/b.ts\",\n      \"name\": \"b.ts\",\n      \"kind\": \"file\",\n      \"path\": \"src/b.ts\",\n      \"span\": \"L1-L4\",\n      \"signature\": null,\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"671d34ed0865f3f077d356bdb474bb71fb0cfdb19ce2d9a5844e5d8e8defaf02\",\n      \"chars\": 65,\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/b.ts#other\",\n      \"name\": \"other\",\n      \"kind\": \"function\",\n      \"path\": \"src/b.ts\",\n      \"span\": \"L1-L3\",\n      \"signature\": \"function other(): void\",\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"c19c3d88134c2e375cda1d98532e2b9987d913dc93f2a1362d8992595931b8a2\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    }\n  ],\n  \"edges\": [\n    {\n      \"source\": \"src/a.ts\",\n      \"target\": \"src/a.ts#root\",\n      \"relation\": \"contains\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"src/b.ts\",\n      \"target\": \"src/b.ts#other\",\n      \"relation\": \"contains\",\n      \"confidence\": \"extracted\"\n    }\n  ]\n}\n",
+    "graft/INDEX.md": "# graft — repo map\n\nSmall markdown nodes summarising this repo. `grep` any term, symbol, or\nfilename here, or run `graft ask \"<task>\"`. Each node carries prose plus exact\n`file:line`; open a source file only to edit the named span.\n\nThe same graph is queryable as MCP tools (`graft_find_code`, `graft_find_all`,\n`graft_trace_calls`, `graft_file_api`, `graft_repo_map`) where a host exposes them, and\nas the `graft` CLI everywhere else. Edges — who calls what — live only in the\ngraph, not in these files: `graft callers <symbol>` is the only way to read them.\n\n## Files\n\n2 per-file wiring cards mirror the source tree under `graft/` (2 carry extracted symbols). They are deliberately not enumerated here —\n`grep` a symbol or `find`/`ls` a filename under `graft/` to land on the card for that file.\n",
+    "graft/src/a.md": "# src/a.ts\n\n- root · function · L3-L5 — function root(): void\n",
+    "graft/src/b.md": "# src/b.ts\n\n- other · function · L1-L3 — function other(): void\n",
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.0\",\n  \"checkedAt\": 9999999999999\n}",
+    "src/a.ts": "console.log(\"NEEDLE module\");\n\nexport function root(): void {\n  console.log(\"NEEDLE root\");\n}\n",
+    "src/b.ts": "export function other(): void {\n  console.log(\"NEEDLE other\");\n}\n"
+  },
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ invalid pattern \"[\": Invalid regular expression: /[/: Unterminated character class\n",
+  "files": {}
+}

@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "jsonpreserves ids"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"jsonpreserves ids\"  (lexical)\n\n1. preparePageRankTopology · function  [symbol]\n   src/ask/graphrank.ts:L93-L110\n   function preparePageRankTopology( graph: GraphV1, nodeFilter?: (id: string) => boolean, ): PageRankTopology\n\n2. formatPendingNote · function  [symbol]\n   src/graph/check.ts:L206-L220\n   function formatPendingNote(r: GraphCheckResult, pct: number): string\n\n3. swiftTypeName · function  [symbol]\n   src/graph/bindings.ts:L396-L404\n   function swiftTypeName(node: Parser.SyntaxNode | null | undefined): string | null\n\n4. swiftTypeName · method  [symbol]\n   internal/graph/lang_kotlin_swift.go:L296-L307\n   func (w *bindingWalk) swiftTypeName(node *sitter.Node) string\n\n5. formatPendingCheckNote · function  [symbol]\n   internal/graph/check.go:L175-L191\n   func formatPendingCheckNote(result GraphCheckResult, percent int) string\n\n6. askPageRankTS · function  [symbol]\n   internal/graph/ask_lexical.go:L413-L477\n   func askPageRankTS(topology askTopology, seeds *askScores) *askScores\n\n7. swiftSuperClassName · function  [symbol]\n   src/graph/extract.ts:L1953-L1959\n   function swiftSuperClassName(node: Parser.SyntaxNode): string | null\n\n8. CheckInvariants · function  [symbol]\n   internal/graph/invariants.go:L21-L77\n   func CheckInvariants(graph GraphV1) InvariantResult\n",
+  "stderr": "",
+  "files": {}
+}

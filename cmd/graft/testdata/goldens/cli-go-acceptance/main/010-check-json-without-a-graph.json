@@ -1,0 +1,14 @@
+{
+  "args": [
+    "check",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "{\n  \"context\": {\n    \"ok\": false,\n    \"missing\": true,\n    \"contentDrift\": [],\n    \"removed\": [],\n    \"coverage\": [],\n    \"indexDrift\": []\n  },\n  \"graph\": null\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

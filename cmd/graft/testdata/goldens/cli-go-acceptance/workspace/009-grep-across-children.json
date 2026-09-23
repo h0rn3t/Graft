@@ -1,0 +1,14 @@
+{
+  "args": [
+    "grep",
+    "users"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "\"users\" — 2 hits in 2 symbols across 2 files (searched 8 indexed files)\n\ntitle · function · web/src/page.tsx:L2-L2 · 1 in-edges\n  L2: export function title() { return 'users'; }\n\nserve · function · api/src/server.ts:L2-L2 · 0 in-edges\n  L2: export function serve() { return query('users'); }\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

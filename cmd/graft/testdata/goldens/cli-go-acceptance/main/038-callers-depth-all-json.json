@@ -1,0 +1,17 @@
+{
+  "args": [
+    "callers",
+    "trim",
+    "-d",
+    "all",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"trim\",\n  \"matches\": [\n    {\n      \"symbol\": {\n        \"id\": \"src/format.js#trim\",\n        \"name\": \"trim\",\n        \"kind\": \"function\",\n        \"path\": \"src/format.js\",\n        \"span\": \"L2-L2\"\n      },\n      \"hits\": [\n        {\n          \"id\": \"src/format.js#format\",\n          \"relation\": \"calls\",\n          \"depth\": 1,\n          \"name\": \"format\",\n          \"kind\": \"function\",\n          \"path\": \"src/format.js\",\n          \"span\": \"L1-L1\"\n        },\n        {\n          \"id\": \"src/store.ts#Store.get\",\n          \"relation\": \"calls\",\n          \"depth\": 2,\n          \"name\": \"get\",\n          \"kind\": \"method\",\n          \"path\": \"src/store.ts\",\n          \"span\": \"L4-L4\"\n        }\n      ]\n    }\n  ],\n  \"saved\": {\n    \"files\": 2,\n    \"baselineChars\": 463\n  }\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

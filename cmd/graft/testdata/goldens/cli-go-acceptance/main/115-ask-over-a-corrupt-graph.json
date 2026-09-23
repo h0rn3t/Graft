@@ -1,0 +1,21 @@
+{
+  "args": [
+    "ask",
+    "store",
+    "--no-refresh"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "mutations": {
+    "writes": {
+      "repo/graft/.graph/wiring.json": "{ not json"
+    },
+    "deletes": []
+  },
+  "status": 0,
+  "stdout": "graft ask — \"store\"  (empty)\n\nno matching nodes — try different words, or `graft build` if graft/ is empty\n\n[graft] no hits — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

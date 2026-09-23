@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync, spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
+import { captureGolden, snapshotGoldenFiles } from "./goldens.js";
 
 type CLIResult = { stdout: string; stderr: string; status: number };
 
@@ -195,30 +196,52 @@ function builtWorkspaceFileUnionFixture(): string {
   return parent;
 }
 
+let capturedAskCase = 0;
+
+function askRoot(args: string[]): string {
+  return args.find((arg) => isAbsolute(arg) && existsSync(arg) && statSync(arg).isDirectory()) ?? process.cwd();
+}
+
+function askEnvironment(home: string): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, HOME: home, USERPROFILE: home, DO_NOT_TRACK: "1", GRAFT_NO_REFRESH: "1", COLUMNS: "80" };
+  for (const name of ["GRAFT_DIR", "GRAFT_BRAIN_TOKEN", "GRAFT_BRAIN_ID", "CI", "GITHUB_ACTIONS"]) delete env[name];
+  return env;
+}
+
+function askHome(root: string): string {
+  const home = join(root, "home");
+  mkdirSync(join(home, ".graft"), { recursive: true });
+  writeFileSync(join(home, ".graft", "update-check.json"), JSON.stringify({ latest: "0.0.0", checkedAt: 9_999_999_999_999 }, null, 2));
+  return home;
+}
+
 function runTypeScript(args: string[]): CLIResult {
-  try {
-    const stdout = execFileSync(process.execPath, ["--import", "tsx", "src/cli.ts", ...args], {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
+  const root = askRoot(args);
+  const home = askHome(root);
+  const env = askEnvironment(home);
+  const inputs = process.env.GRAFT_CAPTURE_GOLDENS === "1" ? snapshotGoldenFiles(root) : {};
+  const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", ...args], { cwd: process.cwd(), encoding: "utf8", env });
+  const outcome = { stdout: result.stdout ?? "", stderr: result.stderr ?? "", status: result.status ?? 1 };
+  if (process.env.GRAFT_CAPTURE_GOLDENS === "1") {
+    captureGolden(`per-command/ask-cli/${String(++capturedAskCase).padStart(3, "0")}`, {
+      args,
+      env: { DO_NOT_TRACK: "1", GRAFT_NO_REFRESH: "1", COLUMNS: "80" },
+      inputs,
+      status: outcome.status,
+      stdout: outcome.stdout,
+      stderr: outcome.stderr,
+      files: {},
+      normalize: { [root]: "<REPO>", [home]: "<HOME>" },
     });
-    return { stdout, stderr: "", status: 0 };
-  } catch (error) {
-    const result = error as { stdout?: string; stderr?: string; status?: number };
-    return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", status: result.status ?? 1 };
   }
+  return outcome;
 }
 
 function runGo(binary: string, args: string[]): CLIResult {
-  try {
-    const stdout = execFileSync(binary, args, {
-      encoding: "utf8",
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return { stdout, stderr: "", status: 0 };
-  } catch (error) {
-    const result = error as { stdout?: string; stderr?: string; status?: number };
-    return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", status: result.status ?? 1 };
-  }
+  const root = askRoot(args);
+  const home = askHome(root);
+  const result = spawnSync(binary, args, { cwd: process.cwd(), encoding: "utf8", env: askEnvironment(home) });
+  return { stdout: result.stdout ?? "", stderr: result.stderr ?? "", status: result.status ?? 1 };
 }
 
 test("Go ask CLI matches TypeScript JSON, exit codes, and diagnostics", () => {

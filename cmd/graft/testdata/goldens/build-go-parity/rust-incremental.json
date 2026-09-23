@@ -1,0 +1,26 @@
+{
+  "args": [
+    "build",
+    "{{ROOT}}"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "initialInputs": {
+    "Cargo.toml": "[package]\nname = \"sample\"\nversion = \"0.1.0\"\n",
+    "src/lib.rs": "mod util;\nuse crate::util::Thing;\npub fn run() -> i32 { util::helper() }\n",
+    "src/util.rs": "pub struct Thing;\npub fn helper() -> i32 { 1 }\n"
+  },
+  "inputs": {
+    "Cargo.toml": "[package]\nname = \"sample\"\nversion = \"0.1.0\"\n",
+    "src/lib.rs": "mod util;\nuse crate::util::Thing;\npub fn run() -> i32 { util::helper() }\n",
+    "src/util.rs": "pub struct Thing;\npub fn helper() -> i32 { 1 }\n"
+  },
+  "status": 0,
+  "stdout": "✓ wiring: 6 nodes (2 file, 2 function, 1 module, 1 struct), 2 edges, 2 cards [rust]\n  parsed: 0 of 2 files (2 replayed from cache)\n  → {{ROOT}}/graft\n  {{ROOT}}/graft/ is git-ignored (added automatically) — a local cache; teammates run `graft build` to get their own.\n",
+  "stderr": "\rparsing 1/2: src/lib.rs                                        \rparsing 2/2: src/util.rs                                       \n",
+  "files": {
+    "graft/.graph/wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 6,\n    \"edgeCount\": 2,\n    \"languages\": [\n      \"rust\"\n    ],\n    \"scopes\": [\n      {\n        \"prefix\": \"\",\n        \"label\": \"\",\n        \"markers\": [\n          \"Cargo.toml\"\n        ]\n      }\n    ]\n  },\n  \"nodes\": [\n    {\n      \"id\": \"src/lib.rs\",\n      \"name\": \"lib.rs\",\n      \"kind\": \"file\",\n      \"path\": \"src/lib.rs\",\n      \"span\": \"L1-L4\",\n      \"signature\": null,\n      \"exported\": true,\n      \"origin\": \"generic\",\n      \"body_hash\": \"07b010ace9d86c180730219f031bf277920fd4a62e469d3ed252851828a37702\",\n      \"chars\": 73,\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/lib.rs#run\",\n      \"name\": \"run\",\n      \"kind\": \"function\",\n      \"path\": \"src/lib.rs\",\n      \"span\": \"L3-L3\",\n      \"signature\": \"pub fn run() -> i32 { util::helper() }\",\n      \"exported\": true,\n      \"origin\": \"generic\",\n      \"body_hash\": \"03f855438bb85f48c75b442521f9a267f8b3cbc38079ae780c73cb70fab6d163\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/lib.rs#util\",\n      \"name\": \"util\",\n      \"kind\": \"module\",\n      \"path\": \"src/lib.rs\",\n      \"span\": \"L1-L1\",\n      \"signature\": \"mod util;\",\n      \"exported\": true,\n      \"origin\": \"generic\",\n      \"body_hash\": \"438514c7af6177cea95a98c0ccc33a553a402d29e241a6818993b6c975fc0332\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/util.rs\",\n      \"name\": \"util.rs\",\n      \"kind\": \"file\",\n      \"path\": \"src/util.rs\",\n      \"span\": \"L1-L3\",\n      \"signature\": null,\n      \"exported\": true,\n      \"origin\": \"generic\",\n      \"body_hash\": \"93e9b59765f44e25541840058261e715ebd0b44e41cdd287ae6efcd185050064\",\n      \"chars\": 47,\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/util.rs#helper\",\n      \"name\": \"helper\",\n      \"kind\": \"function\",\n      \"path\": \"src/util.rs\",\n      \"span\": \"L2-L2\",\n      \"signature\": \"pub fn helper() -> i32 { 1 }\",\n      \"exported\": true,\n      \"origin\": \"generic\",\n      \"body_hash\": \"0846aa98cc73e623d13723044ce83d9bdc4e250bde51da3a4c2c29e0bd2db5fd\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/util.rs#Thing\",\n      \"name\": \"Thing\",\n      \"kind\": \"struct\",\n      \"path\": \"src/util.rs\",\n      \"span\": \"L1-L1\",\n      \"signature\": \"pub struct Thing;\",\n      \"exported\": true,\n      \"origin\": \"generic\",\n      \"body_hash\": \"5bbc80990efa85a1da0e82d019b5c581ac57bb214631059478160e63ce9e0112\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    }\n  ],\n  \"edges\": [\n    {\n      \"source\": \"src/lib.rs\",\n      \"target\": \"src/util.rs\",\n      \"relation\": \"imports\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"src/lib.rs#run\",\n      \"target\": \"src/util.rs#helper\",\n      \"relation\": \"calls\",\n      \"confidence\": \"inferred\"\n    }\n  ]\n}\n"
+  }
+}

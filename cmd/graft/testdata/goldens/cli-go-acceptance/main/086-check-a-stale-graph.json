@@ -1,0 +1,19 @@
+{
+  "args": [
+    "check"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "mutations": {
+    "writes": {
+      "repo/src/format.js": "export function format(text) { return trim(text); }\nfunction trim(text) { return text.trim(); }\nexport function pad(text) { return ' ' + text; }\n"
+    },
+    "deletes": []
+  },
+  "status": 1,
+  "stdout": "deep layer: not built (run `graft build --deep` for concept nodes) — wiring graph is the source of truth\n\ngraph check: STALE\n\nchanged (2):\n  ~ src/format.js\n  ~ src/format.js#format\nadded (1):\n  + src/format.js#pad\n\nRun `graft build` to rebuild the structure, then commit graft/.\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

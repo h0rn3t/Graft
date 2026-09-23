@@ -1,0 +1,14 @@
+{
+  "args": [
+    "grep",
+    "normalize"
+  ],
+  "cwd": "<REPO>/py",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "\"normalize\" — 3 hits in 3 symbols across 2 files (searched 18 indexed files)\n\nnormalize · function · py/util.py:L1-L2 · 1 in-edges\n  L1: def normalize(text):\n\npy/service.py (module level) · 0 in-edges\n  L1: from py.util import normalize\n\nService.handle · method · py/service.py:L4-L5 · 0 in-edges\n  L5: return normalize(self.prefix(text))\n",
+  "stderr": "[graft] no graft/ here — answering from <REPO>/graft\n",
+  "files": {},
+  "checkFiles": false
+}

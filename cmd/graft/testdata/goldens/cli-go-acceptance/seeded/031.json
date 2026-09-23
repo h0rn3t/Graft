@@ -1,0 +1,19 @@
+{
+  "args": [
+    "ask",
+    "note dir",
+    "--in",
+    "src"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"note dir\"  (lexical)\n\n1. looseNoteFor · function  [symbol]\n   src/graph/traverse-cli.ts:L103-L111\n   function looseNoteFor(direction: Direction, name: string, candidateCount: number): string\n\n2. formatPendingNote · function  [symbol]\n   src/graph/check.ts:L206-L220\n   function formatPendingNote(r: GraphCheckResult, pct: number): string\n\n3. droppedNote · function  [symbol]\n   src/graph/map.ts:L314-L317\n   function droppedNote(dropped: number): string | null\n\n4. refreshNote · function  [symbol]\n   src/graph/refresh.ts:L265-L273\n   function refreshNote(r: RefreshResult): string | null\n\n5. coverageNote · function  [symbol]\n   src/graph/workspace.ts:L161-L165\n   function coverageNote(g: WorkspaceGraphs): string\n\n6. zeroHitNote · function  [symbol]\n   src/search/grep-cli.ts:L73-L78\n   function zeroHitNote(result: GrepResult): string\n\n7. fallthroughNoteFor · function  [symbol]\n   src/ask/ask.ts:L349-L354\n   function fallthroughNoteFor(subject: string): string\n\n8. stampDir · function  [symbol]\n   src/graph/extract-cache.ts:L168-L178\n   function stampDir(dir: string, ext: string, version = \"\"): string | null\n",
+  "stderr": "",
+  "files": {}
+}

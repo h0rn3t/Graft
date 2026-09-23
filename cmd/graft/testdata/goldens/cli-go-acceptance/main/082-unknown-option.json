@@ -1,0 +1,15 @@
+{
+  "args": [
+    "ask",
+    "store",
+    "--sauce"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "error: unknown option '--sauce'\n(Did you mean --source?)\n",
+  "files": {},
+  "checkFiles": false
+}

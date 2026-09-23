@@ -1,0 +1,18 @@
+{
+  "args": [
+    "grep",
+    "familyOf",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"pattern\": \"familyOf\",\n  \"filesSearched\": 90,\n  \"totalHits\": 6,\n  \"groups\": [\n    {\n      \"symbol\": {\n        \"id\": \"src/graph/resolve.ts#reachable\",\n        \"name\": \"reachable\",\n        \"kind\": \"function\",\n        \"path\": \"src/graph/resolve.ts\",\n        \"span\": \"L79-L84\"\n      },\n      \"path\": \"src/graph/resolve.ts\",\n      \"inDegree\": 3,\n      \"hits\": [\n        {\n          \"line\": 80,\n          \"text\": \"const from = familyOf(file);\"\n        },\n        {\n          \"line\": 82,\n          \"text\": \"const to = familyOf(candidatePath);\"\n        }\n      ]\n    },\n    {\n      \"symbol\": {\n        \"id\": \"internal/graph/resolve.go#reachable\",\n        \"name\": \"reachable\",\n        \"kind\": \"function\",\n        \"path\": \"internal/graph/resolve.go\",\n        \"span\": \"L50-L57\"\n      },\n      \"path\": \"internal/graph/resolve.go\",\n      \"inDegree\": 2,\n      \"hits\": [\n        {\n          \"line\": 51,\n          \"text\": \"from := familyOf(file)\"\n        },\n        {\n          \"line\": 55,\n          \"text\": \"to := familyOf(candidate)\"\n        }\n      ]\n    },\n    {\n      \"symbol\": {\n        \"id\": \"internal/graph/resolve.go#familyOf\",\n        \"name\": \"familyOf\",\n        \"kind\": \"function\",\n        \"path\": \"internal/graph/resolve.go\",\n        \"span\": \"L32-L46\"\n      },\n      \"path\": \"internal/graph/resolve.go\",\n      \"inDegree\": 1,\n      \"hits\": [\n        {\n          \"line\": 32,\n          \"text\": \"func familyOf(file string) string {\"\n        }\n      ]\n    },\n    {\n      \"symbol\": {\n        \"id\": \"src/graph/resolve.ts#familyOf\",\n        \"name\": \"familyOf\",\n        \"kind\": \"function\",\n        \"path\": \"src/graph/resolve.ts\",\n        \"span\": \"L67-L71\"\n      },\n      \"path\": \"src/graph/resolve.ts\",\n      \"inDegree\": 1,\n      \"hits\": [\n        {\n          \"line\": 67,\n          \"text\": \"function familyOf(path: string): string | null {\"\n        }\n      ]\n    }\n  ],\n  \"truncated\": {\n    \"files\": 0,\n    \"hits\": 0\n  },\n  \"saved\": {\n    \"files\": 2,\n    \"baselineChars\": 52183\n  }\n}\n",
+  "stderr": "",
+  "files": {}
+}

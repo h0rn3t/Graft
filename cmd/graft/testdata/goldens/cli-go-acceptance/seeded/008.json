@@ -1,0 +1,18 @@
+{
+  "args": [
+    "ask",
+    "copyTree",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"copyTree\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"copyTree · function\",\n      \"pointer\": \"src/graph/seed.ts:L168-L180\",\n      \"snippet\": \"function copyTree(srcDir: string, outDir: string): void\",\n      \"score\": 1.5\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"refreshNote · function\",\n      \"pointer\": \"src/graph/refresh.ts:L265-L273\",\n      \"snippet\": \"function refreshNote(r: RefreshResult): string | null\",\n      \"score\": 0.43870352630037807\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"write.ts · file\",\n      \"pointer\": \"src/graph/write.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.2927357948883253\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"requireWasm · function\",\n      \"pointer\": \"src/graph/generic.ts:L93-L102\",\n      \"snippet\": \"function requireWasm(wasm: string): Buffer | null\",\n      \"score\": 0.28747964462786224\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"build.ts · file\",\n      \"pointer\": \"src/graph/build.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.2851193878016782\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"extract.ts · file\",\n      \"pointer\": \"src/graph/extract.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.25538926822418656\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"extractFile · function\",\n      \"pointer\": \"internal/graph/extract.go:L183-L229\",\n      \"snippet\": \"func extractFile(rel, source string) (extractResult, error)\",\n      \"score\": 0.24164996521163373\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"generic_tags.go · file\",\n      \"pointer\": \"internal/graph/generic_tags.go\",\n      \"snippet\": \"\",\n      \"score\": 0.24015657720562714\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stderr": "",
+  "files": {}
+}

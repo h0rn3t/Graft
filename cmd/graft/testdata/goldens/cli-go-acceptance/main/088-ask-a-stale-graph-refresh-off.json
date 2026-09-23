@@ -1,0 +1,16 @@
+{
+  "args": [
+    "ask",
+    "pad text"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"pad text\"  (lexical)\n\n1. handle · method  [symbol]\n   py/service.py:L4-L5\n   def handle(self, text)\n\n2. format · function  [symbol]\n   src/format.js:L1-L1\n   function format(text)\n\n3. normalize · function  [symbol]\n   py/util.py:L1-L2\n   def normalize(text)\n\n4. get · method  [symbol]\n   src/store.ts:L4-L4\n   get(key: string): string\n\n5. prefix · method  [symbol]\n   py/service.py:L7-L8\n   def prefix(self, text)\n\n6. trim · function  [symbol]\n   src/format.js:L2-L2\n   function trim(text)\n\n7. Service · class  [symbol]\n   py/service.py:L3-L8\n   class Service\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

@@ -1,0 +1,14 @@
+{
+  "args": [
+    "ask",
+    "größe"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"größe\"  (lexical)\n\n1. größe · function  [symbol]\n   src/ünï_code.ts:L2-L2\n   function größe(): string\n\n[graft] only 1 hit — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

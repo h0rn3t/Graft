@@ -1,0 +1,21 @@
+{
+  "args": [
+    "ask",
+    "root",
+    "<REPO>",
+    "--json",
+    "--no-refresh"
+  ],
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.0\",\n  \"checkedAt\": 9999999999999\n}"
+  },
+  "status": 0,
+  "stdout": "{\n  \"query\": \"root\",\n  \"mode\": \"empty\",\n  \"hits\": [],\n  \"note\": \"no matching nodes — try different words, or `graft build` if graft/ is empty\"\n}\n",
+  "stderr": "",
+  "files": {}
+}

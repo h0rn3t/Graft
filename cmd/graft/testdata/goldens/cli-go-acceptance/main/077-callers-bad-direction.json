@@ -1,0 +1,16 @@
+{
+  "args": [
+    "callers",
+    "encode",
+    "--direction",
+    "sideways"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ --direction must be \"in\" or \"out\", got \"sideways\"\n",
+  "files": {},
+  "checkFiles": false
+}

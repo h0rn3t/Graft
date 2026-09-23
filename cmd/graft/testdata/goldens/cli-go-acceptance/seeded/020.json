@@ -1,0 +1,18 @@
+{
+  "args": [
+    "ask",
+    "GrepCliOptions",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"GrepCliOptions\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"GrepCliOptions · interface\",\n      \"pointer\": \"src/search/grep-cli.ts:L16-L23\",\n      \"snippet\": \"interface GrepCliOptions\",\n      \"score\": 1.126619639105982\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"Grep · function\",\n      \"pointer\": \"internal/graph/grep.go:L94-L175\",\n      \"snippet\": \"func Grep(wiring GraphV1, repoRoot, pattern string, opts GrepOptions) (GrepResult, error)\",\n      \"score\": 0.9265274380813815\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"CallersCliOptions · interface\",\n      \"pointer\": \"src/graph/traverse-cli.ts:L22-L31\",\n      \"snippet\": \"interface CallersCliOptions\",\n      \"score\": 0.7815500748946159\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"GrepOptions · interface\",\n      \"pointer\": \"src/search/grep.ts:L66-L76\",\n      \"snippet\": \"interface GrepOptions\",\n      \"score\": 0.7603901531988045\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"WorkspaceBuildOptions · interface\",\n      \"pointer\": \"src/graph/workspace-cli.ts:L26-L43\",\n      \"snippet\": \"interface WorkspaceBuildOptions\",\n      \"score\": 0.6089191381423861\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"federateGrep · function\",\n      \"pointer\": \"src/graph/workspace.ts:L563-L603\",\n      \"snippet\": \"function federateGrep( root: string, override: string | undefined, pattern: string, opts: { ignoreCase?: boolean; fixed?: boolean } = {}, ): { result: GrepResult; coverage: string }\",\n      \"score\": 0.48996004448897906\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"AskOptions · struct\",\n      \"pointer\": \"internal/graph/ask.go:L39-L63\",\n      \"snippet\": \"AskOptions\",\n      \"score\": 0.4755425609636584\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"EnrichOptions · interface\",\n      \"pointer\": \"src/graph/enrich.ts:L32-L47\",\n      \"snippet\": \"interface EnrichOptions\",\n      \"score\": 0.370419264206272\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stderr": "",
+  "files": {}
+}

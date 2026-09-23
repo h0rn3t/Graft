@@ -1,0 +1,16 @@
+{
+  "args": [
+    "ask",
+    "render",
+    "--in",
+    "packages/ui"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"render\"  (lexical)\n\n1. renderStore0 · function  [symbol]\n   packages/ui/src/view.ts:L2-L2\n   function renderStore0()\n\n2. renderStore1 · function  [symbol]\n   packages/ui/src/view.ts:L4-L4\n   function renderStore1()\n\n3. renderStore2 · function  [symbol]\n   packages/ui/src/view.ts:L6-L6\n   function renderStore2()\n\n4. renderStore3 · function  [symbol]\n   packages/ui/src/view.ts:L8-L8\n   function renderStore3()\n\n5. renderStore4 · function  [symbol]\n   packages/ui/src/view.ts:L10-L10\n   function renderStore4()\n\n6. renderStore5 · function  [symbol]\n   packages/ui/src/view.ts:L12-L12\n   function renderStore5()\n\n7. renderStore6 · function  [symbol]\n   packages/ui/src/view.ts:L14-L14\n   function renderStore6()\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

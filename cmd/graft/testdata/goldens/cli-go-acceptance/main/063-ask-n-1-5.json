@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "store",
+    "-n",
+    "1.5",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"store\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"openStore · function\",\n      \"pointer\": \"src/store.ts:L7-L7\",\n      \"snippet\": \"function openStore(): Store\",\n      \"score\": 1.5\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

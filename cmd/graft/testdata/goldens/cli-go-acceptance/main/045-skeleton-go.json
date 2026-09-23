@@ -1,0 +1,14 @@
+{
+  "args": [
+    "skeleton",
+    "pkg/queue/queue.go"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft skeleton — pkg/queue/queue.go\n- L3-L3  struct Queue  Queue\n- L5-L5  function New  func New() *Queue\n- L7-L7  method Push  func (q *Queue) Push(v int)\n- L9-L9  method grow  func (q *Queue) grow()\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

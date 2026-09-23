@@ -1,0 +1,16 @@
+{
+  "args": [
+    "stats",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "GRAFT_DIR": "alt"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "null\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

@@ -1,0 +1,14 @@
+{
+  "args": [
+    "grep",
+    "zzqqxxnothing"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "",
+  "stderr": "no hits for \"zzqqxxnothing\" in 18 indexed files. The pattern may be too specific — retry graft grep with a bare symbol name or short substring (drop the receiver, full signature, and regex anchors). All indexed code was searched; use raw grep -rn only for genuinely unindexed files (docs, configs, brand-new files)\n",
+  "files": {},
+  "checkFiles": false
+}

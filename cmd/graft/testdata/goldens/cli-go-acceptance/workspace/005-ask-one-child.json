@@ -1,0 +1,16 @@
+{
+  "args": [
+    "ask",
+    "users",
+    "--in",
+    "web/"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"users\"  (lexical)\n\n1. [web/] listUsers · function  [symbol]\n   web/src/users.ts:L1-L1\n   function listUsers()\n\n2. [web/] title · function  [symbol]\n   web/src/page.tsx:L2-L2\n   function title()\n\n3. [web/] users.ts · file  [symbol]\n   web/src/users.ts\n\n4. [web/] Page · function  [symbol]\n   web/src/page.tsx:L1-L1\n   function Page()\n\nmatched in: web/ (4)\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

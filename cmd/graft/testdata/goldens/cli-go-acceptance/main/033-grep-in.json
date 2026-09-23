@@ -1,0 +1,16 @@
+{
+  "args": [
+    "grep",
+    "text",
+    "--in",
+    "py/"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "\"text\" — 6 hits in 3 symbols across 2 files (searched 2 indexed files)\n\nService.prefix · method · py/service.py:L7-L8 · 1 in-edges\n  L7: def prefix(self, text):\n  L8: return 'svc:' + text\n\nnormalize · function · py/util.py:L1-L2 · 1 in-edges\n  L1: def normalize(text):\n  L2: return text.strip().lower()\n\nService.handle · method · py/service.py:L4-L5 · 0 in-edges\n  L4: def handle(self, text):\n  L5: return normalize(self.prefix(text))\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

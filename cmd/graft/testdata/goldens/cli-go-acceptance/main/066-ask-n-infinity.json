@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "store",
+    "-n",
+    "Infinity",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"store\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"openStore · function\",\n      \"pointer\": \"src/store.ts:L7-L7\",\n      \"snippet\": \"function openStore(): Store\",\n      \"score\": 1.5\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"storeKeys · function\",\n      \"pointer\": \"src/store_util.ts:L2-L2\",\n      \"snippet\": \"function storeKeys(): string[]\",\n      \"score\": 1.1473380217063702\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"app.tsx · file\",\n      \"pointer\": \"src/app.tsx\",\n      \"snippet\": \"\",\n      \"score\": 0.33840235887724823\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"testStore · function\",\n      \"pointer\": \"src/store.test.ts:L2-L2\",\n      \"snippet\": \"function testStore()\",\n      \"score\": 0.1630732448903668\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"format.js · file\",\n      \"pointer\": \"src/format.js\",\n      \"snippet\": \"\",\n      \"score\": 0.07650484476674302\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"store.ts · file\",\n      \"pointer\": \"src/store.ts\",\n      \"snippet\": \"\",\n      \"score\": 1.138564640859378\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"store_util.ts · file\",\n      \"pointer\": \"src/store_util.ts\",\n      \"snippet\": \"\",\n      \"score\": 1.1376999668768422\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"App · function\",\n      \"pointer\": \"src/app.tsx:L2-L2\",\n      \"snippet\": \"function App()\",\n      \"score\": 0.2700677765106714\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"store.test.ts · file\",\n      \"pointer\": \"src/store.test.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.15677309812684717\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"Store · class\",\n      \"pointer\": \"src/store.ts:L2-L6\",\n      \"snippet\": \"class Store\",\n      \"score\": 0.9597823950034235\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"put · method\",\n      \"pointer\": \"src/store.ts:L5-L5\",\n      \"snippet\": \"put(key: string, value: string): void\",\n      \"score\": 0.41343749072492514\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"get · method\",\n      \"pointer\": \"src/store.ts:L4-L4\",\n      \"snippet\": \"get(key: string): string\",\n      \"score\": 0.3374327594751464\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

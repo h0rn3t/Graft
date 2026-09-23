@@ -1,0 +1,16 @@
+{
+  "args": [
+    "ask",
+    "store",
+    "--in",
+    "packages/nope"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ nothing indexed under \"packages/nope/\" — scopes here: packages/core/ · packages/docs/ · packages/ui/ (or any path prefix)\n",
+  "files": {},
+  "checkFiles": false
+}

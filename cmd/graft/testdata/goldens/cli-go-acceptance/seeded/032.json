@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "seedGraph"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"seedGraph\"  (lexical)\n\n1. seedGraph · function  [symbol]\n   src/graph/seed.ts:L211-L228\n   function seedGraph(root: string, opts: { contextDir?: string } = {}): SeedResult\n\n2. seedGraphFromWorktree · function  [symbol]\n   internal/graph/seed.go:L73-L145\n   func seedGraphFromWorktree(root, outDir string) (string, bool, error)\n\n3. seedUnderLock · function  [symbol]\n   src/graph/refresh.ts:L124-L141\n   async function seedUnderLock( dir: string, outDir: string, contextDir?: string, ): Promise<SeedResult & { busy?: boolean }>\n\n4. EnsureFreshGraph · function  [symbol]\n   internal/graph/refresh.go:L40-L179\n   func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult\n\n5. buildGraph · function  [symbol]\n   src/graph/build.ts:L151-L410\n   async function buildGraph( dir: string, opts: GraphBuildOptions = {}, ): Promise<GraphBuildResult>\n\n6. BuildGraph · function  [symbol]\n   internal/graph/build.go:L96-L293\n   func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error)\n\n7. askLexical · function  [symbol]\n   internal/graph/ask_lexical.go:L889-L1586\n   func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts AskOptions) AskResult\n\n8. ImpactOfMany · function  [symbol]\n   internal/graph/traverse.go:L118-L166\n   func ImpactOfMany(graph GraphV1, seeds []NodeV1, maxDepth int, directions ...Direction) []EdgeHit\n",
+  "stderr": "",
+  "files": {}
+}

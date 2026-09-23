@@ -1,0 +1,13 @@
+{
+  "args": [
+    "check"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "workspace check — 3 repo(s)\n\napi/: OK\nmono/: OK\nweb/: OK\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

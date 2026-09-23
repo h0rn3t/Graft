@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "php symbols"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"php symbols\"  (lexical)\n\n1. collectPhpImportedSymbols · function  [symbol]\n   src/graph/extract.ts:L879-L890\n   function collectPhpImportedSymbols(root: Parser.SyntaxNode): Map<string, { name: string; specifier: string }>\n\n2. phpCollapsedEnumClose · method  [symbol]\n   internal/graph/lang_php.go:L224-L226\n   func (x *extractor) phpCollapsedEnumClose(node *sitter.Node) bool\n\n3. collectImportedSymbols · method  [symbol]\n   internal/graph/extract.go:L691-L728\n   func (x *extractor) collectImportedSymbols(root *sitter.Node) map[string]importBinding\n\n4. phpTypeName · function  [symbol]\n   src/graph/bindings.ts:L456-L464\n   function phpTypeName(node: Parser.SyntaxNode | null): string | null\n\n5. extractPhpUses · function  [symbol]\n   src/graph/generic.ts:L291-L302\n   function extractPhpUses(root: TsNode, rel: string, rawEdges: RawEdge[]): void\n\n6. grepSymbols · function  [symbol]\n   internal/graph/grep.go:L182-L198\n   func grepSymbols(nodes []NodeV1, path string) []grepSymbolSpan\n\n7. symbolsOf · function  [symbol]\n   src/search/grep.ts:L100-L109\n   function symbolsOf(graph: GraphV1, path: string): SymbolSpan[]\n\n8. symbolsInFile · function  [symbol]\n   src/graph/traverse.ts:L211-L213\n   function symbolsInFile(graph: GraphV1, fileNode: NodeV1): NodeV1[]\n",
+  "stderr": "",
+  "files": {}
+}

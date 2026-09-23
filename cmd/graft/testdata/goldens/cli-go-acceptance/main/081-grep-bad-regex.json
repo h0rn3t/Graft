@@ -1,0 +1,14 @@
+{
+  "args": [
+    "grep",
+    "("
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ invalid pattern \"(\": Invalid regular expression: /(/: Unterminated group\n",
+  "files": {},
+  "checkFiles": false
+}

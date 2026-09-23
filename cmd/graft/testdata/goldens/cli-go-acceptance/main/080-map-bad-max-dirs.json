@@ -1,0 +1,15 @@
+{
+  "args": [
+    "map",
+    "--max-dirs",
+    "-1"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ --max-dirs must be a positive integer, got \"-1\"\n",
+  "files": {},
+  "checkFiles": false
+}

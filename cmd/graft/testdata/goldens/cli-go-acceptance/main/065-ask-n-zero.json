@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "store",
+    "-n",
+    "zero",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"store\",\n  \"mode\": \"lexical\",\n  \"hits\": [],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

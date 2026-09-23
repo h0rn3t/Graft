@@ -1,0 +1,19 @@
+{
+  "args": [
+    "ask",
+    "direct leaves",
+    "--in",
+    "src"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"direct leaves\"  (lexical)\n\n1. isDirectCallee · function  [symbol]\n   src/graph/extract.ts:L1091-L1098\n   function isDirectCallee(node: Parser.SyntaxNode, callTypes: ReadonlySet<string>): boolean\n\n2. resolveJavaImport · function  [symbol]\n   src/graph/resolve.ts:L527-L542\n   function resolveJavaImport(spec: string, filesBySuffix: Map<string, string[]>): string\n\n3. invariants.ts · file  [symbol]\n   src/graph/invariants.ts\n\n4. defScope · function  [symbol]\n   src/graph/generic.ts:L520-L542\n   function defScope(node: TsNode, langName?: string): TsNode\n\n5. AskOptions · interface  [symbol]\n   src/ask/ask.ts:L1205-L1239\n   interface AskOptions\n\n6. runCallersCommand · function  [symbol]\n   src/graph/traverse-cli.ts:L166-L242\n   function runCallersCommand(query: string, dir: string, opts: CallersCliOptions): void\n\n7. types.ts · file  [symbol]\n   src/graph/types.ts\n\n8. refresh.ts · file  [symbol]\n   src/graph/refresh.ts\n",
+  "stderr": "",
+  "files": {}
+}

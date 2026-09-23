@@ -1,0 +1,14 @@
+{
+  "args": [
+    "callers",
+    "zzqqxxnothing"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ no symbol \"zzqqxxnothing\" in the graph — check spelling or run graft build\n",
+  "files": {},
+  "checkFiles": false
+}

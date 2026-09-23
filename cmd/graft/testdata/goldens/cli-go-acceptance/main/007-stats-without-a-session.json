@@ -1,0 +1,13 @@
+{
+  "args": [
+    "stats"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft stats: no session recorded yet — use graft in an agent session, then look again.\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

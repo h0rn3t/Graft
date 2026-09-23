@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "store",
+    "-n",
+    " 3 ",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"store\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"openStore · function\",\n      \"pointer\": \"src/store.ts:L7-L7\",\n      \"snippet\": \"function openStore(): Store\",\n      \"score\": 1.5\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"storeKeys · function\",\n      \"pointer\": \"src/store_util.ts:L2-L2\",\n      \"snippet\": \"function storeKeys(): string[]\",\n      \"score\": 1.1473380217063702\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"app.tsx · file\",\n      \"pointer\": \"src/app.tsx\",\n      \"snippet\": \"\",\n      \"score\": 0.33840235887724823\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

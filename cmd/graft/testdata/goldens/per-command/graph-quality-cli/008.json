@@ -1,0 +1,13 @@
+{
+  "args": [
+    "<REPO>"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 2,
+  "stdout": "",
+  "stderr": "no graph found at <REPO> (run `graft build` first)\n",
+  "files": {}
+}

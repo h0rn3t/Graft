@@ -1,0 +1,16 @@
+{
+  "args": [
+    "ask",
+    "users",
+    "--in",
+    "mobile"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "no workspace repo \"mobile\" - repos: api, mono, web\n",
+  "files": {},
+  "checkFiles": false
+}

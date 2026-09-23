@@ -1,0 +1,19 @@
+{
+  "args": [
+    "ask",
+    "fingerprint expression",
+    "--no-graph-rank",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"fingerprint expression\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"ReadFingerprint · function\",\n      \"pointer\": \"internal/graph/fingerprint.go:L57-L80\",\n      \"snippet\": \"func ReadFingerprint(outDir, extractor string) (*Fingerprint, error)\",\n      \"score\": 1\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"readFingerprint · function\",\n      \"pointer\": \"src/graph/fingerprint.ts:L77-L82\",\n      \"snippet\": \"function readFingerprint(outDir: string): Fingerprint | null\",\n      \"score\": 0.9938785825011305\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"goExpressionType · method\",\n      \"pointer\": \"internal/graph/lang_go.go:L145-L165\",\n      \"snippet\": \"func (w *bindingWalk) goExpressionType(expression *sitter.Node) string\",\n      \"score\": 0.8696357142732286\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"unsupportedFingerprintFiles · function\",\n      \"pointer\": \"internal/graph/refresh.go:L300-L342\",\n      \"snippet\": \"func unsupportedFingerprintFiles(fingerprint *Fingerprint, drift *Drift) []string\",\n      \"score\": 0.6976530457404377\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"calleeName · function\",\n      \"pointer\": \"src/graph/extract.ts:L2183-L2331\",\n      \"snippet\": \"function calleeName( node: Parser.SyntaxNode, lang: Language, ): { name: string; viaMember: boolean; receiver?: string; kinds?: Kind[] } | null\",\n      \"score\": 0.2899401899852463\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"kotlinSwiftCallee · method\",\n      \"pointer\": \"internal/graph/lang_kotlin_swift.go:L103-L146\",\n      \"snippet\": \"func (x *extractor) kotlinSwiftCallee(node *sitter.Node, lang language) (callee, bool)\",\n      \"score\": 0.2897919236481348\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"grep.go · file\",\n      \"pointer\": \"internal/graph/grep.go\",\n      \"snippet\": \"\",\n      \"score\": 0.2556103264088386\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"extract.go · file\",\n      \"pointer\": \"internal/graph/extract.go\",\n      \"snippet\": \"\",\n      \"score\": 0.2521987551580851\n    }\n  ],\n  \"coverage\": 0.45030384375611254,\n  \"coverageStrong\": 0.45030384375611254\n}\n",
+  "stderr": "",
+  "files": {}
+}

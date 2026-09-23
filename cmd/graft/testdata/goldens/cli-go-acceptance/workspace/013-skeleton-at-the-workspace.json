@@ -1,0 +1,14 @@
+{
+  "args": [
+    "skeleton",
+    "api/src/db.ts"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft skeleton — api/src/db.ts\n\nno wiring graph — run `graft build` first\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

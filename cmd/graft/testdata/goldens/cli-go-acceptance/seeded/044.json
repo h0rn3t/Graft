@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "extractGenericTags"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"extractGenericTags\"  (lexical)\n\n1. extractGenericTags · function  [symbol]\n   internal/graph/generic_tags.go:L40-L173\n   func extractGenericTags(rel, source, name string, lang *sitter.Language, tags string) (extractResult, error)\n\n2. extractGeneric · function  [symbol]\n   src/graph/generic.ts:L222-L285\n   function extractGeneric(rel: string, source: string, langName: string): ExtractResult\n\n3. extractFile · function  [symbol]\n   internal/graph/extract.go:L183-L229\n   func extractFile(rel, source string) (extractResult, error)\n\n4. walk · function  [symbol]\n   src/graph/extract.ts:L563-L849\n   function walk(node: Parser.SyntaxNode, ctx: WalkCtx, out: NodeV1[], edges: RawEdge[], minted: Set<string>): void\n\n5. buildGraph · function  [symbol]\n   src/graph/build.ts:L151-L410\n   async function buildGraph( dir: string, opts: GraphBuildOptions = {}, ): Promise<GraphBuildResult>\n\n6. extractContainer · function  [symbol]\n   src/graph/container.ts:L151-L208\n   function extractContainer(rel: string, source: string, lang: ContainerLang): ExtractResult\n\n7. readExtractCache · function  [symbol]\n   src/graph/extract-cache.ts:L198-L207\n   function readExtractCache(outDir: string): ExtractCache\n\n8. genericLanguageOf · function  [symbol]\n   internal/graph/languages.go:L28-L38\n   func genericLanguageOf(file string) (string, bool)\n",
+  "stderr": "",
+  "files": {}
+}

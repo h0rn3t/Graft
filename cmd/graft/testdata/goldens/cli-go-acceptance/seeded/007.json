@@ -1,0 +1,19 @@
+{
+  "args": [
+    "ask",
+    "end graft",
+    "--no-graph-rank",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"end graft\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"jsSliceEnd · function\",\n      \"pointer\": \"internal/graph/ask_lexical.go:L190-L204\",\n      \"snippet\": \"func jsSliceEnd(length int, end float64) int\",\n      \"score\": 1\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"headEnd · function\",\n      \"pointer\": \"src/graph/extract.ts:L1700-L1703\",\n      \"snippet\": \"headEnd = (type: string): number\",\n      \"score\": 0.9734822821422541\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"headerEnd · function\",\n      \"pointer\": \"internal/graph/extract.go:L510-L515\",\n      \"snippet\": \"func headerEnd(node, body *sitter.Node) uint\",\n      \"score\": 0.9725904156401206\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"clearParentGraft · function\",\n      \"pointer\": \"src/graph/workspace.ts:L124-L126\",\n      \"snippet\": \"function clearParentGraft(root: string, override?: string): void\",\n      \"score\": 0.8576322962215842\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"hasGraftIndex · function\",\n      \"pointer\": \"src/graph/root.ts:L23-L25\",\n      \"snippet\": \"function hasGraftIndex(dir: string): boolean\",\n      \"score\": 0.8115366011708729\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"buildCrux · function\",\n      \"pointer\": \"src/graph/enrich.ts:L287-L302\",\n      \"snippet\": \"function buildCrux(r: NodeCrux, node: NodeV1, source: string, lineCount: number): Crux | null\",\n      \"score\": 0.5365737305870063\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"sliceSpan · function\",\n      \"pointer\": \"src/ask/ask.ts:L1251-L1268\",\n      \"snippet\": \"function sliceSpan(root: string, path: string, from: number, to: number): string | null\",\n      \"score\": 0.48820473164703015\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"askFallthroughNote · function\",\n      \"pointer\": \"internal/graph/ask.go:L504-L506\",\n      \"snippet\": \"func askFallthroughNote(subject string) string\",\n      \"score\": 0.4625450560120712\n    }\n  ],\n  \"coverage\": 0.5384179242752862,\n  \"coverageStrong\": 0.5384179242752862\n}\n",
+  "stderr": "",
+  "files": {}
+}

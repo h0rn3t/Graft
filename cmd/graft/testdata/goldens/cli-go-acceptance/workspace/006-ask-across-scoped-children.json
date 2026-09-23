@@ -1,0 +1,16 @@
+{
+  "args": [
+    "ask",
+    "store render",
+    "--json",
+    "--source"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"store render\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"buildStore · function\",\n      \"pointer\": \"mono/tools/build.ts:L1-L1\",\n      \"snippet\": \"function buildStore()\",\n      \"score\": 1,\n      \"scope\": \"mono\",\n      \"code\": \"export function buildStore() { return 1; }\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"storeGet0 · function\",\n      \"pointer\": \"mono/packages/core/src/store.ts:L1-L1\",\n      \"snippet\": \"function storeGet0(key: string)\",\n      \"score\": 1,\n      \"scope\": \"mono/packages/core\",\n      \"code\": \"export function storeGet0(key: string) { return key + '0'; }\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"renderStore0 · function\",\n      \"pointer\": \"mono/packages/ui/src/view.ts:L2-L2\",\n      \"snippet\": \"function renderStore0()\",\n      \"score\": 1,\n      \"scope\": \"mono/packages/ui\",\n      \"code\": \"export function renderStore0() { return storeGet0('x'); }\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"storeGet1 · function\",\n      \"pointer\": \"mono/packages/core/src/store.ts:L2-L2\",\n      \"snippet\": \"function storeGet1(key: string)\",\n      \"score\": 1,\n      \"scope\": \"mono/packages/core\",\n      \"code\": \"export function storeGet1(key: string) { return key + '1'; }\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"renderStore1 · function\",\n      \"pointer\": \"mono/packages/ui/src/view.ts:L4-L4\",\n      \"snippet\": \"function renderStore1()\",\n      \"score\": 1,\n      \"scope\": \"mono/packages/ui\",\n      \"code\": \"export function renderStore1() { return storeGet1('x'); }\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"storeGet2 · function\",\n      \"pointer\": \"mono/packages/core/src/store.ts:L3-L3\",\n      \"snippet\": \"function storeGet2(key: string)\",\n      \"score\": 1,\n      \"scope\": \"mono/packages/core\",\n      \"code\": \"export function storeGet2(key: string) { return key + '2'; }\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"renderStore2 · function\",\n      \"pointer\": \"mono/packages/ui/src/view.ts:L6-L6\",\n      \"snippet\": \"function renderStore2()\",\n      \"score\": 1,\n      \"scope\": \"mono/packages/ui\",\n      \"code\": \"export function renderStore2() { return storeGet2('x'); }\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"storeGet3 · function\",\n      \"pointer\": \"mono/packages/core/src/store.ts:L4-L4\",\n      \"snippet\": \"function storeGet3(key: string)\",\n      \"score\": 1,\n      \"scope\": \"mono/packages/core\",\n      \"code\": \"export function storeGet3(key: string) { return key + '3'; }\"\n    }\n  ],\n  \"scopes\": {\n    \"federated\": [\n      \"mono\",\n      \"mono/packages/ui\",\n      \"mono/packages/core\"\n    ],\n    \"alsoMatched\": []\n  }\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

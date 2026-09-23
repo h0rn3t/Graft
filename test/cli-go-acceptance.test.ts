@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, wri
 import { join, relative, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { tmpRepo } from "./helpers.js";
+import { captureGolden } from "./goldens.js";
 
 // Absolute, so the TypeScript CLI also runs from inside the fixture repos.
 const TS = [process.execPath, "--import", pathToFileURL(resolve("node_modules/tsx/dist/loader.mjs")).href, resolve("src/cli.ts")];
@@ -79,6 +80,10 @@ interface Twin {
   repo: string;
   home: string;
   elsewhere: string;
+  tracked: string[];
+  gitDirs: string[];
+  fixture: Record<string, string>;
+  fixture: Record<string, string>;
 }
 
 interface Outcome {
@@ -128,7 +133,8 @@ function normalize(text: string, twin: Twin): string {
     .split(twin.home).join("<HOME>")
     .split(twin.base).join("<BASE>")
     .replace(/\b\d+(\.\d+)?\s?(ms|s)\b/g, "<DURATION>")
-    .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z/g, "<TIME>");
+    .replace(/\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z/g, "<TIME>")
+    .replace(/"checkedAt":\s*\d+/g, '"checkedAt":<TIME>');
 }
 
 function invoke(twin: Twin, args: string[], extra: Record<string, string | undefined> = {}, cwd = twin.repo): Outcome {
@@ -172,13 +178,27 @@ function makeTwins(label: string, files: Record<string, string>, setup: (twin: T
   const base = tmpRepo(label);
   const checkedAt = Date.now();
   const make = (name: string, command: string[]): Twin => {
-    const twin: Twin = { name, command, base: join(base, name), repo: join(base, name, "repo"), home: join(base, name, "home"), elsewhere: join(base, name, "elsewhere") };
+    const twin: Twin = { name, command, base: join(base, name), repo: join(base, name, "repo"), home: join(base, name, "home"), elsewhere: join(base, name, "elsewhere"), tracked: [], gitDirs: [], fixture: { ...files } };
     write(twin.repo, files);
     mkdirSync(join(twin.home, ".graft"), { recursive: true });
     mkdirSync(twin.elsewhere, { recursive: true });
     // A fresh registry answer, so neither CLI spawns a background update check.
     writeFileSync(join(twin.home, ".graft", "update-check.json"), JSON.stringify({ latest: "0.0.0", checkedAt }, null, 2));
     setup(twin);
+    const findGitDirs = (dir: string) => {
+      if (existsSync(join(dir, ".git"))) {
+        twin.gitDirs.push(relative(twin.repo, dir) || ".");
+        return;
+      }
+      for (const name of readdirSync(dir).sort()) {
+        const path = join(dir, name);
+        if (statSync(path).isDirectory()) findGitDirs(path);
+      }
+    };
+    findGitDirs(twin.repo);
+    if (twin.gitDirs.includes(".")) {
+      twin.tracked = execFileSync("git", ["ls-files", "-z"], { cwd: twin.repo, encoding: "utf8" }).split("\0").filter(Boolean);
+    }
     return twin;
   };
   return { ts: make("ts", TS), go: make("go", [binary()]) };
@@ -188,15 +208,42 @@ function bind(twin: Twin, value: string): string {
   return value === "REPO" || value.startsWith("REPO/") ? twin.repo + value.slice("REPO".length) : value;
 }
 
-function runMatrix(ts: Twin, go: Twin, cases: Case[]): string[] {
+function runMatrix(ts: Twin, go: Twin, cases: Case[], suite: string): string[] {
   const failures: string[] = [];
-  for (const entry of cases) {
-    const outcomes = [ts, go].map((twin) => {
-      entry.before?.(twin);
-      const env = entry.env && Object.fromEntries(Object.entries(entry.env).map(([name, value]) => [name, value && bind(twin, value)]));
-      return invoke(twin, entry.args.map((arg) => bind(twin, arg)), env, entry.cwd?.(twin));
-    });
+  const capturing = process.env.GRAFT_CAPTURE_GOLDENS === "1";
+  for (const [index, entry] of cases.entries()) {
+    const before = capturing ? snapshot(ts.base, ts) : {};
+    entry.before?.(ts);
+    const afterBefore = capturing ? snapshot(ts.base, ts) : {};
+    entry.before?.(go);
+    const args = entry.args.map((arg) => bind(ts, arg));
+    const env = entry.env && Object.fromEntries(Object.entries(entry.env).map(([name, value]) => [name, value === undefined ? undefined : bind(ts, value)]));
+    const cwd = entry.cwd?.(ts) ?? ts.repo;
+    const tsOutcome = invoke(ts, args, env, cwd);
+    const files = capturing && entry.files ? snapshot(ts.base, ts) : {};
+    const goEnv = entry.env && Object.fromEntries(Object.entries(entry.env).map(([name, value]) => [name, value === undefined ? undefined : bind(go, value)]));
+    const goOutcome = invoke(go, entry.args.map((arg) => bind(go, arg)), goEnv, entry.cwd?.(go));
+    const outcomes = [tsOutcome, goOutcome];
     if (process.env.GRAFT_ACCEPTANCE_TRACE) console.error(JSON.stringify({ case: entry.label, ts: outcomes[0], go: outcomes[1] }));
+    if (capturing) {
+      const vars = { [ts.base]: "<BASE>", [ts.repo]: "<REPO>", [ts.home]: "<HOME>", [ts.elsewhere]: "<ELSEWHERE>" };
+      const slug = entry.label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const writes = Object.fromEntries(Object.entries(afterBefore).filter(([path, value]) => before[path] !== value));
+      const deletes = Object.keys(before).filter((path) => afterBefore[path] === undefined);
+      captureGolden(`cli-go-acceptance/${suite}/${String(index + 1).padStart(3, "0")}-${slug}`, {
+        args,
+        cwd,
+        env: Object.fromEntries(Object.entries(entry.env ?? {}).filter((item): item is [string, string] => item[1] !== undefined).map(([name, value]) => [name, bind(ts, value)])),
+        ...(index === 0 && { tracked: ts.tracked, gitDirs: ts.gitDirs, inputs: ts.fixture }),
+        ...(Object.keys(writes).length > 0 || deletes.length > 0 ? { mutations: { writes, deletes } } : {}),
+        status: tsOutcome.status ?? -1,
+        stdout: tsOutcome.stdout,
+        stderr: tsOutcome.stderr,
+        files,
+        checkFiles: entry.files ?? false,
+        normalize: vars,
+      });
+    }
     try {
       assert.deepEqual(outcomes[1], outcomes[0]);
     } catch (err) {
@@ -368,7 +415,7 @@ test("Go CLI matches TypeScript across the query and build matrix", () => {
     { label: "check over a corrupt graph", args: ["check"] },
     { label: "rebuild over a corrupt graph", args: ["build"], files: true },
   ];
-  const failures = runMatrix(ts, go, cases);
+  const failures = runMatrix(ts, go, cases, "main");
   assert.deepEqual(failures, [], failures.join("\n\n"));
 });
 
@@ -404,7 +451,7 @@ test("Go CLI matches TypeScript on a monorepo with several ranking scopes", () =
     { label: "skeleton", args: ["skeleton", "packages/ui/src/view.ts"] },
     { label: "check", args: ["check", "--json"] },
   ];
-  const failures = runMatrix(ts, go, cases);
+  const failures = runMatrix(ts, go, cases, "monorepo");
   assert.deepEqual(failures, [], failures.join("\n\n"));
 });
 
@@ -444,7 +491,7 @@ test("Go CLI matches TypeScript at a workspace of child repositories", () => {
       files: true,
     },
   ];
-  const failures = runMatrix(ts, go, cases);
+  const failures = runMatrix(ts, go, cases, "workspace");
   assert.deepEqual(failures, [], failures.join("\n\n"));
 });
 
@@ -573,15 +620,41 @@ test("Go CLI excludes the languages outside its source set", () => {
 test("Go queries match TypeScript on real code across a seeded query stream", async () => {
   const base = tmpRepo("cli-acceptance-real");
   const repo = join(base, "repo");
+  const fixtureRoot = resolve("cmd/graft/testdata/cli-go-acceptance/real");
   for (const dir of ["src/ask", "src/graph", "src/search", "internal/graph"]) {
-    for (const name of readdirSync(dir)) {
-      if (/\.(ts|go)$/.test(name)) write(repo, { [`${dir}/${name}`]: readFileSync(join(dir, name), "utf8") });
+    for (const name of readdirSync(join(fixtureRoot, dir))) {
+      if (/\.(ts|go)$/.test(name)) write(repo, { [`${dir}/${name}`]: readFileSync(join(fixtureRoot, dir, name), "utf8") });
     }
   }
   write(repo, { "package.json": JSON.stringify({ name: "real" }), "go.mod": "module example.com/real\n\ngo 1.22\n" });
   execFileSync("git", ["init", "-q"], { cwd: repo });
-  const env = { ...process.env, DO_NOT_TRACK: "1", GRAFT_NO_REFRESH: "1", COLUMNS: "80" };
+  const home = join(base, "home");
+  const elsewhere = join(base, "elsewhere");
+  mkdirSync(join(home, ".graft"), { recursive: true });
+  mkdirSync(elsewhere, { recursive: true });
+  const checkedAt = Date.now();
+  writeFileSync(join(home, ".graft", "update-check.json"), JSON.stringify({ latest: "0.0.0", checkedAt }, null, 2));
+  const env = { ...process.env, HOME: home, USERPROFILE: home, DO_NOT_TRACK: "1", GRAFT_NO_REFRESH: "1", COLUMNS: "80" };
   execFileSync(TS[0], [...TS.slice(1), "build", repo], { stdio: "pipe", env });
+  const normalizer: Twin = { name: "ts", command: TS, base, repo, home, elsewhere, tracked: [], gitDirs: ["."], fixture: {} };
+  const vars = { [base]: "<BASE>", [repo]: "<REPO>", [home]: "<HOME>", [elsewhere]: "<ELSEWHERE>" };
+  if (process.env.GRAFT_CAPTURE_GOLDENS === "1") {
+    const graphFiles: Record<string, string> = {};
+    for (const rel of ["graft/.graph/wiring.json", "graft/.cache/ask-index.json", "graft/INDEX.md"]) {
+      const path = join(repo, rel);
+      if (existsSync(path)) graphFiles[rel] = readFileSync(path, "utf8");
+    }
+    captureGolden("cli-go-acceptance/seeded-graph", {
+      args: ["build", repo],
+      cwd: repo,
+      env: { DO_NOT_TRACK: "1", GRAFT_NO_REFRESH: "1", COLUMNS: "80" },
+      status: 0,
+      stdout: "",
+      stderr: "",
+      files: graphFiles,
+      normalize: vars,
+    });
+  }
 
   const graph = readGraph(repo);
   const symbols = graph.nodes.filter((node) => node.kind !== "file");
@@ -625,8 +698,21 @@ test("Go queries match TypeScript on real code across a seeded query stream", as
   let next = 0;
   const worker = async () => {
     while (next < queries.length) {
-      const args = queries[next++];
+      const index = next++;
+      const args = queries[index];
       const [want, got] = await Promise.all([run(TS, args), run([binary()], args)]);
+      if (process.env.GRAFT_CAPTURE_GOLDENS === "1") {
+        captureGolden(`cli-go-acceptance/seeded/${String(index + 1).padStart(3, "0")}`, {
+          args,
+          cwd: repo,
+          env: { DO_NOT_TRACK: "1", GRAFT_NO_REFRESH: "1", COLUMNS: "80" },
+          status: want.status ?? -1,
+          stdout: normalize(want.stdout, normalizer),
+          stderr: normalize(want.stderr, normalizer),
+          files: {},
+          normalize: vars,
+        });
+      }
       try {
         assert.deepEqual(got, want);
       } catch (err) {

@@ -1,0 +1,15 @@
+{
+  "args": [
+    "skeleton",
+    "src/store.ts",
+    "--no-refresh"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft skeleton — src/store.ts\n\nno wiring graph — run `graft build` first\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

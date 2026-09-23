@@ -1,0 +1,15 @@
+{
+  "args": [
+    "grep",
+    "query",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"pattern\": \"query\",\n  \"filesSearched\": 8,\n  \"totalHits\": 3,\n  \"groups\": [\n    {\n      \"symbol\": {\n        \"id\": \"src/db.ts#query\",\n        \"name\": \"query\",\n        \"kind\": \"function\",\n        \"path\": \"api/src/db.ts\",\n        \"span\": \"L1-L1\"\n      },\n      \"path\": \"api/src/db.ts\",\n      \"inDegree\": 1,\n      \"hits\": [\n        {\n          \"line\": 1,\n          \"text\": \"export function query(table: string) { return table; }\"\n        }\n      ]\n    },\n    {\n      \"symbol\": null,\n      \"path\": \"api/src/server.ts\",\n      \"inDegree\": 0,\n      \"hits\": [\n        {\n          \"line\": 1,\n          \"text\": \"import { query } from './db';\"\n        }\n      ]\n    },\n    {\n      \"symbol\": {\n        \"id\": \"src/server.ts#serve\",\n        \"name\": \"serve\",\n        \"kind\": \"function\",\n        \"path\": \"api/src/server.ts\",\n        \"span\": \"L2-L2\"\n      },\n      \"path\": \"api/src/server.ts\",\n      \"inDegree\": 0,\n      \"hits\": [\n        {\n          \"line\": 2,\n          \"text\": \"export function serve() { return query('users'); }\"\n        }\n      ]\n    }\n  ],\n  \"truncated\": {\n    \"files\": 0,\n    \"hits\": 0\n  },\n  \"saved\": {\n    \"files\": 2,\n    \"baselineChars\": 136\n  }\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

@@ -7,10 +7,11 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { tmpRepo } from "./helpers.js";
+import { captureGolden } from "./goldens.js";
 
 function write(root: string, files: Record<string, string>): void {
   for (const [rel, text] of Object.entries(files)) {
@@ -126,12 +127,36 @@ const PYTHON_GO_FIXTURE: Record<string, string> = {
   "pkg/store/b.go": "package store\n\nimport \"example.com/app/pkg/store\"\n\nvar _ = store.NewStore\n",
 };
 
-function buildTs(root: string): string {
-  execFileSync(process.execPath, ["--import", "tsx", "src/cli.ts", "build", root], {
-    stdio: "pipe",
-    env: { ...process.env, GRAFT_NO_REFRESH: "1", DO_NOT_TRACK: "1" },
+function buildTs(
+  root: string,
+  goldenName?: string,
+  inputs: Record<string, string> = {},
+  initialInputs?: Record<string, string>,
+): string {
+  const env = { ...process.env, GRAFT_NO_REFRESH: "1", DO_NOT_TRACK: "1" };
+  const result = spawnSync(process.execPath, ["--import", "tsx", "src/cli.ts", "build", root], {
+    encoding: "utf8",
+    env,
   });
-  return readFileSync(join(root, "graft", ".graph", "wiring.json"), "utf8");
+  assert.equal(result.status, 0, result.stderr || result.error?.message);
+  const graph = readFileSync(join(root, "graft", ".graph", "wiring.json"), "utf8");
+  if (goldenName) {
+    captureGolden(goldenName, {
+      args: ["build", root],
+      env: { GRAFT_NO_REFRESH: "1", DO_NOT_TRACK: "1" },
+      initialInputs,
+      inputs,
+      status: result.status ?? 1,
+      stdout: result.stdout,
+      stderr: result.stderr,
+      files: { "graft/.graph/wiring.json": graph },
+      normalize: {
+        [relative(process.cwd(), join(root, "graft"))]: "{{ROOT}}/graft",
+        [root]: "{{ROOT}}",
+      },
+    });
+  }
+  return graph;
 }
 
 function buildGo(binary: string, root: string): string {
@@ -145,19 +170,21 @@ function goBinary(): string {
   return binary;
 }
 
-function twin(files: Record<string, string>): { ts: string; go: string } {
+function twin(files: Record<string, string>): { ts: string; go: string; inputs: Record<string, string> } {
+  const inputs = { ...files };
   const ts = tmpRepo("build-parity-ts");
-  write(ts, files);
+  write(ts, inputs);
   execFileSync("git", ["init", "-q"], { cwd: ts });
   const go = tmpRepo("build-parity-go");
   cpSync(ts, go, { recursive: true });
-  return { ts, go };
+  return { ts, go, inputs };
 }
 
 test("Go build writes a byte-identical wiring.json to TypeScript, cold and incremental", () => {
   const binary = goBinary();
-  const { ts, go } = twin(FIXTURE);
-  const cold = buildTs(ts);
+  const { ts, go, inputs } = twin(FIXTURE);
+  const initialInputs = { ...inputs };
+  const cold = buildTs(ts, "build-go-parity/ts-js-cold", inputs);
   assert.equal(buildGo(binary, go), cold, "cold build");
   assert.match(cold, /"prefix": "packages\/core"/, "fixture exercises workspace scopes");
   assert.match(cold, /"target": "packages\/core\/src\/log.ts#Logger.write"/, "fixture exercises typed member calls");
@@ -170,7 +197,9 @@ test("Go build writes a byte-identical wiring.json to TypeScript, cold and incre
     write(root, edits);
     rmSync(join(root, "scripts", "cfg.cjs"));
   }
-  const incremental = buildTs(ts);
+  Object.assign(inputs, edits);
+  delete inputs["scripts/cfg.cjs"];
+  const incremental = buildTs(ts, "build-go-parity/ts-js-incremental", inputs, initialInputs);
   assert.equal(buildGo(binary, go), incremental, "incremental build");
 
   rmSync(join(go, "graft"), { recursive: true, force: true });
@@ -179,55 +208,62 @@ test("Go build writes a byte-identical wiring.json to TypeScript, cold and incre
 
 test("Go build matches TypeScript for Python and Go sources, cold and incremental", () => {
   const binary = goBinary();
-  const { ts, go } = twin(PYTHON_GO_FIXTURE);
-  const cold = buildTs(ts);
+  const { ts, go, inputs } = twin(PYTHON_GO_FIXTURE);
+  const initialInputs = { ...inputs };
+  const cold = buildTs(ts, "build-go-parity/python-go-cold", inputs);
   assert.equal(buildGo(binary, go), cold, "cold build");
   assert.match(cold, /"target": "cmd\/main.go#Worker.helper"/, "fixture exercises Go receiver calls");
   assert.match(cold, /"target": "app\/models.py#Base.save"/, "fixture exercises Python self calls");
+  const edits = { "app/store.py": "class Store:\n    def put(self, key):\n        return key\n    def drop(self):\n        self.put(1)\n" };
   for (const root of [ts, go]) {
-    write(root, { "app/store.py": "class Store:\n    def put(self, key):\n        return key\n    def drop(self):\n        self.put(1)\n" });
+    write(root, edits);
     rmSync(join(root, "stubs", "api.pyi"));
   }
-  assert.equal(buildGo(binary, go), buildTs(ts), "incremental build");
+  Object.assign(inputs, edits);
+  delete inputs["stubs/api.pyi"];
+  assert.equal(buildGo(binary, go), buildTs(ts, "build-go-parity/python-go-incremental", inputs, initialInputs), "incremental build");
 });
 
 test("Go build matches TypeScript for Rust tags and crate imports", () => {
   const binary = goBinary();
-  const { ts, go } = twin({
+  const { ts, go, inputs } = twin({
     "Cargo.toml": "[package]\nname = \"sample\"\nversion = \"0.1.0\"\n",
     "src/lib.rs": "mod util;\nuse crate::util::Thing;\npub fn run() -> i32 { util::helper() }\n",
     "src/util.rs": "pub struct Thing;\npub fn helper() -> i32 { 1 }\n",
   });
-  const cold = buildTs(ts);
+  const initialInputs = { ...inputs };
+  const cold = buildTs(ts, "build-go-parity/rust-cold", inputs);
   assert.equal(buildGo(binary, go), cold, "cold Rust build");
   assert.match(cold, /"target": "src\/util.rs#helper"/, "fixture exercises Rust call resolution");
-  assert.equal(buildGo(binary, go), cold, "incremental Rust build");
+  assert.equal(buildGo(binary, go), buildTs(ts, "build-go-parity/rust-incremental", inputs, initialInputs), "incremental Rust build");
 });
 
 test("Go build matches TypeScript for C and C++ tags and local includes", () => {
   const binary = goBinary();
-  const { ts, go } = twin({
+  const { ts, go, inputs } = twin({
     "src/local.h": "int helper(void);\n",
     "src/main.c": '#include "local.h"\n#include <stdio.h>\nint helper(void) { return 1; }\nint run(void) { return helper(); }\n',
     "src/local.hpp": "int make();\n",
     "src/main.cpp": '#include "local.hpp"\nclass Widget { public: int make() { return 1; } int run() { return make(); } };\n',
   });
-  const cold = buildTs(ts);
+  const initialInputs = { ...inputs };
+  const cold = buildTs(ts, "build-go-parity/c-cpp-cold", inputs);
   assert.equal(buildGo(binary, go), cold, "cold C/C++ build");
   assert.match(cold, /"target": "src\/local.h"/, "fixture exercises C local include");
   assert.match(cold, /"target": "src\/local.hpp"/, "fixture exercises C++ local include");
-  assert.equal(buildGo(binary, go), cold, "incremental C/C++ build");
+  assert.equal(buildGo(binary, go), buildTs(ts, "build-go-parity/c-cpp-incremental", inputs, initialInputs), "incremental C/C++ build");
 });
 
 test("Go build matches TypeScript for Java tags and references", () => {
   const binary = goBinary();
-  const { ts, go } = twin({
+  const { ts, go, inputs } = twin({
     "src/Worker.java": "interface Service {}\nclass Base {}\nclass Worker extends Base implements Service { Service run() { return make(); } Service make() { return null; } }\n",
   });
-  const cold = buildTs(ts);
+  const initialInputs = { ...inputs };
+  const cold = buildTs(ts, "build-go-parity/java-cold", inputs);
   assert.equal(buildGo(binary, go), cold, "cold Java build");
   assert.match(cold, /"target": "src\/Worker.java#Worker.make"/, "fixture exercises Java call resolution");
-  assert.equal(buildGo(binary, go), cold, "incremental Java build");
+  assert.equal(buildGo(binary, go), buildTs(ts, "build-go-parity/java-incremental", inputs, initialInputs), "incremental Java build");
 });
 
 test("Go build excludes Ruby while TypeScript still indexes it", () => {

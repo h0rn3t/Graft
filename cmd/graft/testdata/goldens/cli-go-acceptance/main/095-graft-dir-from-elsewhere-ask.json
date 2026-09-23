@@ -1,0 +1,18 @@
+{
+  "args": [
+    "ask",
+    "store",
+    "--json",
+    "--source"
+  ],
+  "cwd": "<ELSEWHERE>",
+  "env": {
+    "GRAFT_DIR": "<REPO>/graft"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"store\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"openStore · function\",\n      \"pointer\": \"src/store.ts:L7-L7\",\n      \"snippet\": \"function openStore(): Store\",\n      \"score\": 1.5\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"storeKeys · function\",\n      \"pointer\": \"src/store_util.ts:L2-L2\",\n      \"snippet\": \"function storeKeys(): string[]\",\n      \"score\": 1.1473916489947886\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"app.tsx · file\",\n      \"pointer\": \"src/app.tsx\",\n      \"snippet\": \"\",\n      \"score\": 0.338506723749362\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"testStore · function\",\n      \"pointer\": \"src/store.test.ts:L2-L2\",\n      \"snippet\": \"function testStore()\",\n      \"score\": 0.16307668067303127\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"format.js · file\",\n      \"pointer\": \"src/format.js\",\n      \"snippet\": \"\",\n      \"score\": 0.07649838369150411\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"store.ts · file\",\n      \"pointer\": \"src/store.ts\",\n      \"snippet\": \"\",\n      \"score\": 1.1384294974338676\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"store_util.ts · file\",\n      \"pointer\": \"src/store_util.ts\",\n      \"snippet\": \"\",\n      \"score\": 1.1376890811868705\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"App · function\",\n      \"pointer\": \"src/app.tsx:L2-L2\",\n      \"snippet\": \"function App()\",\n      \"score\": 0.2702850733149331\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1,\n  \"saved\": {\n    \"files\": 5,\n    \"baselineChars\": 811\n  }\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

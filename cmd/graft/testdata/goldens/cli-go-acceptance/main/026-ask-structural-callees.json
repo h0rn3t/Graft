@@ -1,0 +1,15 @@
+{
+  "args": [
+    "ask",
+    "what does openStore call",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"what does openStore call\",\n  \"mode\": \"structural\",\n  \"subject\": \"openStore\",\n  \"hits\": [\n    {\n      \"kind\": \"callee\",\n      \"title\": \"put\",\n      \"pointer\": \"src/store.ts:L5-L5\",\n      \"snippet\": \"put(key: string, value: string): void\",\n      \"relation\": \"calls\",\n      \"score\": 1\n    }\n  ],\n  \"note\": \"outgoing edges from openStore\"\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

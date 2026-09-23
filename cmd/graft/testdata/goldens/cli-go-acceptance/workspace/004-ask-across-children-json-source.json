@@ -1,0 +1,16 @@
+{
+  "args": [
+    "ask",
+    "query users",
+    "--json",
+    "--source"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"query\": \"query users\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"query · function\",\n      \"pointer\": \"api/src/db.ts:L1-L1\",\n      \"snippet\": \"function query(table: string)\",\n      \"score\": 1,\n      \"code\": \"export function query(table: string) { return table; }\",\n      \"scope\": \"api\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"listUsers · function\",\n      \"pointer\": \"web/src/users.ts:L1-L1\",\n      \"snippet\": \"function listUsers()\",\n      \"score\": 1,\n      \"code\": \"export function listUsers() { return ['a']; }\",\n      \"scope\": \"web\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"serve · function\",\n      \"pointer\": \"api/src/server.ts:L2-L2\",\n      \"snippet\": \"function serve()\",\n      \"score\": 0.9838709677419354,\n      \"code\": \"export function serve() { return query('users'); }\",\n      \"scope\": \"api\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"title · function\",\n      \"pointer\": \"web/src/page.tsx:L2-L2\",\n      \"snippet\": \"function title()\",\n      \"score\": 0.9838709677419354,\n      \"code\": \"export function title() { return 'users'; }\",\n      \"scope\": \"web\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"users.ts · file\",\n      \"pointer\": \"web/src/users.ts\",\n      \"snippet\": \"\",\n      \"score\": 1,\n      \"scope\": \"web\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"server.ts · file\",\n      \"pointer\": \"api/src/server.ts\",\n      \"snippet\": \"\",\n      \"score\": 0.9838709677419354,\n      \"scope\": \"api\"\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"Page · function\",\n      \"pointer\": \"web/src/page.tsx:L1-L1\",\n      \"snippet\": \"function Page()\",\n      \"score\": 0.9838709677419354,\n      \"code\": \"export function Page() { return <main>{title()}</main>; }\",\n      \"scope\": \"web\"\n    }\n  ],\n  \"scopes\": {\n    \"federated\": [\n      \"api\",\n      \"web\"\n    ],\n    \"alsoMatched\": []\n  }\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

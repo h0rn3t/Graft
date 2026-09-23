@@ -1,0 +1,14 @@
+{
+  "args": [
+    "grep",
+    "encode"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "\"encode\" — 3 hits in 3 symbols across 2 files (searched 18 indexed files)\n\nencode · function · native/codec.c:L2-L2 · 1 in-edges\n  L2: int encode(int value) { return value + 1; }\n\nencode_twice · function · native/codec.c:L3-L3 · 0 in-edges\n  L3: int encode_twice(int value) { return encode(encode(value)); }\n\nencode · function · native/codec.h:L1-L1 · 0 in-edges\n  L1: int encode(int value);\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

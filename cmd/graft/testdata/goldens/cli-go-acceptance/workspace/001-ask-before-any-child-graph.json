@@ -1,0 +1,36 @@
+{
+  "args": [
+    "ask",
+    "users"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "tracked": [],
+  "gitDirs": [
+    "api",
+    "mono",
+    "web"
+  ],
+  "inputs": {
+    "api/src/db.ts": "export function query(table: string) { return table; }\n",
+    "api/src/server.ts": "import { query } from './db';\nexport function serve() { return query('users'); }\n",
+    "mono/package.json": "{\"name\":\"root\",\"workspaces\":[\"packages/*\"]}",
+    "mono/packages/core/package.json": "{\"name\":\"core\"}",
+    "mono/packages/core/src/store.ts": "export function storeGet0(key: string) { return key + '0'; }\nexport function storeGet1(key: string) { return key + '1'; }\nexport function storeGet2(key: string) { return key + '2'; }\nexport function storeGet3(key: string) { return key + '3'; }\nexport function storeGet4(key: string) { return key + '4'; }\nexport function storeGet5(key: string) { return key + '5'; }\nexport function storeGet6(key: string) { return key + '6'; }\n",
+    "mono/packages/docs/package.json": "{\"name\":\"docs\"}",
+    "mono/packages/docs/src/notes.ts": "// the store keeps values; the store is the source of truth\nexport function note0() { return 0; }\n// the store keeps values; the store is the source of truth\nexport function note1() { return 1; }\n// the store keeps values; the store is the source of truth\nexport function note2() { return 2; }\n// the store keeps values; the store is the source of truth\nexport function note3() { return 3; }\n// the store keeps values; the store is the source of truth\nexport function note4() { return 4; }\n// the store keeps values; the store is the source of truth\nexport function note5() { return 5; }\n",
+    "mono/packages/ui/package.json": "{\"name\":\"ui\"}",
+    "mono/packages/ui/src/view.ts": "import { storeGet0 } from '../../core/src/store';\nexport function renderStore0() { return storeGet0('x'); }\nimport { storeGet1 } from '../../core/src/store';\nexport function renderStore1() { return storeGet1('x'); }\nimport { storeGet2 } from '../../core/src/store';\nexport function renderStore2() { return storeGet2('x'); }\nimport { storeGet3 } from '../../core/src/store';\nexport function renderStore3() { return storeGet3('x'); }\nimport { storeGet4 } from '../../core/src/store';\nexport function renderStore4() { return storeGet4('x'); }\nimport { storeGet5 } from '../../core/src/store';\nexport function renderStore5() { return storeGet5('x'); }\nimport { storeGet6 } from '../../core/src/store';\nexport function renderStore6() { return storeGet6('x'); }\n",
+    "mono/tools/build.ts": "export function buildStore() { return 1; }\n",
+    "tools/notes.md": "# not a repo\n",
+    "web/src/page.tsx": "export function Page() { return <main>{title()}</main>; }\nexport function title() { return 'users'; }\n",
+    "web/src/users.ts": "export function listUsers() { return ['a']; }\n"
+  },
+  "status": 0,
+  "stdout": "graft ask — \"users\"  (empty)\n\nno matching nodes — try different words, or `graft build` if graft/ is empty\n\n[graft] no hits — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

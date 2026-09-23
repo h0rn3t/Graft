@@ -12,7 +12,15 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { captureGolden, snapshotGoldenFiles } from './goldens.js';
+
+function testHome(root: string): string {
+  const home = join(root, 'home');
+  mkdirSync(join(home, '.graft'), { recursive: true });
+  writeFileSync(join(home, '.graft', 'update-check.json'), JSON.stringify({ latest: '0.0.0', checkedAt: 9_999_999_999_999 }, null, 2));
+  return home;
+}
 
 function builtRepo(): string {
   const d = mkdtempSync(join(tmpdir(), 'graft-traversecli-'));
@@ -27,17 +35,9 @@ function builtRepo(): string {
   return d;
 }
 
-function runCli(args: string[]): { stdout: string; stderr: string; status: number } {
-  try {
-    const stdout = execFileSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', ...args], {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { stdout, stderr: '', status: 0 };
-  } catch (err) {
-    const e = err as { stdout?: string; stderr?: string; status?: number };
-    return { stdout: e.stdout ?? '', stderr: e.stderr ?? '', status: e.status ?? 1 };
-  }
+function runCli(args: string[], env: NodeJS.ProcessEnv = process.env): { stdout: string; stderr: string; status: number } {
+  const result = spawnSync(process.execPath, ['--import', 'tsx', 'src/cli.ts', ...args], { encoding: 'utf8', env });
+  return { stdout: result.stdout, stderr: result.stderr, status: result.status ?? 1 };
 }
 
 function builtGoCli(): string {
@@ -47,18 +47,9 @@ function builtGoCli(): string {
   return binary;
 }
 
-function runGoCli(binary: string, args: string[]): { stdout: string; stderr: string; status: number } {
-  try {
-    const stdout = execFileSync(binary, args, {
-      cwd: process.cwd(),
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
-    return { stdout, stderr: '', status: 0 };
-  } catch (err) {
-    const e = err as { stdout?: string; stderr?: string; status?: number };
-    return { stdout: e.stdout ?? '', stderr: e.stderr ?? '', status: e.status ?? 1 };
-  }
+function runGoCli(binary: string, args: string[], env: NodeJS.ProcessEnv = process.env): { stdout: string; stderr: string; status: number } {
+  const result = spawnSync(binary, args, { cwd: process.cwd(), encoding: 'utf8', env });
+  return { stdout: result.stdout, stderr: result.stderr, status: result.status ?? 1 };
 }
 
 test('graft callers: happy path shows header and the caller hit', () => {
@@ -248,9 +239,26 @@ test('Go callers CLI matches TypeScript JSON, exit codes, and diagnostics', () =
     ['callers', 'add', mkdtempSync(join(tmpdir(), 'graft-go-cli-missing-'))],
   ];
 
-  for (const args of cases) {
-    const typescript = runCli(args);
-    const go = runGoCli(binary, args);
+  for (const [index, args] of cases.entries()) {
+    const root = args[2];
+    const home = testHome(root);
+    const inputs = snapshotGoldenFiles(root);
+    const env = { ...process.env, HOME: home, USERPROFILE: home, DO_NOT_TRACK: '1', GRAFT_NO_REFRESH: '1', COLUMNS: '80' };
+    for (const name of ['GRAFT_DIR', 'GRAFT_BRAIN_TOKEN', 'GRAFT_BRAIN_ID', 'CI', 'GITHUB_ACTIONS']) delete env[name];
+    const typescript = runCli(args, env);
+    const go = runGoCli(binary, args, env);
+    if (process.env.GRAFT_CAPTURE_GOLDENS === '1') {
+      captureGolden(`per-command/graph-traverse-cli/${String(index + 1).padStart(3, '0')}`, {
+        args,
+        env: { DO_NOT_TRACK: '1', GRAFT_NO_REFRESH: '1', COLUMNS: '80' },
+        inputs,
+        status: typescript.status,
+        stdout: typescript.stdout,
+        stderr: typescript.stderr,
+        files: {},
+        normalize: { [root]: '<REPO>', [home]: '<HOME>' },
+      });
+    }
     assert.equal(go.status, typescript.status, `status mismatch for ${args.join(' ')}`);
     assert.equal(go.stderr, typescript.stderr, `stderr mismatch for ${args.join(' ')}`);
     if (go.status === 0) {

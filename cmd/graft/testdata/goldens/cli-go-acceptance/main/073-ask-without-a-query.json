@@ -1,0 +1,13 @@
+{
+  "args": [
+    "ask"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "error: missing required argument 'query'\n",
+  "files": {},
+  "checkFiles": false
+}

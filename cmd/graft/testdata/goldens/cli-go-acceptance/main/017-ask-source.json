@@ -1,0 +1,15 @@
+{
+  "args": [
+    "ask",
+    "queue push",
+    "--source"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"queue push\"  (lexical)\n\n1. Push · method  [symbol]\n   pkg/queue/queue.go:L7-L7\n   func (q *Queue) Push(v int)\n\n```\nfunc (q *Queue) Push(v int) { q.items = append(q.items, v); q.grow() }\n```\n\n2. main.go · file  [symbol]\n   cmd/server/main.go\n\n3. queue.go · file  [symbol]\n   pkg/queue/queue.go\n\n4. main · function  [symbol]\n   cmd/server/main.go:L5-L5\n   func main()\n\n```\nfunc main() { queue.New().Push(1) }\n```\n\n5. grow · method  [symbol]\n   pkg/queue/queue.go:L9-L9\n   func (q *Queue) grow()\n\n```\nfunc (q *Queue) grow() {}\n```\n\n6. Queue · struct  [symbol]\n   pkg/queue/queue.go:L3-L3\n   Queue\n\n```\ntype Queue struct{ items []int }\n```\n\n7. New · function  [symbol]\n   pkg/queue/queue.go:L5-L5\n   func New() *Queue\n\n```\nfunc New() *Queue { return &Queue{} }\n```\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

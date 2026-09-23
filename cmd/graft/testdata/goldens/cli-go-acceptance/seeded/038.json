@@ -1,0 +1,17 @@
+{
+  "args": [
+    "ask",
+    "RepoMapOptions"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"RepoMapOptions\"  (lexical)\n\n1. BuildRepoMap · function  [symbol]\n   internal/graph/map.go:L79-L152\n   func BuildRepoMap(wiring GraphV1, opts RepoMapOptions) RepoMap\n\n2. BuildRepoMapOptions · interface  [symbol]\n   src/graph/map.ts:L83-L90\n   interface BuildRepoMapOptions\n\n3. FederateMap · function  [symbol]\n   internal/graph/workspace.go:L230-L253\n   func FederateMap(root, contextDir string, options RepoMapOptions) string\n\n4. ResolveOptions · interface  [symbol]\n   src/graph/resolve.ts:L94-L99\n   interface ResolveOptions\n\n5. FederateAskOptions · interface  [symbol]\n   src/graph/workspace.ts:L186-L196\n   interface FederateAskOptions\n\n6. ResolveSymbolOptions · interface  [symbol]\n   src/graph/traverse.ts:L31-L36\n   interface ResolveSymbolOptions\n\n7. GrepOptions · interface  [symbol]\n   src/search/grep.ts:L66-L76\n   interface GrepOptions\n\n8. WorkspaceBuildOptions · interface  [symbol]\n   src/graph/workspace-cli.ts:L26-L43\n   interface WorkspaceBuildOptions\n",
+  "stderr": "",
+  "files": {}
+}

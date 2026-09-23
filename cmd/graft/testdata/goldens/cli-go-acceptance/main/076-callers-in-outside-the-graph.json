@@ -1,0 +1,16 @@
+{
+  "args": [
+    "callers",
+    "encode",
+    "--in",
+    "nowhere"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ nothing indexed under \"nowhere/\" (or any path prefix)\n",
+  "files": {},
+  "checkFiles": false
+}

@@ -1,0 +1,15 @@
+{
+  "args": [
+    "<REPO>/wiring.json"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {
+    "wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 2,\n    \"edgeCount\": 3,\n    \"languages\": [\n      \"typescript\"\n    ]\n  },\n  \"nodes\": [\n    {\n      \"id\": \"a.ts\",\n      \"name\": \"a.ts\",\n      \"kind\": \"file\",\n      \"path\": \"a.ts\",\n      \"span\": \"L1-L3\",\n      \"origin\": \"ast\"\n    },\n    {\n      \"id\": \"a.ts#main\",\n      \"name\": \"main\",\n      \"kind\": \"function\",\n      \"path\": \"a.ts\",\n      \"span\": \"L1-L3\",\n      \"origin\": \"ast\"\n    }\n  ],\n  \"edges\": [\n    {\n      \"source\": \"a.ts\",\n      \"target\": \"a.ts#main\",\n      \"relation\": \"contains\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"a.ts#main\",\n      \"target\": \"a.ts#main\",\n      \"relation\": \"calls\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"a.ts\",\n      \"target\": \"node:fs\",\n      \"relation\": \"imports\",\n      \"confidence\": \"inferred\"\n    }\n  ]\n}\n"
+  },
+  "status": 0,
+  "stdout": "graph-quality — <REPO>/wiring.json\n  nodes 2 (1 symbols) · edges 3\n  kinds:      file=1 function=1\n  origin:     ast=2\n  relations:  contains=1 calls=1 imports=1\n  confidence: extracted=2 inferred=1\n  calls resolved: 1/1 (100%)\n  orphan symbols: 0/1 (0%)\n  INVARIANTS: OK ✓\n  note: 1 self-loop calls\n",
+  "stderr": "",
+  "files": {}
+}

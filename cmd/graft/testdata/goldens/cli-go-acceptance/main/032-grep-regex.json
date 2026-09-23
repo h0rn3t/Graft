@@ -1,0 +1,14 @@
+{
+  "args": [
+    "grep",
+    "parse_\\w+"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "\"parse_\\w+\" — 2 hits in 2 symbols across 2 files (searched 18 indexed files)\n\nparse_line · function · rust/parse.rs:L1-L1 · 1 in-edges\n  L1: pub fn parse_line() -> i32 { 1 }\n\nrun · function · rust/lib.rs:L2-L2 · 0 in-edges\n  L2: pub fn run() -> i32 { parse::parse_line() }\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

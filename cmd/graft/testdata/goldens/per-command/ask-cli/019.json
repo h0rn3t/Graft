@@ -1,0 +1,28 @@
+{
+  "args": [
+    "ask",
+    "handler",
+    "<REPO>",
+    "--in",
+    "repoA",
+    "--json",
+    "--no-refresh"
+  ],
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {
+    "graft/workspace.json": "{\"version\":1,\"children\":[\"repoA\",\"repoB\"]}\n",
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.0\",\n  \"checkedAt\": 9999999999999\n}",
+    "repoA/a.ts": "export function alphaHandler(): number { return 1; }\n",
+    "repoA/graft/.graph/wiring.json": "{\"meta\":{\"version\":1,\"nodeCount\":2,\"edgeCount\":0,\"languages\":[\"ts\"]},\"nodes\":[{\"id\":\"a.ts\",\"name\":\"a.ts\",\"kind\":\"file\",\"path\":\"a.ts\",\"span\":\"L1-L1\",\"signature\":null,\"exported\":false,\"origin\":\"ast\",\"body_hash\":\"\",\"summary_state\":\"pending\",\"summary\":null,\"crux\":null},{\"id\":\"a.ts#alphaHandler\",\"name\":\"alphaHandler\",\"kind\":\"function\",\"path\":\"a.ts\",\"span\":\"L1-L1\",\"signature\":\"alphaHandler(): number\",\"exported\":true,\"origin\":\"ast\",\"body_hash\":\"\",\"body_text\":\"handler result\",\"summary_state\":\"pending\",\"summary\":null,\"crux\":null}],\"edges\":[]}",
+    "repoB/b.ts": "export function betaHandler(): number { return 1; }\n",
+    "repoB/graft/.graph/wiring.json": "{\"meta\":{\"version\":1,\"nodeCount\":2,\"edgeCount\":0,\"languages\":[\"ts\"]},\"nodes\":[{\"id\":\"b.ts\",\"name\":\"b.ts\",\"kind\":\"file\",\"path\":\"b.ts\",\"span\":\"L1-L1\",\"signature\":null,\"exported\":false,\"origin\":\"ast\",\"body_hash\":\"\",\"summary_state\":\"pending\",\"summary\":null,\"crux\":null},{\"id\":\"b.ts#betaHandler\",\"name\":\"betaHandler\",\"kind\":\"function\",\"path\":\"b.ts\",\"span\":\"L1-L1\",\"signature\":\"betaHandler(): number\",\"exported\":true,\"origin\":\"ast\",\"body_hash\":\"\",\"body_text\":\"handler result\",\"summary_state\":\"pending\",\"summary\":null,\"crux\":null}],\"edges\":[]}"
+  },
+  "status": 0,
+  "stdout": "{\n  \"query\": \"handler\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"alphaHandler · function\",\n      \"pointer\": \"repoA/a.ts:L1-L1\",\n      \"snippet\": \"alphaHandler(): number\",\n      \"score\": 1.5,\n      \"scope\": \"repoA\"\n    }\n  ],\n  \"scopes\": {\n    \"federated\": [\n      \"repoA\"\n    ],\n    \"alsoMatched\": []\n  }\n}\n",
+  "stderr": "",
+  "files": {}
+}

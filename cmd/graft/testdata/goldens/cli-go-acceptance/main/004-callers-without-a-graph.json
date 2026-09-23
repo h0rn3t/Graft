@@ -1,0 +1,15 @@
+{
+  "args": [
+    "callers",
+    "encode",
+    "--no-refresh"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ no graph found at <REPO>/graft — run `graft build` first\n",
+  "files": {},
+  "checkFiles": false
+}

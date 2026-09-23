@@ -1,0 +1,18 @@
+{
+  "args": [
+    "grep",
+    "SourceStat",
+    "-i"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "[graft] tokens saved ≈ 7,948 (97%) — this output ≈ 224 tok vs reading the 3 file(s) it covers whole ≈ 8,172 tok (estimate). At the end of your reply, tell the user the total graft tokens saved this turn — sum each such line across your graft calls — e.g. \"🌱 graft saved ~N tokens this turn\".\n\n\"SourceStat\" — 8 hits in 6 symbols across 3 files (searched 90 indexed files)\n\nlistSourceStats · function · src/graph/source-files.ts:L103-L120 · 2 in-edges\n  L103: export function listSourceStats(\n  L108: ): SourceStat[] {\n  L109: const out: SourceStat[] = [];\n\nbuildGraph · function · src/graph/build.ts:L151-L410 · 1 in-edges\n  L166: const files = listSourceStats(root, outDir, repoFiles);\n\nprobeDrift · function · src/graph/fingerprint.ts:L150-L196 · 1 in-edges\n  L158: for (const f of listSourceStats(root, outDir, undefined, onlyDirs)) {\n\nsrc/graph/build.ts (module level) · 0 in-edges\n  L35: import { filterByOnlyDirs, listSourceStats } from \"./source-files.js\";\n\nsrc/graph/fingerprint.ts (module level) · 0 in-edges\n  L27: import { listSourceStats } from \"./source-files.js\";\n\nSourceStat · interface · src/graph/source-files.ts:L87-L96 · 0 in-edges\n  L87: export interface SourceStat {\n",
+  "stderr": "",
+  "files": {}
+}

@@ -1,0 +1,15 @@
+{
+  "args": [
+    "<REPO>/wiring.json"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {
+    "wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 0,\n    \"edgeCount\": 0,\n    \"languages\": []\n  },\n  \"nodes\": [],\n  \"edges\": []\n}\n"
+  },
+  "status": 0,
+  "stdout": "graph-quality — <REPO>/wiring.json\n  nodes 0 (0 symbols) · edges 0\n  kinds:      \n  origin:     \n  relations:  \n  confidence: \n  calls resolved: 0/0 (null%)\n  orphan symbols: 0/0 (null%)\n  INVARIANTS: OK ✓\n",
+  "stderr": "",
+  "files": {}
+}

@@ -1,0 +1,13 @@
+{
+  "args": [
+    "stats"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft stats — session s1\n  graft reads:   3\n  source reads:  1   (Read / Grep / Glob)\n  mix:           75% graft\n  tokens saved:  ~12,345\n  value saved:   ~$0.04\n  last query:    store get\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

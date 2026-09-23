@@ -1,0 +1,18 @@
+{
+  "args": [
+    "grep",
+    "bodyLen",
+    "--json"
+  ],
+  "cwd": "<REPO>",
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"pattern\": \"bodyLen\",\n  \"filesSearched\": 90,\n  \"totalHits\": 4,\n  \"groups\": [\n    {\n      \"symbol\": {\n        \"id\": \"src/ask/ask.ts#lexical.bodyLen\",\n        \"name\": \"lexical.bodyLen\",\n        \"kind\": \"function\",\n        \"path\": \"src/ask/ask.ts\",\n        \"span\": \"L634-L638\"\n      },\n      \"path\": \"src/ask/ask.ts\",\n      \"inDegree\": 1,\n      \"hits\": [\n        {\n          \"line\": 634,\n          \"text\": \"const bodyLen = (m: Map<string, number>) => {\"\n        }\n      ]\n    },\n    {\n      \"symbol\": {\n        \"id\": \"src/ask/ask.ts#lexical\",\n        \"name\": \"lexical\",\n        \"kind\": \"function\",\n        \"path\": \"src/ask/ask.ts\",\n        \"span\": \"L488-L1203\"\n      },\n      \"path\": \"src/ask/ask.ts\",\n      \"inDegree\": 1,\n      \"hits\": [\n        {\n          \"line\": 683,\n          \"text\": \"? symbolDocs.reduce((a, d) => a + bodyLen(d.body), 0) / symbolDocs.length\"\n        },\n        {\n          \"line\": 738,\n          \"text\": \"bm25(q, body, idf, bodyLen(body), avgBodyLen)) *\"\n        },\n        {\n          \"line\": 921,\n          \"text\": \"bm25(q, body, idf, bodyLen(body), avgBodyLen)) *\"\n        }\n      ]\n    }\n  ],\n  \"truncated\": {\n    \"files\": 0,\n    \"hits\": 0\n  },\n  \"saved\": {\n    \"files\": 1,\n    \"baselineChars\": 71242\n  }\n}\n",
+  "stderr": "",
+  "files": {}
+}

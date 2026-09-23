@@ -1,0 +1,21 @@
+{
+  "args": [
+    "grep",
+    "NEEDLE",
+    "<REPO>",
+    "--json",
+    "--no-refresh"
+  ],
+  "env": {
+    "COLUMNS": "80",
+    "DO_NOT_TRACK": "1",
+    "GRAFT_NO_REFRESH": "1"
+  },
+  "inputs": {
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.0\",\n  \"checkedAt\": 9999999999999\n}"
+  },
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ no graph — run graft build first\n",
+  "files": {}
+}

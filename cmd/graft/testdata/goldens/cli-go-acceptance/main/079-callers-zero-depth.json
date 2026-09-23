@@ -1,0 +1,16 @@
+{
+  "args": [
+    "callers",
+    "encode",
+    "--depth",
+    "0"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ --depth must be a positive number or \"all\", got \"0\"\n",
+  "files": {},
+  "checkFiles": false
+}

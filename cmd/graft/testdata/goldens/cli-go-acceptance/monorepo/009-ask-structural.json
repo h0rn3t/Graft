@@ -1,0 +1,14 @@
+{
+  "args": [
+    "ask",
+    "who calls storeGet3"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "graft ask — \"who calls storeGet3\"  (structural)\n\ncallers / references of storeGet3\n\n- renderStore3  packages/ui/src/view.ts:L8-L8  (calls) — function renderStore3()\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}

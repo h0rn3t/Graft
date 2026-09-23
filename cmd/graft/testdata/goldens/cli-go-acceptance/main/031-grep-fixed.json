@@ -1,0 +1,15 @@
+{
+  "args": [
+    "grep",
+    "q.items",
+    "--fixed"
+  ],
+  "cwd": "<REPO>",
+  "env": {},
+  "inputs": {},
+  "status": 0,
+  "stdout": "\"q.items\" — 1 hits in 1 symbols across 1 files (searched 18 indexed files)\n\nQueue.Push · method · pkg/queue/queue.go:L7-L7 · 0 in-edges\n  L7: func (q *Queue) Push(v int) { q.items = append(q.items, v); q.grow() }\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": false
+}
