@@ -77,7 +77,7 @@ func TestWorkspaceQueryPreservesUnsupportedChildGraph(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(childRoot, "src", "app.ts"), []byte("export function current() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(childRoot, "src", "other.rs"), []byte("fn other() {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(childRoot, "src", "other.zig"), []byte("fn other() void {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	childContext := filepath.Join(childRoot, "graft")

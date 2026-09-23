@@ -144,14 +144,14 @@ func TestEnsureFreshChildrenPreservesChildLimitationsContract(t *testing.T) {
 	root := t.TempDir()
 	childRoot := filepath.Join(root, "api")
 	outDir := filepath.Join(childRoot, "graft")
-	options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".rs"}}
+	options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".zig"}}
 	writeRefreshSource(t, childRoot, "src/app.ts", "export function ready() {}\n")
 	buildAndWriteRefreshGraph(t, childRoot, options)
-	writeRefreshSource(t, childRoot, "src/tool.rs", "fn unsupported() {}\n")
+	writeRefreshSource(t, childRoot, "src/tool.zig", "fn unsupported() void {}\n")
 
 	got := EnsureFreshChildren(root, []string{"api"})
 	note := RefreshNote(got)
-	if got.Refreshed || !strings.Contains(note, "api/: graph refresh skipped: native graph cannot index 1 unsupported or unreadable source file(s), including \"src/tool.rs\"") {
+	if got.Refreshed || !strings.Contains(note, "api/: graph refresh skipped: native graph cannot index 1 unsupported or unreadable source file(s), including \"src/tool.zig\"") {
 		t.Errorf("EnsureFreshChildren(%q, [api]) = %#v, RefreshNote = %q, want child limitation without refresh", root, got, note)
 	}
 }
@@ -373,8 +373,8 @@ func TestEnsureFreshGraphUnsupportedSourceContract(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile(%q) before refresh error = %v", filepath.Join(outDir, ".cache", "fingerprint."+ExtractorID+".json"), err)
 	}
-	writeRefreshSource(t, root, "src/unsupported.rs", "fn unsupported() {}\n")
-	options := RefreshOptions{Source: sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".rs"}}}
+	writeRefreshSource(t, root, "src/unsupported.zig", "fn unsupported() void {}\n")
+	options := RefreshOptions{Source: sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".zig"}}}
 
 	got := EnsureFreshGraph(root, options)
 	if got.Refreshed || !strings.Contains(got.Note, "unsupported") {
@@ -396,15 +396,15 @@ func TestEnsureFreshGraphUnsupportedSourceContract(t *testing.T) {
 func TestEnsureFreshGraphUnsupportedBaselineContract(t *testing.T) {
 	root := t.TempDir()
 	outDir := filepath.Join(root, "graft")
-	options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".rs"}}
+	options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".zig"}}
 	writeRefreshSource(t, root, "src/app.ts", "export function retained() {}")
-	writeRefreshSource(t, root, "src/unsupported.rs", "fn unsupported() {}\n")
+	writeRefreshSource(t, root, "src/unsupported.zig", "fn unsupported() void {}\n")
 	built, err := BuildGraph(root, options)
 	if err != nil {
 		t.Fatalf("BuildGraph(%q, %#v) error = %v, want nil", root, options, err)
 	}
 	if len(built.Unsupported) != 1 {
-		t.Fatalf("BuildGraph(%q, %#v) unsupported = %v, want src/unsupported.rs", root, options, built.Unsupported)
+		t.Fatalf("BuildGraph(%q, %#v) unsupported = %v, want src/unsupported.zig", root, options, built.Unsupported)
 	}
 	if _, err := Write(built.Graph, outDir); err != nil {
 		t.Fatalf("Write(BuildGraph(%q), %q) error = %v, want nil", root, outDir, err)

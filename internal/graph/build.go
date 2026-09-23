@@ -17,7 +17,7 @@ import (
 // ExtractorID names the native extractor in its cache and fingerprint sidecars.
 // Bump it whenever extraction output or a grammar version changes, so a graph
 // built by an older extractor is never trusted as fresh.
-const ExtractorID = "go-v2"
+const ExtractorID = "go-v3"
 
 var goModuleLine = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)
 
@@ -168,6 +168,9 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 	languageSet := make(map[string]struct{})
 	for _, file := range files {
 		_, label, _ := languageOf(file.Rel)
+		if label == "" {
+			label, _ = genericLanguageOf(file.Rel)
+		}
 		source, readable, readErr := sourcefiles.Read(file.Abs)
 		fingerprint := FingerprintFile{Size: file.Size, MTimeMS: file.MTimeMS}
 		if readErr == nil && readable {
@@ -267,6 +270,9 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 
 // nativeSupported reports whether a native Go adapter extracts file.
 func nativeSupported(file string) bool {
+	if generic, ok := genericLanguageOf(file); ok && generic == "rust" {
+		return true
+	}
 	lang, _, ok := languageOf(file)
 	_, native := grammars[lang]
 	return ok && native

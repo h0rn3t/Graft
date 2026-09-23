@@ -26,7 +26,7 @@ func TestBuildGraphContract(t *testing.T) {
 	}
 	write("src/helper.js", "export function helper() {}")
 	write("src/main.ts", "import { helper } from \"./helper.js\";\nexport function run() { return helper; }")
-	write("src/main.rs", "fn main() {}")
+	write("src/main.zig", "fn main() void {}")
 
 	opts := sourcefiles.Options{OutDir: filepath.Join(root, "graft")}
 	got, err := BuildGraph(root, opts)
@@ -40,8 +40,8 @@ func TestBuildGraphContract(t *testing.T) {
 		{Source: "src/main.ts#run", Target: "src/helper.js#helper", Relation: "references", Confidence: "extracted"},
 	}
 	wantScopes := []ScopeV1{{Prefix: "", Label: "", Markers: []string{}}}
-	if got.Graph.Meta.Version != 1 || got.Graph.Meta.NodeCount != 4 || got.Graph.Meta.EdgeCount != len(wantEdges) || !reflect.DeepEqual(got.Graph.Meta.Languages, []string{"javascript", "typescript"}) || len(got.Graph.Nodes) != 4 || !reflect.DeepEqual(got.Graph.Edges, wantEdges) || !reflect.DeepEqual(got.Unsupported, []string{"src/main.rs"}) || len(got.Errors) != 0 || len(got.Limitations) != 0 || got.Graph.Meta.Scopes == nil || !reflect.DeepEqual(*got.Graph.Meta.Scopes, wantScopes) {
-		t.Errorf("BuildGraph(%q, %#v) = %#v, want GraphV1 with 4 nodes, 4 edges, TS/JS coverage, root scope, no limitations, and unsupported src/main.rs", root, opts, got)
+	if got.Graph.Meta.Version != 1 || got.Graph.Meta.NodeCount != 4 || got.Graph.Meta.EdgeCount != len(wantEdges) || !reflect.DeepEqual(got.Graph.Meta.Languages, []string{"javascript", "typescript"}) || len(got.Graph.Nodes) != 4 || !reflect.DeepEqual(got.Graph.Edges, wantEdges) || !reflect.DeepEqual(got.Unsupported, []string{"src/main.zig"}) || len(got.Errors) != 0 || len(got.Limitations) != 0 || got.Graph.Meta.Scopes == nil || !reflect.DeepEqual(*got.Graph.Meta.Scopes, wantScopes) {
+		t.Errorf("BuildGraph(%q, %#v) = %#v, want GraphV1 with 4 nodes, 4 edges, TS/JS coverage, root scope, no limitations, and unsupported src/main.zig", root, opts, got)
 	}
 	if invariants := CheckInvariants(got.Graph); len(invariants.Problems) > 0 {
 		t.Errorf("CheckInvariants(BuildGraph(%q)) = %v, want no problems", root, invariants.Problems)
@@ -78,8 +78,8 @@ func TestBuildGraphFingerprintContract(t *testing.T) {
 	outDir := filepath.Join(root, "graft")
 	path := filepath.Join(root, "src", "app.ts")
 	source := "export function run() {}"
-	unsupportedPath := filepath.Join(root, "src", "app.rs")
-	unsupportedSource := "package app\n"
+	unsupportedPath := filepath.Join(root, "src", "app.zig")
+	unsupportedSource := "const app = 1;\n"
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(path), err)
 	}
@@ -89,13 +89,13 @@ func TestBuildGraphFingerprintContract(t *testing.T) {
 	if err := os.WriteFile(unsupportedPath, []byte(unsupportedSource), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v", unsupportedPath, err)
 	}
-	opts := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".rs"}, OnlyDirs: []string{"src"}}
+	opts := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".zig"}, OnlyDirs: []string{"src"}}
 	result, err := BuildGraph(root, opts)
 	if err != nil {
 		t.Fatalf("BuildGraph(%q, %#v) error = %v, want nil", root, opts, err)
 	}
-	if !slices.Equal(result.Unsupported, []string{"src/app.rs"}) {
-		t.Errorf("BuildGraph(%q, %#v) unsupported = %v, want [src/app.rs]", root, opts, result.Unsupported)
+	if !slices.Equal(result.Unsupported, []string{"src/app.zig"}) {
+		t.Errorf("BuildGraph(%q, %#v) unsupported = %v, want [src/app.zig]", root, opts, result.Unsupported)
 	}
 	fingerprint, err := ReadFingerprint(outDir, ExtractorID)
 	if err != nil {
@@ -112,8 +112,8 @@ func TestBuildGraphFingerprintContract(t *testing.T) {
 		t.Errorf("BuildGraph(%q, %#v) fingerprints = %v for files %v, want both sources", root, opts, result.Fingerprints, files)
 	}
 	wantHashes := map[string]string{
-		"src/app.ts": sourcefiles.Hash(source),
-		"src/app.rs": sourcefiles.Hash(unsupportedSource),
+		"src/app.ts":  sourcefiles.Hash(source),
+		"src/app.zig": sourcefiles.Hash(unsupportedSource),
 	}
 	for _, file := range files {
 		got := result.Fingerprints[file.Rel]

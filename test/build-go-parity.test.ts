@@ -191,6 +191,19 @@ test("Go build matches TypeScript for Python and Go sources, cold and incrementa
   assert.equal(buildGo(binary, go), buildTs(ts), "incremental build");
 });
 
+test("Go build matches TypeScript for Rust tags and crate imports", () => {
+  const binary = goBinary();
+  const { ts, go } = twin({
+    "Cargo.toml": "[package]\nname = \"sample\"\nversion = \"0.1.0\"\n",
+    "src/lib.rs": "mod util;\nuse crate::util::Thing;\npub fn run() -> i32 { util::helper() }\n",
+    "src/util.rs": "pub struct Thing;\npub fn helper() -> i32 { 1 }\n",
+  });
+  const cold = buildTs(ts);
+  assert.equal(buildGo(binary, go), cold, "cold Rust build");
+  assert.match(cold, /"target": "src\/util.rs#helper"/, "fixture exercises Rust call resolution");
+  assert.equal(buildGo(binary, go), cold, "incremental Rust build");
+});
+
 test("Go build carries the prior meaning layer forward like TypeScript", () => {
   const binary = goBinary();
   const { ts, go } = twin({ "src/a.ts": "export function kept() { return 1; }\nexport function changed() { return 1; }\n" });

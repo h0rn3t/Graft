@@ -179,8 +179,11 @@ var callTypes = map[language][]string{
 
 var functionValueTypes = []string{"arrow_function", "function", "function_expression", "generator_function"}
 
-// extractFile parses one depth-tier source file into its nodes and unresolved edges.
+// extractFile parses one supported source file into its nodes and unresolved edges.
 func extractFile(rel, source string) (extractResult, error) {
+	if generic, ok := genericLanguageOf(rel); ok && generic == "rust" {
+		return extractRust(rel, source)
+	}
 	lang, label, ok := languageOf(rel)
 	newGrammar, native := grammars[lang]
 	if !ok || !native {

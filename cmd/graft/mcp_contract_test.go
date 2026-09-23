@@ -334,7 +334,7 @@ func TestMCPCallPreservesUnsupportedWorkspaceChild(t *testing.T) {
 	if err := os.WriteFile(source, []byte("export function current() {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(childRoot, "src", "other.rs"), []byte("fn other() {}\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(childRoot, "src", "other.zig"), []byte("fn other() void {}\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	childContext := filepath.Join(childRoot, "graft")
@@ -482,8 +482,8 @@ func TestMCPRefreshContract(t *testing.T) {
 				if err := os.MkdirAll(filepath.Join(root, "src"), 0o755); err != nil {
 					t.Fatalf("MkdirAll(%q) for unsupported source error = %v, want nil", filepath.Join(root, "src"), err)
 				}
-				if err := os.WriteFile(filepath.Join(root, "src", "other.rs"), []byte("fn other() {}"), 0o644); err != nil {
-					t.Fatalf("WriteFile(%q) for unsupported source error = %v, want nil", filepath.Join(root, "src", "other.rs"), err)
+				if err := os.WriteFile(filepath.Join(root, "src", "other.zig"), []byte("fn other() void {}"), 0o644); err != nil {
+					t.Fatalf("WriteFile(%q) for unsupported source error = %v, want nil", filepath.Join(root, "src", "other.zig"), err)
 				}
 			}
 			built, err := graph.BuildGraph(root, sourcefiles.Options{OutDir: contextDir})
@@ -528,7 +528,7 @@ func TestMCPRefreshContract(t *testing.T) {
 			if tt.wantStale && (!strings.Contains(got.text, "src/app.ts#after") || !strings.Contains(got.text, "src/app.ts#before")) {
 				t.Errorf("mcpCall(%q, %q, %q) text = %q, want added and removed symbol IDs", root, contextDir, tt.tool, got.text)
 			}
-			if tt.wantUnsupported && (!strings.Contains(got.text, "graph check: PARTIAL") || !strings.Contains(got.text, "src/other.rs")) {
+			if tt.wantUnsupported && (!strings.Contains(got.text, "graph check: PARTIAL") || !strings.Contains(got.text, "src/other.zig")) {
 				t.Errorf("mcpCall(%q, %q, %q) text = %q, want an explicit unsupported-source limitation", root, contextDir, tt.tool, got.text)
 			}
 			if slices.ContainsFunc(loaded.Nodes, func(node graph.NodeV1) bool { return node.Name == "after" }) {

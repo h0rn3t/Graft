@@ -79,8 +79,8 @@ func TestExtractFileContract(t *testing.T) {
 		},
 		{
 			name:    "unsupported extension",
-			path:    "src/app.rs",
-			source:  "fn run() {}",
+			path:    "src/app.zig",
+			source:  "fn run() void {}",
 			wantErr: true,
 		},
 	}
