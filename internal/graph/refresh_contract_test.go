@@ -51,6 +51,37 @@ func TestEnsureFreshGraphRefreshesDriftContract(t *testing.T) {
 	}
 }
 
+func TestSelectedWalkAgreesAcrossBuildProbeAndRefreshContract(t *testing.T) {
+	t.Setenv("GRAFT_NO_REFRESH", "false")
+	t.Setenv("GRAFT_REFRESH", "hash")
+	root := t.TempDir()
+	outDir := filepath.Join(root, "graft")
+	writeRefreshSource(t, root, ".graft/config.json", `{"includeDirs":["vendor"]}`)
+	writeRefreshSource(t, root, "src/app.ts", "export function app() {}\n")
+	writeRefreshSource(t, root, "vendor/code.ts", "export function before() {}\n")
+	writeRefreshSource(t, root, "src/other.rb", "def other; end\n")
+	buildAndWriteRefreshGraph(t, root, sourcefiles.Options{OutDir: outDir})
+	fingerprint, err := ReadFingerprint(outDir, ExtractorID)
+	if err != nil || fingerprint == nil || len(fingerprint.Files) != 2 {
+		t.Fatalf("ReadFingerprint(%q) = %#v, %v, want src/app.ts and vendor/code.ts", outDir, fingerprint, err)
+	}
+	drift, err := ProbeDrift(root, outDir, ExtractorID, sourcefiles.Options{})
+	if err != nil || drift == nil || len(drift.Added)+len(drift.Changed)+len(drift.Removed) != 0 {
+		t.Errorf("ProbeDrift(%q) = %#v, %v, want clean selected file set", root, drift, err)
+	}
+	if result := EnsureFreshGraph(root, RefreshOptions{}); result.Refreshed || result.Note != "" {
+		t.Errorf("EnsureFreshGraph(%q) = %#v, want clean selected file set", root, result)
+	}
+	writeRefreshSource(t, root, "vendor/code.ts", "export function after() {}\n")
+	drift, err = ProbeDrift(root, outDir, ExtractorID, sourcefiles.Options{})
+	if err != nil || drift == nil || !slices.Equal(drift.Changed, []string{"vendor/code.ts"}) {
+		t.Errorf("ProbeDrift(%q) = %#v, %v, want changed vendor/code.ts only", root, drift, err)
+	}
+	if result := EnsureFreshGraph(root, RefreshOptions{}); !result.Refreshed {
+		t.Errorf("EnsureFreshGraph(%q) = %#v, want included vendor refresh", root, result)
+	}
+}
+
 func TestEnsureFreshChildrenContract(t *testing.T) {
 	type repoFixture struct {
 		path, before, after, wantName string
@@ -138,21 +169,20 @@ func TestEnsureFreshChildrenContract(t *testing.T) {
 	}
 }
 
-func TestEnsureFreshChildrenPreservesChildLimitationsContract(t *testing.T) {
+func TestEnsureFreshChildrenExcludesOtherLanguagesContract(t *testing.T) {
 	t.Setenv("GRAFT_NO_REFRESH", "false")
 	t.Setenv("GRAFT_REFRESH", "hash")
 	root := t.TempDir()
 	childRoot := filepath.Join(root, "api")
 	outDir := filepath.Join(childRoot, "graft")
-	options := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts", ".zig"}}
+	options := sourcefiles.Options{OutDir: outDir}
 	writeRefreshSource(t, childRoot, "src/app.ts", "export function ready() {}\n")
 	buildAndWriteRefreshGraph(t, childRoot, options)
 	writeRefreshSource(t, childRoot, "src/tool.zig", "fn unsupported() void {}\n")
 
 	got := EnsureFreshChildren(root, []string{"api"})
-	note := RefreshNote(got)
-	if got.Refreshed || !strings.Contains(note, "api/: graph refresh skipped: native graph cannot index 1 unsupported or unreadable source file(s), including \"src/tool.zig\"") {
-		t.Errorf("EnsureFreshChildren(%q, [api]) = %#v, RefreshNote = %q, want child limitation without refresh", root, got, note)
+	if got.Refreshed || RefreshNote(got) != "" {
+		t.Errorf("EnsureFreshChildren(%q, [api]) = %#v, want no refresh for excluded source", root, got)
 	}
 }
 

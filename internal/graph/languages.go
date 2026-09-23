@@ -25,15 +25,6 @@ var genericLanguages = []struct {
 	{"lua", []string{".lua"}},
 }
 
-// containerLanguages mirrors src/graph/container.ts CONTAINER_LANGS: files whose
-// wrapper grammar locates an embedded block for the depth tier.
-var containerLanguages = []struct {
-	name       string
-	extensions []string
-}{
-	{"vue", []string{".vue"}},
-}
-
 func genericLanguageOf(file string) (string, bool) {
 	lower := strings.ToLower(file)
 	for _, lang := range genericLanguages {

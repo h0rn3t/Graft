@@ -30,6 +30,9 @@ var (
 )
 
 func familyOf(file string) string {
+	if strings.EqualFold(path.Ext(file), ".sql") {
+		return "sql"
+	}
 	lang := ""
 	if grammar, _, ok := languageOf(file); ok {
 		lang = string(grammar)
@@ -225,6 +228,31 @@ func (ix *resolveIndex) resolveReference(edge rawEdge, add func(string, string, 
 			add(edge.source, hit.id, "references", hit.confidence)
 		} else {
 			add(edge.source, edge.name, "references", "inferred")
+		}
+	case strings.EqualFold(path.Ext(edge.file), ".sql"):
+		candidates := make([]NodeV1, 0)
+		for _, candidate := range ix.globalName[edge.name] {
+			if strings.EqualFold(path.Ext(candidate.Path), ".sql") && candidate.Kind == "type" {
+				candidates = append(candidates, candidate)
+			}
+		}
+		if len(candidates) == 0 && !strings.Contains(edge.name, ".") {
+			for name, named := range ix.globalName {
+				if strings.HasSuffix(name, "."+edge.name) {
+					for _, candidate := range named {
+						if strings.EqualFold(path.Ext(candidate.Path), ".sql") && candidate.Kind == "type" {
+							candidates = append(candidates, candidate)
+						}
+					}
+				}
+			}
+		}
+		if len(candidates) == 1 {
+			confidence := Confidence("inferred")
+			if candidates[0].Path == edge.file {
+				confidence = "extracted"
+			}
+			add(edge.source, candidates[0].ID, "references", confidence)
 		}
 	case source.Origin == "generic":
 		if hit, ok := ix.resolveName(edge.name, edge.file, []Kind{"class", "interface", "struct", "enum", "type", "module"}); ok && hit.id != edge.source {

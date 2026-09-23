@@ -181,8 +181,13 @@ var functionValueTypes = []string{"arrow_function", "function", "function_expres
 
 // extractFile parses one supported source file into its nodes and unresolved edges.
 func extractFile(rel, source string) (extractResult, error) {
-	if generic, ok := genericLanguageOf(rel); ok && generic == "rust" {
-		return extractRust(rel, source)
+	if strings.EqualFold(path.Ext(rel), ".sql") {
+		return extractSQL(rel, source)
+	}
+	if generic, ok := genericLanguageOf(rel); ok {
+		if adapter, native := genericNativeGrammars[generic]; native {
+			return extractGenericTags(rel, source, generic, adapter.language(), *adapter.tags)
+		}
 	}
 	lang, label, ok := languageOf(rel)
 	newGrammar, native := grammars[lang]

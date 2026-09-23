@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"maps"
@@ -56,6 +57,19 @@ func Walk(root string, opts Options) ([]File, error) {
 		return nil, fmt.Errorf("resolve source root: %w", err)
 	}
 	requested = filepath.Clean(requested)
+	var persisted struct {
+		IncludeDirs       []string `json:"includeDirs"`
+		FollowSubmodules  bool     `json:"followSubmodules"`
+		FollowNestedRepos bool     `json:"followNestedRepos"`
+	}
+	if data, err := os.ReadFile(filepath.Join(requested, ".graft", "config.json")); err == nil {
+		_ = json.Unmarshal(data, &persisted)
+	}
+	if len(opts.IncludeDirs) == 0 {
+		opts.IncludeDirs = persisted.IncludeDirs
+	}
+	opts.FollowSubmodules = opts.FollowSubmodules || persisted.FollowSubmodules
+	opts.FollowNestedRepos = opts.FollowNestedRepos || persisted.FollowNestedRepos
 	canonical, err := canonicalWalkRoot(requested)
 	if err != nil {
 		return nil, err

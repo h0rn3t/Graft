@@ -17,7 +17,7 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	onlyDirs := make([]string, 0, len(opts.onlyDirs))
+	var onlyDirs []string
 	for _, dir := range opts.onlyDirs {
 		dir = strings.ReplaceAll(dir, "\\", "/")
 		dir = strings.Trim(filepath.ToSlash(filepath.Clean(dir)), "/")
@@ -52,7 +52,7 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		writeDiagnostic(stderr, "✗ ask index write failed: %v\n", err)
 		return 1
 	}
-	if err := graph.WriteFingerprint(contextDir, graph.ExtractorID, built.Fingerprints, onlyDirs); err != nil {
+	if err := graph.WriteFingerprint(contextDir, graph.ExtractorID, built.Fingerprints, built.OnlyDirs); err != nil {
 		writeDiagnostic(stderr, "✗ fingerprint write failed: %v\n", err)
 		return 1
 	}

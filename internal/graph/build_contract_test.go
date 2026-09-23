@@ -40,8 +40,8 @@ func TestBuildGraphContract(t *testing.T) {
 		{Source: "src/main.ts#run", Target: "src/helper.js#helper", Relation: "references", Confidence: "extracted"},
 	}
 	wantScopes := []ScopeV1{{Prefix: "", Label: "", Markers: []string{}}}
-	if got.Graph.Meta.Version != 1 || got.Graph.Meta.NodeCount != 4 || got.Graph.Meta.EdgeCount != len(wantEdges) || !reflect.DeepEqual(got.Graph.Meta.Languages, []string{"javascript", "typescript"}) || len(got.Graph.Nodes) != 4 || !reflect.DeepEqual(got.Graph.Edges, wantEdges) || !reflect.DeepEqual(got.Unsupported, []string{"src/main.zig"}) || len(got.Errors) != 0 || len(got.Limitations) != 0 || got.Graph.Meta.Scopes == nil || !reflect.DeepEqual(*got.Graph.Meta.Scopes, wantScopes) {
-		t.Errorf("BuildGraph(%q, %#v) = %#v, want GraphV1 with 4 nodes, 4 edges, TS/JS coverage, root scope, no limitations, and unsupported src/main.zig", root, opts, got)
+	if got.Graph.Meta.Version != 1 || got.Graph.Meta.NodeCount != 4 || got.Graph.Meta.EdgeCount != len(wantEdges) || !reflect.DeepEqual(got.Graph.Meta.Languages, []string{"javascript", "typescript"}) || len(got.Graph.Nodes) != 4 || !reflect.DeepEqual(got.Graph.Edges, wantEdges) || len(got.Unsupported) != 0 || len(got.Errors) != 0 || len(got.Limitations) != 0 || got.Graph.Meta.Scopes == nil || !reflect.DeepEqual(*got.Graph.Meta.Scopes, wantScopes) {
+		t.Errorf("BuildGraph(%q, %#v) = %#v, want GraphV1 with 4 nodes, 4 edges, TS/JS coverage, root scope, and excluded src/main.zig", root, opts, got)
 	}
 	if invariants := CheckInvariants(got.Graph); len(invariants.Problems) > 0 {
 		t.Errorf("CheckInvariants(BuildGraph(%q)) = %v, want no problems", root, invariants.Problems)
@@ -70,6 +70,67 @@ func TestBuildGraphContract(t *testing.T) {
 	}
 	if !bytes.Equal(first, second) {
 		t.Errorf("Write(BuildGraph(%q)) output changed between identical builds", root)
+	}
+}
+
+func TestBuildGraphReusesStoredOnlyDirsContract(t *testing.T) {
+	root := t.TempDir()
+	outDir := filepath.Join(root, "graft")
+	for _, rel := range []string{"src/inside.ts", "other/outside.ts"} {
+		path := filepath.Join(root, rel)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte("export function mark() {}\n"), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", path, err)
+		}
+	}
+	opts := sourcefiles.Options{OutDir: outDir, OnlyDirs: []string{"src"}}
+	first, err := BuildGraph(root, opts)
+	if err != nil {
+		t.Fatalf("BuildGraph(%q, %#v) error = %v", root, opts, err)
+	}
+	if err := WriteFingerprint(outDir, ExtractorID, first.Fingerprints, opts.OnlyDirs); err != nil {
+		t.Fatalf("WriteFingerprint(%q, %q) error = %v", outDir, ExtractorID, err)
+	}
+	second, err := BuildGraph(root, sourcefiles.Options{OutDir: outDir})
+	if err != nil {
+		t.Fatalf("BuildGraph(%q, no scope) error = %v", root, err)
+	}
+	if len(second.Fingerprints) != 1 || !reflect.DeepEqual(first.Graph, second.Graph) {
+		t.Errorf("BuildGraph(%q, no scope) = %#v, want stored src scope and unchanged graph", root, second)
+	}
+}
+
+func TestBuildGraphRemovesExcludedLanguageNodesContract(t *testing.T) {
+	root := t.TempDir()
+	outDir := filepath.Join(root, "graft")
+	if err := os.WriteFile(filepath.Join(root, "main.ts"), []byte("export function main() {}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(main.ts) error = %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "legacy.rb"), []byte("def legacy; end\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(legacy.rb) error = %v", err)
+	}
+	prior := GraphV1{Meta: GraphMeta{Version: 1}, Nodes: []NodeV1{{ID: "legacy.rb#legacy", Name: "legacy", Kind: "method", Path: "legacy.rb", Span: "L1-L1"}}}
+	if _, err := Write(prior, outDir); err != nil {
+		t.Fatalf("Write(prior, %q) error = %v", outDir, err)
+	}
+	got, err := BuildGraph(root, sourcefiles.Options{OutDir: outDir})
+	if err != nil {
+		t.Fatalf("BuildGraph(%q) error = %v", root, err)
+	}
+	if len(got.Unsupported) != 0 || len(got.Errors) != 0 || len(got.Fingerprints) != 1 || slices.ContainsFunc(got.Graph.Nodes, func(node NodeV1) bool { return node.Path == "legacy.rb" }) {
+		t.Errorf("BuildGraph(%q) = %#v, want complete selected graph without Ruby nodes", root, got)
+	}
+	if _, err := Write(got.Graph, outDir); err != nil {
+		t.Fatalf("Write(BuildGraph(%q), %q) error = %v", root, outDir, err)
+	}
+	stored, err := Read(WiringPath(outDir))
+	if err != nil {
+		t.Fatalf("Read(%q) error = %v", WiringPath(outDir), err)
+	}
+	if slices.ContainsFunc(stored.Nodes, func(node NodeV1) bool { return node.Path == "legacy.rb" }) {
+		t.Errorf("Read(%q) nodes = %#v, want no excluded Ruby nodes", WiringPath(outDir), stored.Nodes)
 	}
 }
 

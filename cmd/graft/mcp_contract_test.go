@@ -455,17 +455,16 @@ func TestMCPWorkspaceFreshnessDoesNotRepairDrift(t *testing.T) {
 
 func TestMCPRefreshContract(t *testing.T) {
 	for _, tt := range []struct {
-		name            string
-		tool            string
-		editSource      bool
-		addUnsupported  bool
-		wantRefresh     bool
-		wantStale       bool
-		wantUnsupported bool
+		name           string
+		tool           string
+		editSource     bool
+		addUnsupported bool
+		wantRefresh    bool
+		wantStale      bool
 	}{
 		{name: "refresh before retrieval", tool: "graft_file_api", editSource: true, wantRefresh: true},
 		{name: "freshness check reports without repairing", tool: "graft_check_freshness", editSource: true, wantStale: true},
-		{name: "unsupported source is never called clean", tool: "graft_check_freshness", addUnsupported: true, wantUnsupported: true},
+		{name: "excluded source does not make graph partial", tool: "graft_check_freshness", addUnsupported: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Setenv("GRAFT_NO_REFRESH", "false")
@@ -528,8 +527,8 @@ func TestMCPRefreshContract(t *testing.T) {
 			if tt.wantStale && (!strings.Contains(got.text, "src/app.ts#after") || !strings.Contains(got.text, "src/app.ts#before")) {
 				t.Errorf("mcpCall(%q, %q, %q) text = %q, want added and removed symbol IDs", root, contextDir, tt.tool, got.text)
 			}
-			if tt.wantUnsupported && (!strings.Contains(got.text, "graph check: PARTIAL") || !strings.Contains(got.text, "src/other.zig")) {
-				t.Errorf("mcpCall(%q, %q, %q) text = %q, want an explicit unsupported-source limitation", root, contextDir, tt.tool, got.text)
+			if tt.addUnsupported && (!strings.Contains(got.text, "graph check: OK") || strings.Contains(got.text, "src/other.zig")) {
+				t.Errorf("mcpCall(%q, %q, %q) text = %q, want excluded source omitted from freshness", root, contextDir, tt.tool, got.text)
 			}
 			if slices.ContainsFunc(loaded.Nodes, func(node graph.NodeV1) bool { return node.Name == "after" }) {
 				t.Errorf("Read(%q) nodes = %v, want freshness check to leave the stale graph unchanged", graph.WiringPath(contextDir), loaded.Nodes)

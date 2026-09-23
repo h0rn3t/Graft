@@ -95,6 +95,15 @@ func TestWalkContract(t *testing.T) {
 			want: []string{"vendor/lib/c.ts"},
 		},
 		{
+			name: "persisted include directory applies without an option",
+			setup: func(t *testing.T, root string) {
+				setupTree(t, root)
+				writeSourcefilesTestFile(t, root, ".graft/config.json", `{"includeDirs":["vendor"]}`)
+			},
+			options: Options{Extensions: []string{".ts"}, OnlyDirs: []string{"vendor/lib"}},
+			want:    []string{"vendor/lib/c.ts"},
+		},
+		{
 			name:  "file size limit",
 			setup: setupTree,
 			options: Options{
@@ -147,6 +156,21 @@ func TestWalkContract(t *testing.T) {
 				writeSourcefilesTestFile(t, root, "main.ts", "main")
 			},
 			options: Options{Extensions: []string{".ts"}, FollowNestedRepos: true},
+			want:    []string{"main.ts", "nested/child.ts"},
+		},
+		{
+			name: "persisted nested repository choice applies without an option",
+			setup: func(t *testing.T, root string) {
+				initSourcefilesTestRepo(t, root)
+				nested := filepath.Join(root, "nested")
+				initSourcefilesTestRepo(t, nested)
+				writeSourcefilesTestFile(t, nested, "child.ts", "child")
+				runSourcefilesTestGit(t, "-C", nested, "add", "child.ts")
+				runSourcefilesTestGit(t, "-C", nested, "commit", "-m", "child")
+				writeSourcefilesTestFile(t, root, "main.ts", "main")
+				writeSourcefilesTestFile(t, root, ".graft/config.json", `{"followNestedRepos":true}`)
+			},
+			options: Options{Extensions: []string{".ts"}},
 			want:    []string{"main.ts", "nested/child.ts"},
 		},
 		{

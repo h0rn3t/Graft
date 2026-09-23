@@ -204,6 +204,45 @@ test("Go build matches TypeScript for Rust tags and crate imports", () => {
   assert.equal(buildGo(binary, go), cold, "incremental Rust build");
 });
 
+test("Go build matches TypeScript for C and C++ tags and local includes", () => {
+  const binary = goBinary();
+  const { ts, go } = twin({
+    "src/local.h": "int helper(void);\n",
+    "src/main.c": '#include "local.h"\n#include <stdio.h>\nint helper(void) { return 1; }\nint run(void) { return helper(); }\n',
+    "src/local.hpp": "int make();\n",
+    "src/main.cpp": '#include "local.hpp"\nclass Widget { public: int make() { return 1; } int run() { return make(); } };\n',
+  });
+  const cold = buildTs(ts);
+  assert.equal(buildGo(binary, go), cold, "cold C/C++ build");
+  assert.match(cold, /"target": "src\/local.h"/, "fixture exercises C local include");
+  assert.match(cold, /"target": "src\/local.hpp"/, "fixture exercises C++ local include");
+  assert.equal(buildGo(binary, go), cold, "incremental C/C++ build");
+});
+
+test("Go build matches TypeScript for Java tags and references", () => {
+  const binary = goBinary();
+  const { ts, go } = twin({
+    "src/Worker.java": "interface Service {}\nclass Base {}\nclass Worker extends Base implements Service { Service run() { return make(); } Service make() { return null; } }\n",
+  });
+  const cold = buildTs(ts);
+  assert.equal(buildGo(binary, go), cold, "cold Java build");
+  assert.match(cold, /"target": "src\/Worker.java#Worker.make"/, "fixture exercises Java call resolution");
+  assert.equal(buildGo(binary, go), cold, "incremental Java build");
+});
+
+test("Go build excludes Ruby while TypeScript still indexes it", () => {
+  const binary = goBinary();
+  const { ts, go } = twin({
+    "src/main.ts": "export function main() {}\n",
+    "lib/widget.rb": "class Widget\n  def render\n    self.draw\n  end\n  def draw\n    1\n  end\nend\n",
+  });
+  assert.match(buildTs(ts), /"id": "lib\/widget.rb#Widget"/, "TypeScript retains Ruby support");
+  const cold = buildGo(binary, go);
+  assert.doesNotMatch(cold, /lib\/widget.rb/, "Go excludes Ruby by default");
+  assert.match(cold, /"id": "src\/main.ts#main"/, "Go keeps selected sources");
+  assert.equal(buildGo(binary, go), cold, "incremental Go build");
+});
+
 test("Go build carries the prior meaning layer forward like TypeScript", () => {
   const binary = goBinary();
   const { ts, go } = twin({ "src/a.ts": "export function kept() { return 1; }\nexport function changed() { return 1; }\n" });

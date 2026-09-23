@@ -17,33 +17,25 @@ import (
 // ExtractorID names the native extractor in its cache and fingerprint sidecars.
 // Bump it whenever extraction output or a grammar version changes, so a graph
 // built by an older extractor is never trusted as fresh.
-const ExtractorID = "go-v3"
+const ExtractorID = "go-v5"
 
 var goModuleLine = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)
 
-// SourceExtensions lists every extension a depth, breadth, or container tier
-// claims, sorted and de-duplicated (source-files.ts supportedExtensions).
+var selectedSourceExtensions = []string{
+	".c", ".cc", ".cjs", ".cpp", ".cts", ".cxx", ".go", ".h", ".hh", ".hpp",
+	".java", ".js", ".jsx", ".mjs", ".mts", ".py", ".pyi", ".rs", ".sql", ".ts", ".tsx",
+}
+
+// SourceExtensions lists the selected native non-deep source extensions.
 func SourceExtensions() []string {
-	set := make(map[string]struct{})
-	for _, entry := range depthExtensions {
-		set[entry.ext] = struct{}{}
-	}
-	for _, lang := range genericLanguages {
-		for _, extension := range lang.extensions {
-			set[extension] = struct{}{}
-		}
-	}
-	for _, lang := range containerLanguages {
-		for _, extension := range lang.extensions {
-			set[extension] = struct{}{}
-		}
-	}
-	return slices.Sorted(maps.Keys(set))
+	return slices.Clone(selectedSourceExtensions)
 }
 
 // BuildResult contains a graph and its known coverage limitations.
 type BuildResult struct {
 	Graph GraphV1
+	// OnlyDirs is the effective persisted source scope used by this build.
+	OnlyDirs []string
 	// Parsed is the number of supported source files parsed during this build.
 	Parsed int
 	// Reused is the number of supported source files replayed from the extraction cache.
@@ -99,6 +91,21 @@ const extractCacheVersion = 2
 // `.cache` directory and the prior graph's meaning layer is carried over.
 // Persist the returned fingerprints only after Write succeeds.
 func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
+	if opts.OnlyDirs == nil && opts.OutDir != "" {
+		fingerprintDir := opts.OutDir
+		if !filepath.IsAbs(fingerprintDir) {
+			fingerprintDir = filepath.Join(root, fingerprintDir)
+		}
+		fingerprint, err := ReadFingerprint(fingerprintDir, ExtractorID)
+		if err != nil {
+			if _, graphErr := os.Stat(WiringPath(fingerprintDir)); graphErr == nil {
+				return BuildResult{}, fmt.Errorf("read source scope: %w", err)
+			}
+		}
+		if err == nil && fingerprint != nil {
+			opts.OnlyDirs = slices.Clone(fingerprint.OnlyDirs)
+		}
+	}
 	extensions := make(map[string]struct{})
 	wanted := opts.Extensions
 	if len(wanted) == 0 {
@@ -158,6 +165,7 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 	}
 	current := extractCache{Version: extractCacheVersion, Extractor: ExtractorID, Files: make(map[string]cachedFile, len(files))}
 	result := BuildResult{
+		OnlyDirs:     slices.Clone(opts.OnlyDirs),
 		Fingerprints: make(map[string]FingerprintFile, len(files)),
 		Unsupported:  make([]string, 0),
 		Errors:       make([]string, 0),
@@ -170,6 +178,9 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		_, label, _ := languageOf(file.Rel)
 		if label == "" {
 			label, _ = genericLanguageOf(file.Rel)
+		}
+		if strings.EqualFold(path.Ext(file.Rel), ".sql") {
+			label = "sql"
 		}
 		source, readable, readErr := sourcefiles.Read(file.Abs)
 		fingerprint := FingerprintFile{Size: file.Size, MTimeMS: file.MTimeMS}
@@ -270,8 +281,16 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 
 // nativeSupported reports whether a native Go adapter extracts file.
 func nativeSupported(file string) bool {
-	if generic, ok := genericLanguageOf(file); ok && generic == "rust" {
+	if !slices.Contains(selectedSourceExtensions, strings.ToLower(path.Ext(file))) {
+		return false
+	}
+	if strings.EqualFold(path.Ext(file), ".sql") {
 		return true
+	}
+	if generic, ok := genericLanguageOf(file); ok {
+		if _, native := genericNativeGrammars[generic]; native {
+			return true
+		}
 	}
 	lang, _, ok := languageOf(file)
 	_, native := grammars[lang]

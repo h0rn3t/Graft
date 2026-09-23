@@ -155,6 +155,9 @@ func probeDrift(root, outDir string, opts sourcefiles.Options, fingerprint *Fing
 	}
 	opts.OutDir = outDir
 	opts.OnlyDirs = slices.Clone(fingerprint.OnlyDirs)
+	if len(opts.Extensions) == 0 {
+		opts.Extensions = SourceExtensions()
+	}
 	files, err := sourcefiles.Walk(root, opts)
 	if err != nil {
 		return nil, err

@@ -8,19 +8,40 @@ import (
 
 	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
 	sitter "github.com/tree-sitter/go-tree-sitter"
+	c "github.com/tree-sitter/tree-sitter-c/bindings/go"
+	cpp "github.com/tree-sitter/tree-sitter-cpp/bindings/go"
+	ruby "github.com/tree-sitter/tree-sitter-ruby/bindings/go"
 	rust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
 )
 
 //go:embed queries/rust.scm
 var rustTags string
 
-// extractRust implements the generic tags-query tier for Rust.
-func extractRust(rel, source string) (extractResult, error) {
-	lang := sitter.NewLanguage(rust.Language())
+//go:embed queries/c.scm
+var cTags string
+
+//go:embed queries/cpp.scm
+var cppTags string
+
+//go:embed queries/ruby.scm
+var rubyTags string
+
+var genericNativeGrammars = map[string]struct {
+	language func() *sitter.Language
+	tags     *string
+}{
+	"rust": {func() *sitter.Language { return sitter.NewLanguage(rust.Language()) }, &rustTags},
+	"c":    {func() *sitter.Language { return sitter.NewLanguage(c.Language()) }, &cTags},
+	"cpp":  {func() *sitter.Language { return sitter.NewLanguage(cpp.Language()) }, &cppTags},
+	"ruby": {func() *sitter.Language { return sitter.NewLanguage(ruby.Language()) }, &rubyTags},
+}
+
+// extractGenericTags implements the shared tags-query tier for native grammars.
+func extractGenericTags(rel, source, name string, lang *sitter.Language, tags string) (extractResult, error) {
 	parser := sitter.NewParser()
 	defer parser.Close()
 	if err := parser.SetLanguage(lang); err != nil {
-		return extractResult{}, fmt.Errorf("set rust grammar: %w", err)
+		return extractResult{}, fmt.Errorf("set %s grammar: %w", name, err)
 	}
 	data := []byte(source)
 	tree := parser.Parse(data, nil)
@@ -28,9 +49,9 @@ func extractRust(rel, source string) (extractResult, error) {
 		return extractResult{}, fmt.Errorf("parse %q: tree-sitter returned no tree", rel)
 	}
 	defer tree.Close()
-	query, queryErr := sitter.NewQuery(lang, rustTags)
+	query, queryErr := sitter.NewQuery(lang, tags)
 	if queryErr != nil {
-		return extractResult{}, fmt.Errorf("compile rust tags query: %s", queryErr.Message)
+		return extractResult{}, fmt.Errorf("compile %s tags query: %s", name, queryErr.Message)
 	}
 	defer query.Close()
 	cursor := sitter.NewQueryCursor()
@@ -77,8 +98,12 @@ func extractRust(rel, source string) (extractResult, error) {
 		}
 		if defNode != nil && nameNode != nil {
 			defNameAt[nameNode.StartByte()] = struct{}{}
-			if _, duplicate := seen[defNode.StartByte()]; !duplicate {
-				seen[defNode.StartByte()] = struct{}{}
+			whole := defNode
+			for parent := whole.Parent(); parent != nil && genericDefContainer(parent.Kind()); parent = whole.Parent() {
+				whole = parent
+			}
+			if _, duplicate := seen[whole.StartByte()]; !duplicate {
+				seen[whole.StartByte()] = struct{}{}
 				name := nameNode.Utf8Text(data)
 				base := rel + "#" + name
 				id := base
@@ -89,10 +114,10 @@ func extractRust(rel, source string) (extractResult, error) {
 					id = fmt.Sprintf("%s~%d", base, suffix)
 				}
 				minted[id] = struct{}{}
-				start, end := defNode.StartPosition().Row, defNode.EndPosition().Row
+				start, end := whole.StartPosition().Row, whole.EndPosition().Row
 				sig := strings.TrimSpace(lines[start])
 				sig = strings.TrimSpace(strings.TrimSuffix(sig, "{"))
-				body := string(data[defNode.StartByte():defNode.EndByte()])
+				body := string(data[whole.StartByte():whole.EndByte()])
 				node := NodeV1{
 					ID: id, Name: name, Kind: kind, Path: rel,
 					Span:     fmt.Sprintf("L%d-L%d", start+1, end+1),
@@ -103,7 +128,7 @@ func extractRust(rel, source string) (extractResult, error) {
 					node.Signature = &sig
 				}
 				nodes = append(nodes, node)
-				defs = append(defs, definition{id: id, start: defNode.StartByte(), end: defNode.EndByte()})
+				defs = append(defs, definition{id: id, start: whole.StartByte(), end: whole.EndByte()})
 			}
 		}
 		if callNode != nil && nameNode != nil {
@@ -122,19 +147,34 @@ func extractRust(rel, source string) (extractResult, error) {
 		}
 		edges = append(edges, rawEdge{source: sourceID, relation: "calls", name: call.name, file: rel})
 	}
-	var visitUses func(*sitter.Node)
-	visitUses = func(node *sitter.Node) {
-		if node.Kind() == "use_declaration" {
+	var visitImports func(*sitter.Node)
+	visitImports = func(node *sitter.Node) {
+		if name == "rust" && node.Kind() == "use_declaration" {
 			if spec, ok := rustUseModule(node.Utf8Text(data)); ok {
 				edges = append(edges, rawEdge{source: rel, relation: "imports", specifier: spec, file: rel})
 			}
 		}
+		if (name == "c" || name == "cpp") && node.Kind() == "preproc_include" {
+			if pathNode := node.ChildByFieldName("path"); pathNode != nil {
+				raw := pathNode.Utf8Text(data)
+				if strings.HasPrefix(raw, "\"") {
+					if spec := strings.TrimSpace(strings.Trim(raw, "\"")); spec != "" {
+						edges = append(edges, rawEdge{source: rel, relation: "imports", specifier: spec, file: rel})
+					}
+				}
+			}
+		}
 		for _, child := range namedChildren(node) {
-			visitUses(child)
+			visitImports(child)
 		}
 	}
-	visitUses(tree.RootNode())
-	return extractResult{language: "rust", nodes: nodes, rawEdges: edges}, nil
+	visitImports(tree.RootNode())
+	return extractResult{language: name, nodes: nodes, rawEdges: edges}, nil
+}
+
+func genericDefContainer(kind string) bool {
+	return strings.HasSuffix(kind, "definition") || strings.HasSuffix(kind, "declaration") ||
+		strings.HasSuffix(kind, "specifier") || strings.HasSuffix(kind, "_item")
 }
 
 func rustUseModule(raw string) (string, bool) {
