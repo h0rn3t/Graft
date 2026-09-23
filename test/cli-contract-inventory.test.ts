@@ -76,13 +76,18 @@ test("every inventoried command matches its commander usage and flags", () => {
   }
 });
 
-test("build --deep is the only TypeScript-routed invocation", () => {
+test("deep build and visualization are TypeScript-routed invocations", () => {
   assert.deepEqual(
     inventory.exceptions.map(({ invocation, backend }) => ({ invocation, backend })),
-    [{ invocation: ["build", "--deep"], backend: "typescript" }],
+    [
+      { invocation: ["build", "--deep"], backend: "typescript" },
+      { invocation: ["viz"], backend: "typescript" },
+      { invocation: ["blast", "--export-viz"], backend: "typescript" },
+    ],
   );
   assert.ok(inventory.commands.find((c) => c.name === "build")?.options.includes("--deep"));
-  assert.deepEqual(inventory.commands.filter((c) => c.backend !== "go"), []);
+  assert.ok(inventory.commands.find((c) => c.name === "blast")?.options.includes("--export-viz <dir>"));
+  assert.deepEqual(inventory.commands.filter((c) => c.backend !== "go").map((c) => c.name), ["viz"]);
 });
 
 function sourceFiles(dir: string): string[] {

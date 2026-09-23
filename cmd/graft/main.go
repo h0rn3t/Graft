@@ -121,6 +121,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return runBuild(opts, stdout, stderr)
 	case "check":
 		return runCheck(opts, stdout, stderr)
+	case "stats":
+		return runStats(opts, stdout)
 	case "callers":
 		return runCallers(opts, stdout, stderr)
 	case "skeleton":
@@ -261,7 +263,7 @@ func parseArgs(args []string) (callersOptions, error) {
 			positionals = append(positionals, arg)
 		}
 	}
-	if len(positionals) == 0 || (positionals[0] != "build" && positionals[0] != "check" && positionals[0] != "callers" && positionals[0] != "skeleton" && positionals[0] != "grep" && positionals[0] != "map" && positionals[0] != "ask" && positionals[0] != "mcp") {
+	if len(positionals) == 0 || (positionals[0] != "build" && positionals[0] != "check" && positionals[0] != "stats" && positionals[0] != "callers" && positionals[0] != "skeleton" && positionals[0] != "grep" && positionals[0] != "map" && positionals[0] != "ask" && positionals[0] != "mcp") {
 		return callersOptions{}, fmt.Errorf("usage: graft build [dir] [options], graft check [dir] [options], graft <ask|callers|skeleton|grep> <query> [dir] [options], graft map [dir] [options], or graft mcp [dir]")
 	}
 	if positionals[0] == "build" {
@@ -281,6 +283,17 @@ func parseArgs(args []string) (callersOptions, error) {
 			return callersOptions{}, fmt.Errorf("unexpected argument %q", positionals[2])
 		}
 		opts.command = "check"
+		if len(positionals) == 2 {
+			opts.root = positionals[1]
+			opts.rootSet = true
+		}
+		return opts, nil
+	}
+	if positionals[0] == "stats" {
+		if len(positionals) > 2 {
+			return callersOptions{}, fmt.Errorf("unexpected argument %q", positionals[2])
+		}
+		opts.command = "stats"
 		if len(positionals) == 2 {
 			opts.root = positionals[1]
 			opts.rootSet = true
