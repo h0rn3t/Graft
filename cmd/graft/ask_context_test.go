@@ -33,7 +33,7 @@ func TestAskCompactSource(t *testing.T) {
 
 func TestAskHumanOmitsSavingsBanner(t *testing.T) {
 	result := graph.AskResult{Query: "example", Mode: "lexical", Hits: []graph.AskHit{{Title: "example", Pointer: "example.go:L1-L3", Code: "func example() {}"}}, Saved: &graph.AskSavings{Files: 1, BaselineChars: 40000}}
-	if got := formatAskText(result); strings.Contains(got, "tokens saved") || strings.Contains(got, "At the end of your reply") {
+	if got := formatAskText(result, false); strings.Contains(got, "tokens saved") || strings.Contains(got, "At the end of your reply") {
 		t.Errorf("formatAskText() = %q, want source without savings instructions", got)
 	}
 }
@@ -45,11 +45,11 @@ func TestAskBudgetAndSeen(t *testing.T) {
 				{Title: "example", Pointer: "example.go:L1-L80", Code: strings.Repeat("  doWork(\"世界😀\")\n", 80)},
 				{Title: "caller", Pointer: "caller.go:L1-L80", Code: strings.Repeat("  example()\n", 80)},
 			}}
-			got, err := fitAskBudget(result, 256, asJSON)
+			got, err := fitAskBudget(result, 256, asJSON, false)
 			if err != nil {
 				t.Fatal(err)
 			}
-			body := renderAskBudget(got, asJSON)
+			body := renderAskBudget(got, asJSON, false)
 			if savings.Tokens(savings.Length(body)) > 256 || !strings.Contains(got.Note, "budget") || len(got.Hits) == 0 {
 				t.Errorf("fitAskBudget(256) = %s, want bounded answer retaining primary hit and truncation note", body)
 			}

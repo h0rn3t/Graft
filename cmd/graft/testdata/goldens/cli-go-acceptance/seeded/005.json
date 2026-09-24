@@ -11,7 +11,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "graft skeleton — internal/graph/lang_go.go\n- L13-L39  method describeGo  func (x *extractor) describeGo(node *sitter.Node) *defDescriptor\n- L41-L52  function goReceiverParameter  func goReceiverParameter(node *sitter.Node) *sitter.Node\n- L55-L68  function goReceiverType  func goReceiverType(node *sitter.Node, source []byte) string\n- L71-L76  function goReceiverVar  func goReceiverVar(node *sitter.Node, source []byte) string\n- L80-L89  function goExported  func goExported(name string) bool\n- L91-L97  method goImportSpecifier  func (x *extractor) goImportSpecifier(node *sitter.Node) string\n- L99-L114  method goDefName  func (w *bindingWalk) goDefName(node *sitter.Node) (string, bool)\n- L116-L142  method handleGo  func (w *bindingWalk) handleGo(node *sitter.Node, scope []string)\n- L145-L165  method goExpressionType  func (w *bindingWalk) goExpressionType(expression *sitter.Node) string\n",
+  "stdout": "graft skeleton — internal/graph/lang_go.go\n- L13-L39 func (x *extractor) describeGo(node *sitter.Node) *defDescriptor\n- L41-L52 func goReceiverParameter(node *sitter.Node) *sitter.Node\n- L55-L68 func goReceiverType(node *sitter.Node, source []byte) string\n- L71-L76 func goReceiverVar(node *sitter.Node, source []byte) string\n- L80-L89 func goExported(name string) bool\n- L91-L97 func (x *extractor) goImportSpecifier(node *sitter.Node) string\n- L99-L114 func (w *bindingWalk) goDefName(node *sitter.Node) (string, bool)\n- L116-L142 func (w *bindingWalk) handleGo(node *sitter.Node, scope []string)\n- L145-L165 func (w *bindingWalk) goExpressionType(expression *sitter.Node) string\n",
   "stderr": "",
   "files": {}
 }

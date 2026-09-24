@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "graft ask — \"who calls encode\"  (structural)\n\ncallers / references of encode\n\n- encode_twice  native/codec.c:L3-L3  (calls) — int encode_twice(int value) { return encode(encode(value)); }\n",
+  "stdout": "callers / references of encode\n\n- encode_twice  native/codec.c:L3-L3  (calls) — int encode_twice(int value) { return encode(encode(value)); }\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

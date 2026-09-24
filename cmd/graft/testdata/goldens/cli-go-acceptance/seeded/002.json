@@ -13,7 +13,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "graft ask — \"askLexConcept\"  (lexical)\n\n1. askLexConcept · struct  [symbol]\n   internal/graph/ask_lexical.go:L79-L83\n   askLexConcept\n\n2. askConceptPointer · function  [symbol]\n   internal/graph/ask.go:L488-L493\n   func askConceptPointer(concept AskConcept) string\n\n3. lexical · function  [symbol]\n   src/ask/ask.ts:L488-L1203\n   function lexical( query: string, corpus: Corpus, limit: number, graphRank: boolean, inPrefix?: string, fileFirst = true, fileComplement = false, fileTopLock = false, includeRankingMetadata = false, ): AskResult\n\n[graft] only 3 hits — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
+  "stdout": "1. askLexConcept · struct\n   internal/graph/ask_lexical.go:L79-L83\n   askLexConcept\n\n2. askConceptPointer · function\n   internal/graph/ask.go:L488-L493\n   func askConceptPointer(concept AskConcept) string\n\n3. readConceptCards · function\n   internal/graph/cards.go:L167-L200\n   func readConceptCards(outDir string) ([]conceptCard, error)\n",
   "stderr": "",
   "files": {}
 }

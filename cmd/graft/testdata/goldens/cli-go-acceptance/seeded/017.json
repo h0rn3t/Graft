@@ -11,7 +11,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "graft skeleton — internal/graph/lang_sql.go\n- L11-L15  struct sqlToken  sqlToken\n- L17-L108  function lexSQL  func lexSQL(source string) ([]sqlToken, error)\n- L110-L134  function sqlName  func sqlName(tokens []sqlToken, at int) (string, int)\n- L136-L252  function extractSQL  func extractSQL(rel, source string) (extractResult, error)\n",
+  "stdout": "graft skeleton — internal/graph/lang_sql.go\n- L11-L15 sqlToken\n- L17-L108 func lexSQL(source string) ([]sqlToken, error)\n- L110-L134 func sqlName(tokens []sqlToken, at int) (string, int)\n- L136-L252 func extractSQL(rel, source string) (extractResult, error)\n",
   "stderr": "",
   "files": {}
 }

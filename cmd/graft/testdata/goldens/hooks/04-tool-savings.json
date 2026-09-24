@@ -25,9 +25,6 @@
   "status": 0,
   "stdout": "",
   "stderr": "",
-  "files": {
-    "repo/graft/.cache/session/usage.json": "{\n  \"lastQuery\": null,\n  \"perAgentQuery\": {},\n  \"graftReads\": 1,\n  \"sourceReads\": 0,\n  \"savedTokens\": 3000,\n  \"injectedPointers\": [],\n  \"nudges\": 0,\n  \"turnUsedGraft\": true,\n  \"host\": \"claude-code\"\n}",
-    "repo/graft/.cache/session/usage.json.lock": ""
-  },
+  "files": {},
   "checkFiles": true
 }

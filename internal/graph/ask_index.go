@@ -30,6 +30,10 @@ func askOrderedCounts(text string) askBag {
 	return bag
 }
 
+// AskIndexVersion is the ask index format. Version 2 stores terms folded by
+// AskFold; an index of any other version is treated as absent.
+const AskIndexVersion = 2
+
 // WriteAskIndex stores the lexical body tokens omitted from the persisted graph.
 func WriteAskIndex(outDir string, graph GraphV1) error {
 	type document struct {
@@ -79,7 +83,7 @@ func WriteAskIndex(outDir string, graph GraphV1) error {
 		DF         [][]any    `json:"df"`
 		DocCount   int        `json:"docCount"`
 		Docs       []document `json:"docs"`
-	}{Version: 1, AvgBodyLen: average, DF: pairs(df), DocCount: len(docs), Docs: docs}, "")
+	}{Version: AskIndexVersion, AvgBodyLen: average, DF: pairs(df), DocCount: len(docs), Docs: docs}, "")
 	if err != nil {
 		return fmt.Errorf("encode ask index: %w", err)
 	}

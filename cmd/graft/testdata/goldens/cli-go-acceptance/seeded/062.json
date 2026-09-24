@@ -13,7 +13,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "graft ask — \"extractFile\"  (lexical)\n\n1. extractFile · function  [symbol]\n   internal/graph/extract.go:L183-L229\n   func extractFile(rel, source string) (extractResult, error)\n\n2. extractFile · function  [symbol]\n   src/graph/extract.ts:L387-L440\n   function extractFile(rel: string, source: string, lang: Language): ExtractResult\n\n3. ExtractEntry · interface  [symbol]\n   src/graph/extract-cache.ts:L39-L51\n   interface ExtractEntry\n\n[graft] only 3 hits — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
+  "stdout": "1. extractFile · function\n   internal/graph/extract.go:L183-L229\n   func extractFile(rel, source string) (extractResult, error)\n\n2. extractFile · function\n   src/graph/extract.ts:L387-L440\n   function extractFile(rel: string, source: string, lang: Language): ExtractResult\n\n3. readExtractCache · function\n   src/graph/extract-cache.ts:L198-L207\n   function readExtractCache(outDir: string): ExtractCache\n",
   "stderr": "",
   "files": {}
 }

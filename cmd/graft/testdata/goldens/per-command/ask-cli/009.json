@@ -17,7 +17,7 @@
     "src/root.ts": "export function root(): string {\n  return \"needle\";\n}\n"
   },
   "status": 0,
-  "stdout": "graft ask — \"absent\"  (empty)\n\nno matching nodes — try different words, or `graft build` if graft/ is empty\n\n[graft] no hits — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
+  "stdout": "no matching nodes — try different words, or `graft build` if graft/ is empty\n\n[graft] no hits — don't re-ask with new wording; switch tool: `graft grep -i \"absent\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
   "stderr": "",
   "files": {}
 }

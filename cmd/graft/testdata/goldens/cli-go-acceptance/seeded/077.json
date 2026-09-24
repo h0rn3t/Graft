@@ -11,7 +11,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "graft skeleton — internal/graph/grep_contract_test.go\n- L11-L107  function TestGrepContract  func TestGrepContract(t *testing.T)\n- L109-L115  function grepContractNode  func grepContractNode(id, name, kind, path, span string, chars int) NodeV1\n- L117-L126  function writeGrepFile  func writeGrepFile(t *testing.T, root, path, text string)\n",
+  "stdout": "graft skeleton — internal/graph/grep_contract_test.go\n- L11-L107 func TestGrepContract(t *testing.T)\n- L109-L115 func grepContractNode(id, name, kind, path, span string, chars int) NodeV1\n- L117-L126 func writeGrepFile(t *testing.T, root, path, text string)\n",
   "stderr": "",
   "files": {}
 }

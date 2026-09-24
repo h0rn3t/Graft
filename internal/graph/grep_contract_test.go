@@ -23,6 +23,34 @@ func TestGrepMatchesLineEndOnCRLF(t *testing.T) {
 	}
 }
 
+func TestGrepListsProductionGroupsFirst(t *testing.T) {
+	dir := t.TempDir()
+	writeGrepFile(t, dir, "src/app.ts", "export function app() {\n  NEEDLE app\n}\n")
+	writeGrepFile(t, dir, "testdata/copy.ts", "export function copy() {\n  NEEDLE copy\n  NEEDLE again\n}\n")
+	app := grepContractNode("src/app.ts#app", "app", "function", "src/app.ts", "L1-L3", 0)
+	copied := grepContractNode("testdata/copy.ts#copy", "copy", "function", "testdata/copy.ts", "L1-L4", 0)
+	wiring := GraphV1{
+		Nodes: []NodeV1{
+			grepContractNode("src/app.ts", "app.ts", "file", "src/app.ts", "L1-L3", 0), app,
+			grepContractNode("testdata/copy.ts", "copy.ts", "file", "testdata/copy.ts", "L1-L4", 0), copied,
+		},
+		Edges: []EdgeV1{
+			{Source: "src/x.ts#one", Target: copied.ID, Relation: "calls"},
+			{Source: "src/x.ts#two", Target: copied.ID, Relation: "calls"},
+		},
+	}
+	result, err := Grep(wiring, dir, "NEEDLE", GrepOptions{})
+	if err != nil {
+		t.Fatalf("Grep(%q) error = %v, want nil", "NEEDLE", err)
+	}
+	if len(result.Groups) != 2 || result.TotalHits != 3 {
+		t.Fatalf("Grep(%q) = %d groups, %d hits, want 2 groups, 3 hits", "NEEDLE", len(result.Groups), result.TotalHits)
+	}
+	if got := []string{result.Groups[0].Path, result.Groups[1].Path}; got[0] != "src/app.ts" || got[1] != "testdata/copy.ts" {
+		t.Errorf("Grep(%q) group order = %v, want [src/app.ts testdata/copy.ts]", "NEEDLE", got)
+	}
+}
+
 func TestGrepContract(t *testing.T) {
 	dir := t.TempDir()
 	writeGrepFile(t, dir, "src/a.ts", "NEEDLE module\nexport function root() {\n  NEEDLE root\n}\n")

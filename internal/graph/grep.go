@@ -167,8 +167,16 @@ func Grep(wiring GraphV1, repoRoot, pattern string, opts GrepOptions) (GrepResul
 	}
 
 	compare := localeCompare()
+	// Copies (testdata, fixtures, generated, vendored) follow production code;
+	// every hit is still reported.
+	copied := func(group GrepGroup) int {
+		if askTestPathPattern.MatchString(group.Path) {
+			return 1
+		}
+		return 0
+	}
 	slices.SortStableFunc(result.Groups, func(left, right GrepGroup) int {
-		return cmp.Or(cmp.Compare(right.InDegree, left.InDegree), compare(left.Path, right.Path))
+		return cmp.Or(cmp.Compare(copied(left), copied(right)), cmp.Compare(right.InDegree, left.InDegree), compare(left.Path, right.Path))
 	})
 	result.Saved = grepSavings(wiring.Nodes, hitPaths)
 	return result, nil

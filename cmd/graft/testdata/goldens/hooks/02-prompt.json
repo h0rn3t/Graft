@@ -23,7 +23,7 @@
     "prompt": "how does auth verification work"
   },
   "status": 0,
-  "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[graft] starting points for this task: pull the code inline with `graft ask \\\"<what you need>\\\" --source`, trace impact with `graft callers <symbol>`, or search with `graft grep \\\"<literal>\\\"`:\\n 1. verify: src/auth.ts:L1-L4\\n    function verify() {}\"}}",
+  "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[graft] starting points for this task: pull the code inline with `graft ask \\\"<what you need>\\\" --source`, trace impact with `graft callers <symbol>`, or search with `graft grep \\\"<literal>\\\"`:\\n 1. verify: src/auth.ts:L1-L4 — function verify() {}\"}}",
   "stderr": "",
   "files": {
     "repo/ask-stub.cjs": "process.stdout.write(\"{\\\"query\\\":\\\"auth verification\\\",\\\"mode\\\":\\\"lexical\\\",\\\"coverage\\\":1,\\\"coverageStrong\\\":1,\\\"hits\\\":[{\\\"kind\\\":\\\"symbol\\\",\\\"title\\\":\\\"verify\\\",\\\"pointer\\\":\\\"src/auth.ts:L1-L4\\\",\\\"snippet\\\":\\\"function verify() {}\\\",\\\"score\\\":1}]}\");\n",

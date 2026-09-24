@@ -13,7 +13,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "graft ask — \"isImport\"  (lexical)\n\n1. resolveImportTarget · method  [symbol]\n   internal/graph/resolve.go:L190-L204\n   func (ix *resolveIndex) resolveImportTarget(edge rawEdge) string\n\n2. collectTsImportBindings · function  [symbol]\n   src/graph/extract.ts:L1012-L1024\n   function collectTsImportBindings( node: Parser.SyntaxNode, specifier: string, out: Map<string, { name: string; specifier: string }>, ): void\n\n3. importSpecifier · method  [symbol]\n   internal/graph/extract.go:L639-L662\n   func (x *extractor) importSpecifier(node *sitter.Node, lang language) string\n\n[graft] only 3 hits — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
+  "stdout": "1. resolveImportTarget · method\n   internal/graph/resolve.go:L190-L204\n   func (ix *resolveIndex) resolveImportTarget(edge rawEdge) string\n\n2. collectTsImportBindings · function\n   src/graph/extract.ts:L1012-L1024\n   function collectTsImportBindings( node: Parser.SyntaxNode, specifier: string, out: Map<string, { name: string; specifier: string }>, ): void\n\n3. importSpecifier · method\n   internal/graph/extract.go:L639-L662\n   func (x *extractor) importSpecifier(node *sitter.Node, lang language) string\n",
   "stderr": "",
   "files": {}
 }

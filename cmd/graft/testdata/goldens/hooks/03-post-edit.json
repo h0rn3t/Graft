@@ -29,6 +29,8 @@
   "stderr": "",
   "files": {
     "repo/check-stub.cjs": "process.stdout.write(\"{\\\"graph\\\":{\\\"changed\\\":[\\\"src/auth.ts\\\"],\\\"added\\\":[],\\\"removed\\\":[]}}\");\n",
+    "repo/graft/.cache/session/default.json": "{\n  \"lastQuery\": null,\n  \"perAgentQuery\": {},\n  \"graftReads\": 0,\n  \"sourceReads\": 0,\n  \"savedTokens\": 0,\n  \"injectedPointers\": [],\n  \"blastShown\": [\n    \"name:\\u0000src/auth.ts\\u0000d8ca2a0ae823da4e9dc23c9346c5aaecb26f852d7cc2c626e3209f376301edf6\"\n  ],\n  \"nudges\": 0\n}",
+    "repo/graft/.cache/session/default.json.lock": "",
     "repo/graft/.cache/stats.json": "{\n  \"nodeCount\": 0,\n  \"edgeCount\": 0,\n  \"languages\": [],\n  \"totalCount\": 0,\n  \"readyCount\": 0,\n  \"staleCount\": 1,\n  \"dirty\": true,\n  \"syncing\": false,\n  \"syncedAt\": null,\n  \"lastFile\": \"src/auth.ts\"\n}",
     "repo/graft/.cache/stats.json.lock": "",
     "repo/graft/.graph/wiring.json": "{\"meta\":{\"nodeCount\":2,\"edgeCount\":1,\"languages\":[\"typescript\"]},\"nodes\":[{\"id\":\"src/auth.ts\",\"name\":\"auth.ts\",\"kind\":\"file\",\"path\":\"src/auth.ts\",\"span\":\"L1-L4\"},{\"id\":\"src/client.ts#call\",\"name\":\"call\",\"kind\":\"function\",\"path\":\"src/client.ts\",\"span\":\"L1-L1\"}],\"edges\":[{\"source\":\"src/client.ts#call\",\"target\":\"src/auth.ts\",\"relation\":\"calls\",\"confidence\":\"extracted\"}]}"

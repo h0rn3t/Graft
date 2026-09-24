@@ -9,7 +9,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "graft ask — \"format\"  (lexical)\n\n1. format · function  [symbol]\n   src/format.js:L1-L1\n   function format(text)\n\n2. store.ts · file  [symbol]\n   src/store.ts\n\n3. format.js · file  [symbol]\n   src/format.js\n\n4. get · method  [symbol]\n   src/store.ts:L4-L4\n   get(key: string): string\n\n5. trim · function  [symbol]\n   src/format.js:L2-L2\n   function trim(text)\n\n6. Store · class  [symbol]\n   src/store.ts:L2-L6\n   class Store\n",
+  "stdout": "1. format · function\n   src/format.js:L1-L1\n   function format(text)\n\n2. src/store.ts (file)\n\n3. src/format.js (file)\n\n4. get · method\n   src/store.ts:L4-L4\n   get(key: string): string\n\n5. trim · function\n   src/format.js:L2-L2\n   function trim(text)\n\n6. Store · class\n   src/store.ts:L2-L6\n   class Store\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

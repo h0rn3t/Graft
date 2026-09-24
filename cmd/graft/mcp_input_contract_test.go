@@ -52,10 +52,10 @@ func TestMCPToolArgumentsNeverBecomeFlags(t *testing.T) {
 		{tool: "graft_find_all", args: map[string]any{"pattern": "-i"}, want: `run("-i")`},
 		{tool: "graft_find_all", args: map[string]any{"pattern": "--version"}, want: `run("--version")`},
 		{tool: "graft_find_all", args: map[string]any{"pattern": "--dir=/x"}, want: `run("--dir=/x")`},
-		{tool: "graft_find_code", args: map[string]any{"query": "--dir=/x"}, want: `graft ask — "--dir=/x"`},
-		{tool: "graft_find_code", args: map[string]any{"query": "--version"}, want: `graft ask — "--version"`},
-		{tool: "graft_find_code", args: map[string]any{"query": "--help me"}, want: `graft ask — "--help me"`},
-		{tool: "graft_find_code", args: map[string]any{"query": "-i"}, want: `graft ask — "-i"`},
+		{tool: "graft_find_code", args: map[string]any{"query": "--dir=/x"}, want: "no matching nodes"},
+		{tool: "graft_find_code", args: map[string]any{"query": "--version"}, want: "no matching nodes"},
+		{tool: "graft_find_code", args: map[string]any{"query": "--help me"}, want: "no matching nodes"},
+		{tool: "graft_find_code", args: map[string]any{"query": "-i"}, want: "no matching nodes"},
 	}
 	for _, tt := range tests {
 		got := mcpCall(t.Context(), root, contextDir, "", tt.tool, tt.args)

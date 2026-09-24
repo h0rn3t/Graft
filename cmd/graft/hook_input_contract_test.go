@@ -27,20 +27,26 @@ func TestHookSessionIDNeverLeavesTheCache(t *testing.T) {
 		root := filepath.Join(parent, "repo")
 		t.Setenv("CLAUDE_PROJECT_DIR", root)
 		t.Setenv("GRAFT_DIR", "")
-		stdin := `{"session_id":` + quoteJSON(tt.id) + `,"tool_name":"Read"}`
+		// The transcript lives outside parent, so only session state can land there.
+		transcript := filepath.Join(t.TempDir(), "transcript.jsonl")
+		line := `{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{}}]}}` + "\n"
+		if err := os.WriteFile(transcript, []byte(line), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		stdin := `{"session_id":` + quoteJSON(tt.id) + `,"hook_event_name":"Stop","transcript_path":` + quoteJSON(transcript) + `}`
 		var stdout, stderr bytes.Buffer
-		if status := runWithInput([]string{"_hook", "tool-savings"}, strings.NewReader(stdin), &stdout, &stderr); status != 0 {
-			t.Fatalf("runWithInput(tool-savings, session %q) status = %d, want 0", tt.id, status)
+		if status := runWithInput([]string{"_hook", "stop"}, strings.NewReader(stdin), &stdout, &stderr); status != 0 {
+			t.Fatalf("runWithInput(stop, session %q) status = %d, want 0", tt.id, status)
 		}
 		entries, err := os.ReadDir(parent)
 		if err != nil {
 			t.Fatal(err)
 		}
 		if len(entries) != 1 || entries[0].Name() != "repo" {
-			t.Errorf("tool-savings(session %q) wrote %v next to the repository, want only repo", tt.id, entries)
+			t.Errorf("stop(session %q) wrote %v next to the repository, want only repo", tt.id, entries)
 		}
 		if session := readHookSession(root, strings.TrimSuffix(tt.file, ".json")); session.SourceReads != 1 {
-			t.Errorf("tool-savings(session %q) %s sourceReads = %d, want 1", tt.id, tt.file, session.SourceReads)
+			t.Errorf("stop(session %q) %s sourceReads = %d, want 1", tt.id, tt.file, session.SourceReads)
 		}
 	}
 }

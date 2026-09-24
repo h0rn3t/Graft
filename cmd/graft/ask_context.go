@@ -80,7 +80,7 @@ func writeAskResult(opts callersOptions, result graph.AskResult, stdout, stderr 
 	if opts.queryNote != "" {
 		result.Note = strings.TrimSpace(opts.queryNote + "\n" + result.Note)
 	}
-	result, err = fitAskBudget(result, budget, opts.jsonOutput, opts.budgetOverhead)
+	result, err = fitAskBudget(result, budget, opts.jsonOutput, opts.mcp, opts.budgetOverhead)
 	if err != nil {
 		writeDiagnostic(stderr, "%v\n", err)
 		return 1
@@ -88,22 +88,22 @@ func writeAskResult(opts callersOptions, result graph.AskResult, stdout, stderr 
 	if opts.jsonOutput {
 		return writeAskJSON(stdout, stderr, result)
 	}
-	return writeAskHuman(stdout, result)
+	return writeAskHuman(stdout, result, opts.mcp)
 }
 
-func renderAskBudget(result graph.AskResult, asJSON bool) string {
+func renderAskBudget(result graph.AskResult, asJSON, mcp bool) string {
 	if asJSON {
 		data, _ := jsonjs.Marshal(result, "  ") // AskResult contains only JSON-safe values from ranking.
 		return string(data) + "\n"
 	}
-	return formatAskText(result)
+	return formatAskText(result, mcp)
 }
 
-func fitAskBudget(result graph.AskResult, budget int, asJSON bool, overhead ...string) (graph.AskResult, error) {
+func fitAskBudget(result graph.AskResult, budget int, asJSON, mcp bool, overhead ...string) (graph.AskResult, error) {
 	result.Hits = slices.Clone(result.Hits)
 	overheadChars := savings.Length(strings.Join(overhead, ""))
 	noted := false
-	for savings.Tokens(overheadChars+savings.Length(renderAskBudget(result, asJSON))) > budget {
+	for savings.Tokens(overheadChars+savings.Length(renderAskBudget(result, asJSON, mcp))) > budget {
 		if !noted {
 			result.Note = strings.TrimSpace(result.Note + "\nContext omitted to fit the budget; increase --budget or narrow --in.")
 			noted = true
@@ -201,6 +201,9 @@ func compactAskSource(lines []string, from int, query, pointer string) string {
 		return strings.Join(lines, "\n")
 	}
 	terms := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' })
+	for i, term := range terms {
+		terms[i] = graph.AskFold(term)
+	}
 	best, bestScore := 1, 0
 	for i, line := range lines[1:] {
 		score := 0

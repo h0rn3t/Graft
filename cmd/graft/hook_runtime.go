@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 
@@ -171,9 +173,54 @@ func handleHookPostEdit(ctx context.Context, input hookInput, root string, stdou
 	if err != nil {
 		return
 	}
-	if blast := formatHookBlastRadius(*wiring, file, 8); blast != "" {
+	blast := formatHookBlastRadius(*wiring, file, 8)
+	if blast == "" {
+		return
+	}
+	key := hookAgentContext(input) + "\x00" + lastFile
+	hash := fmt.Sprintf("%x", sha256.Sum256([]byte(blast)))
+	shown := false
+	if err := updateHookSession(root, hookSessionID(input), func(session *sessionState) bool {
+		shown = hookBlastSeen(session, key, hash)
+		return !shown
+	}); err != nil {
+		// Without the session lock, repeating a blast radius beats hiding it.
+		shown = false
+	}
+	if !shown {
 		emitHookContext(stdout, "PostToolUse", blast)
 	}
+}
+
+// hookBlastShownLimit bounds how many blast radii a session remembers.
+const hookBlastShownLimit = 256
+
+// hookBlastSeen reports whether the blast radius hash was already shown for key
+// (agent context and file), and records it when it was not.
+func hookBlastSeen(session *sessionState, key, hash string) bool {
+	entry := key + "\x00" + hash
+	index := slices.IndexFunc(session.BlastShown, func(shown string) bool { return strings.HasPrefix(shown, key+"\x00") })
+	if index >= 0 && session.BlastShown[index] == entry {
+		return true
+	}
+	if index >= 0 {
+		session.BlastShown = slices.Delete(session.BlastShown, index, index+1)
+	}
+	session.BlastShown = append(session.BlastShown, entry)
+	if extra := len(session.BlastShown) - hookBlastShownLimit; extra > 0 {
+		session.BlastShown = session.BlastShown[extra:]
+	}
+	return false
+}
+
+// hookAgentContext names the agent a hook event comes from, so injected context
+// is deduplicated per agent: a subagent by id, the main agent by name.
+func hookAgentContext(input hookInput) string {
+	if id := input.string("agent_id"); id != "" {
+		return "id:" + id
+	}
+	agent, _ := input.object("agent")["name"].(string)
+	return "name:" + agent
 }
 
 func classifyAndScoreHookUse(toolName, command string, payload any) hookToolUse {
@@ -192,16 +239,10 @@ func classifyAndScoreHookUse(toolName, command string, payload any) hookToolUse 
 	return hookToolUse{Kind: kind, SavedTokens: saved}
 }
 
+// handleHookToolUse runs after a search tool call in Claude Code and nudges a
+// raw search over indexed code toward graft. Tool counts are not kept here:
+// they come from the transcript when the turn or subagent stops.
 func handleHookToolUse(input hookInput, root string, stdout io.Writer) {
-	toolInput := input.object("tool_input")
-	command, _ := toolInput["command"].(string)
-	payload := input["tool_response"]
-	if payload == nil {
-		payload = input
-	}
-	use := classifyAndScoreHookUse(input.string("tool_name"), command, payload)
-	use.Host = "claude-code"
-	_ = recordHookToolUse(root, hookSessionID(input), use)
 	if note := hookSearchNudge(input, root); note != "" {
 		emitHookContext(stdout, "PostToolUse", note)
 	}
@@ -333,6 +374,15 @@ func startHookSync(root string) bool {
 
 func handleHookStop(input hookInput, root string) {
 	id := hookSessionID(input)
+	// A subagent's own transcript is counted when it stops; the main
+	// transcript waits for the main agent's turn to end.
+	if input.string("hook_event_name") == "SubagentStop" {
+		if agent := input.string("agent_transcript_path"); agent != input.string("transcript_path") {
+			countHookTranscriptTools(root, id, agent)
+		}
+		return
+	}
+	countHookTranscriptTools(root, id, input.string("transcript_path"))
 	entries := hookTranscriptEntries(input.string("transcript_path"))
 	sampleHookTurnCost(root, id, entries)
 	countHookTallyTurn(root, id, entries)
@@ -553,10 +603,7 @@ func handleHookPrompt(ctx context.Context, input hookInput, root string, stdout,
 		return
 	}
 	agent, _ := input.object("agent")["name"].(string)
-	agentContext := "name:" + agent
-	if id := input.string("agent_id"); id != "" {
-		agentContext = "id:" + id
-	}
+	agentContext := hookAgentContext(input)
 	text := ""
 	remember := func(session *sessionState) bool {
 		session.LastQuery = &prompt
@@ -603,6 +650,7 @@ func runHook(ctx context.Context, event string, stdin io.Reader, stdout, stderr 
 	switch event {
 	case "session-start":
 		id := hookSessionID(input)
+		seedHookTranscriptOffset(root, id, input.string("transcript_path"))
 		if _, err := os.Stat(hookSessionPath(root, id)); err == nil {
 			_ = updateHookSession(root, id, func(session *sessionState) bool {
 				if len(session.InjectedPointers) == 0 && len(session.InjectedRevisions) == 0 {

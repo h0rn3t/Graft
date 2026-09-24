@@ -47,7 +47,7 @@ func ClaudeGlobalTargets(home string) []PlannedWrite {
 	}
 	return []PlannedWrite{
 		target("claude-global-shim", filepath.Join(globalHelpersDir(home), "graft-hooks.cjs"), WriteHook, "hooks shim (user level)"),
-		target("claude-global-hooks", filepath.Join(home, ".claude", "settings.json"), WriteHook, "SessionStart / UserPromptSubmit / PostToolUse / Stop"),
+		target("claude-global-hooks", filepath.Join(home, ".claude", "settings.json"), WriteHook, "SessionStart / UserPromptSubmit / PostToolUse / Stop / SubagentStop"),
 		target("claude-global-mcp", filepath.Join(home, ".claude.json"), WriteMCP, "mcpServers.graft"),
 	}
 }
@@ -75,11 +75,14 @@ func graftBlocks(script string) []graftBlock {
 	return []graftBlock{
 		{event: "PostToolUse", blocks: []jsonjs.Value{
 			block("Write|Edit|MultiEdit", "post-edit", 10),
-			block("Bash|mcp__graft__|Read|Grep|Glob", "tool-savings", 8),
+			// Only search tools: the nudge is the one thing done per call. Tool
+			// counts come from the transcript when a turn or subagent stops.
+			block("Grep|Bash", "tool-savings", 8),
 		}},
 		{event: "UserPromptSubmit", blocks: []jsonjs.Value{block("", "prompt", 15)}},
 		{event: "SessionStart", blocks: []jsonjs.Value{block("", "session-start", 8)}},
 		{event: "Stop", blocks: []jsonjs.Value{block("", "stop", 8)}},
+		{event: "SubagentStop", blocks: []jsonjs.Value{block("", "stop", 8)}},
 	}
 }
 

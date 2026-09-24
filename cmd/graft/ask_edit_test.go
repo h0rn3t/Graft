@@ -200,20 +200,25 @@ func TestMCPAskEditBudgetIncludesRefreshNote(t *testing.T) {
 	}
 }
 
+// JSON carries the query, so an oversized query cannot fit a small budget there;
+// human text does not echo the query and still answers within the budget.
 func TestAskEditBudgetRejectsOversizedQueryMetadata(t *testing.T) {
 	root := t.TempDir()
-	for _, format := range []string{"human", "json"} {
-		t.Run(format, func(t *testing.T) {
-			args := []string{"ask", strings.Repeat("unmatched-query ", 80), root, "--no-refresh", "--budget", "128"}
-			if format == "json" {
-				args = append(args, "--json")
-			}
-			var stdout, stderr bytes.Buffer
-			if status := run(args, &stdout, &stderr); status == 0 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "budget") {
-				t.Errorf("ask oversized query without graph = (status %d, stdout %q, stderr %q), want budget error", status, stdout.String(), stderr.String())
-			}
-		})
-	}
+	query := strings.Repeat("unmatched-query ", 80)
+	t.Run("json", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		status := run([]string{"ask", query, root, "--no-refresh", "--budget", "128", "--json"}, &stdout, &stderr)
+		if status == 0 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "budget") {
+			t.Errorf("ask --json oversized query without graph = (status %d, stdout %q, stderr %q), want budget error", status, stdout.String(), stderr.String())
+		}
+	})
+	t.Run("human", func(t *testing.T) {
+		var stdout, stderr bytes.Buffer
+		status := run([]string{"ask", query, root, "--no-refresh", "--budget", "128"}, &stdout, &stderr)
+		if status != 0 || strings.Contains(stdout.String(), "unmatched-query") || savings.Tokens(savings.Length(stdout.String())) > 128 {
+			t.Errorf("ask oversized query without graph = (status %d, stdout %q, stderr %q), want an answer within budget without the query", status, stdout.String(), stderr.String())
+		}
+	})
 }
 
 func TestMCPAskEditReferenceReplay(t *testing.T) {

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"unicode/utf16"
 
@@ -136,17 +137,17 @@ func hookRetrievalBody(hits []graph.AskHit) string {
 		snippet := hookTruncateUTF16(strings.Join(strings.Fields(hit.Snippet), " "), 140)
 		block := fmt.Sprintf(" %d. %s: %s", index+1, hit.Title, pointer)
 		if snippet != "" {
-			block += "\n    " + snippet
+			block += " — " + snippet
 		}
 		if hit.Code != "" {
 			withCode = true
-			block += "\n```\n" + hit.Code + "\n```"
+			block += "\n```\n" + askExcerptText(hit.Code, false) + "\n```"
 		}
 		blocks = append(blocks, block)
 	}
 	header := "[graft] starting points for this task: pull the code inline with `graft ask \"<what you need>\" --source`, trace impact with `graft callers <symbol>`, or search with `graft grep \"<literal>\"`:"
 	if withCode {
-		header = "[graft] retrieved context, read these spans; do not re-open the files:"
+		header = "[graft] retrieved context: cite these spans instead of re-opening the files; if an excerpt is cut, rerun with --full or open just that range:"
 	}
 	return header + "\n" + strings.Join(blocks, "\n")
 }
@@ -194,17 +195,17 @@ func relevantHookRetrieval(result *graph.AskResult, session *sessionState, cap i
 	if result == nil || len(result.Hits) == 0 {
 		return ""
 	}
-	if result.Coverage != nil || result.CoverageStrong != nil {
-		strong := 0.0
-		if result.CoverageStrong != nil {
-			strong = *result.CoverageStrong
-		}
-		broad := 0.0
-		if result.Coverage != nil {
-			broad = *result.Coverage
-		}
-		if strong < 0.1 && broad < 0.5 {
-			return hookWeakMatchNudge(session, strong)
+	if askWeakMatch(*result) {
+		return hookWeakMatchNudge(session, askOptionalCoverage(result.CoverageStrong))
+	}
+	// Only a strong top hit is inlined; every other hit is a pointer. A
+	// revision covers the hit's code whether or not it is shown, plus whether
+	// it was held back, so a changed body and a pointer later sent inlined are
+	// both delivered again.
+	hits := slices.Clone(result.Hits)
+	for i := range hits {
+		if i > 0 || askOptionalCoverage(result.CoverageStrong) < askStrongCoverage {
+			hits[i].Code = ""
 		}
 	}
 
@@ -212,10 +213,14 @@ func relevantHookRetrieval(result *graph.AskResult, session *sessionState, cap i
 	for _, revision := range session.InjectedRevisions {
 		seen[revision] = struct{}{}
 	}
-	fresh := make([]graph.AskHit, 0, len(result.Hits))
+	fresh := make([]graph.AskHit, 0, len(hits))
 	var revisions []string
-	for _, hit := range result.Hits {
-		content := fmt.Sprintf("%q", []string{agent, hit.Pointer, hit.Title, hit.SourceHash, hit.Code, hit.Snippet})
+	for i, hit := range hits {
+		fields := []string{agent, hit.Pointer, hit.Title, hit.SourceHash, result.Hits[i].Code, hit.Snippet}
+		if hit.Code != result.Hits[i].Code {
+			fields = append(fields, "pointer")
+		}
+		content := fmt.Sprintf("%q", fields)
 		revision := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
 		if _, ok := seen[revision]; ok {
 			continue

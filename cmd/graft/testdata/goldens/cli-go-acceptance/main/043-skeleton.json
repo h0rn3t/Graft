@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "graft skeleton — src/store.ts\n- L2-L6  class Store  class Store\n- L4-L4  method get  get(key: string): string\n- L5-L5  method put  put(key: string, value: string): void\n- L7-L7  function openStore  function openStore(): Store\n",
+  "stdout": "graft skeleton — src/store.ts\n- L2-L6 class Store\n- L4-L4 get(key: string): string\n- L5-L5 put(key: string, value: string): void\n- L7-L7 function openStore(): Store\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

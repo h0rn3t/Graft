@@ -8,7 +8,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "graft ask — \"worker compute\"  (lexical)\n\n1. Worker · class  [symbol]\n   java/Worker.java:L1-L1\n   class Worker\n\n2. compute · method  [symbol]\n   java/Worker.java:L1-L1\n   int compute()\n\n3. Worker.java · file  [symbol]\n   java/Worker.java\n\n4. run · method  [symbol]\n   java/Worker.java:L1-L1\n   int run()\n",
+  "stdout": "1. Worker · class\n   java/Worker.java:L1-L1\n   class Worker\n\n2. compute · method\n   java/Worker.java:L1-L1\n   int compute()\n\n3. java/Worker.java (file)\n\n4. run · method\n   java/Worker.java:L1-L1\n   int run()\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

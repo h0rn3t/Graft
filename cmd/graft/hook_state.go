@@ -26,6 +26,8 @@ type sessionState struct {
 	SavedTokens       int               `json:"savedTokens"`
 	InjectedPointers  []string          `json:"injectedPointers"`
 	InjectedRevisions []string          `json:"injectedRevisions,omitempty"`
+	BlastShown        []string          `json:"blastShown,omitempty"`        // "<agent>\x00<file>\x00<hash>", oldest first
+	TranscriptOffsets map[string]int64  `json:"transcriptOffsets,omitempty"` // bytes already counted, per transcript
 	Nudges            int               `json:"nudges"`
 	SearchNudges      int               `json:"searchNudges,omitzero"`
 	TurnUsedGraft     *bool             `json:"turnUsedGraft,omitempty"`

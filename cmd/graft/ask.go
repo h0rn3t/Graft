@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -113,6 +114,7 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 	candidates := make([]workspaceCandidate, 0, len(children))
 	loadedCount := 0
 	fileFirst := false
+	distinctive := ""
 	for _, child := range children {
 		childContext := filepath.Join(root, child, "graft")
 		loaded, index, err := opts.queryCache.load(childContext)
@@ -132,6 +134,9 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 			FileComplement:         true,
 			IncludeRankingMetadata: true,
 		})
+		if distinctive == "" {
+			distinctive = childResult.Distinctive
+		}
 		if err != nil || len(childResult.Hits) == 0 {
 			continue
 		}
@@ -315,8 +320,15 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 	for _, group := range projectedGroups {
 		projectedHits = append(projectedHits, group.hits)
 	}
-	hits := workspaceRoundRobin(projectedHits, limit)
-	result := graph.AskResult{Query: opts.query, Mode: "empty", Hits: hits}
+	// Name-coverage tiers hold within each child scope: the fused order runs
+	// unbounded, each scope's hits are reordered in the positions it holds,
+	// and only then is the answer cut to the limit.
+	hits := workspaceRoundRobin(projectedHits, math.Inf(1))
+	tierWithinScopes(hits)
+	if capacity := graph.JSQueueCap(limit); capacity >= 0 {
+		hits = hits[:min(capacity, len(hits))]
+	}
+	result := graph.AskResult{Query: opts.query, Mode: "empty", Hits: hits, Distinctive: distinctive}
 	if len(hits) > 0 {
 		result.Mode = "lexical"
 		federated := make([]string, 0)
@@ -453,6 +465,29 @@ func workspaceRoundRobin(groups [][]graph.AskHit, limit float64) []graph.AskHit 
 	}
 }
 
+// tierWithinScopes orders each scope's hits by name coverage, most query terms
+// first, while every scope keeps the positions it holds in the fused answer.
+func tierWithinScopes(hits []graph.AskHit) {
+	positions := make(map[string][]int)
+	for i, hit := range hits {
+		scope := ""
+		if hit.Scope != nil {
+			scope = *hit.Scope
+		}
+		positions[scope] = append(positions[scope], i)
+	}
+	for _, indexes := range positions {
+		scoped := make([]graph.AskHit, len(indexes))
+		for j, i := range indexes {
+			scoped[j] = hits[i]
+		}
+		slices.SortStableFunc(scoped, func(left, right graph.AskHit) int { return cmp.Compare(right.NameTerms, left.NameTerms) })
+		for j, i := range indexes {
+			hits[i] = scoped[j]
+		}
+	}
+}
+
 func missingAskChildren(root string, children []string) string {
 	missing := make([]string, 0)
 	for _, child := range children {
@@ -480,7 +515,7 @@ func readAskIndex(path string) *graph.AskIndex {
 			Body [][]json.RawMessage `json:"body"`
 		} `json:"docs"`
 	}
-	if err := json.Unmarshal(data, &raw); err != nil || raw.Version != 1 || raw.AvgBodyLen == nil || raw.DF == nil || raw.Docs == nil || raw.DocCount != len(raw.Docs) {
+	if err := json.Unmarshal(data, &raw); err != nil || raw.Version != graph.AskIndexVersion || raw.AvgBodyLen == nil || raw.DF == nil || raw.Docs == nil || raw.DocCount != len(raw.Docs) {
 		return nil
 	}
 	df, ok := askIndexPairs(raw.DF)
@@ -555,23 +590,23 @@ func writeAskJSON(stdout, stderr io.Writer, result graph.AskResult) int {
 	return 0
 }
 
-func writeAskHuman(stdout io.Writer, result graph.AskResult) int {
-	_, err := io.WriteString(stdout, formatAskText(result))
+func writeAskHuman(stdout io.Writer, result graph.AskResult, mcp bool) int {
+	_, err := io.WriteString(stdout, formatAskText(result, mcp))
 	return writeAskError(err)
 }
 
-// formatAskText renders ranked source context without recurring statistics.
-func formatAskText(result graph.AskResult) string {
-	head := `graft ask — "` + result.Query + `"  (` + result.Mode + ")"
+// formatAskText renders a ranked answer for agents and people; mcp selects the
+// wording of expansion hints for the MCP surface instead of the CLI.
+func formatAskText(result graph.AskResult, mcp bool) string {
 	note := askNoteBlock(result.Note)
 	if len(result.Hits) == 0 {
 		body := note
 		if body == "" {
 			body = "no matches."
 		}
-		return head + "\n\n" + body + askEscalationNudge(result) + "\n"
+		return body + askEscalationNudge(result, mcp) + "\n"
 	}
-	lines := []string{head, ""}
+	var lines []string
 	if note != "" {
 		lines = append(lines, note, "")
 	}
@@ -589,7 +624,7 @@ func formatAskText(result graph.AskResult) string {
 				lines = append(lines, "   unchanged; source already supplied")
 			}
 			if hit.Code != "" {
-				lines = append(lines, "", "```", hit.Code, "```", "")
+				lines = append(lines, "", "```", askExcerptText(hit.Code, mcp), "```", "")
 			}
 		}
 	} else {
@@ -598,7 +633,16 @@ func formatAskText(result graph.AskResult) string {
 			if result.Scopes != nil && hit.Scope != nil && *hit.Scope != "" {
 				label = "[" + *hit.Scope + "/] "
 			}
-			lines = append(lines, fmt.Sprintf("%d. %s%s  [%s]", index+1, label, hit.Title, hit.Kind))
+			bareFile := strings.HasSuffix(hit.Title, " · file") && hit.Code == "" && hit.Snippet == "" && hit.ContentRef == "" && !hit.Unchanged
+			switch {
+			case bareFile:
+				lines = append(lines, fmt.Sprintf("%d. %s%s (file)", index+1, label, hit.Pointer), "")
+				continue
+			case hit.Kind == "symbol" || strings.HasSuffix(hit.Title, " · "+hit.Kind):
+				lines = append(lines, fmt.Sprintf("%d. %s%s", index+1, label, hit.Title))
+			default:
+				lines = append(lines, fmt.Sprintf("%d. %s%s  [%s]", index+1, label, hit.Title, hit.Kind))
+			}
 			lines = append(lines, "   "+hit.Pointer)
 			if hit.ContentRef != "" {
 				lines = append(lines, "   ref: "+hit.ContentRef)
@@ -606,18 +650,77 @@ func formatAskText(result graph.AskResult) string {
 			if hit.Unchanged {
 				lines = append(lines, "   unchanged; source already supplied")
 			}
-			if hit.Snippet != "" {
+			if hit.Snippet != "" && !askExcerptStartsWith(hit.Code, hit.Snippet) {
 				lines = append(lines, "   "+hit.Snippet)
 			}
 			if hit.Code != "" {
-				lines = append(lines, "", "```", hit.Code, "```")
+				lines = append(lines, "", "```", askExcerptText(hit.Code, mcp), "```")
 			}
 			lines = append(lines, "")
 		}
 		lines = append(lines, askScopeFooterLines(result)...)
 	}
 	body := jsonjs.TrimEnd(strings.Join(lines, "\n"))
-	return body + askEscalationNudge(result) + "\n"
+	return body + askEscalationNudge(result, mcp) + "\n"
+}
+
+// askExcerptStartsWith reports whether code opens with the signature, compared
+// with whitespace collapsed and any line-number prefix removed.
+func askExcerptStartsWith(code, signature string) bool {
+	first, _, _ := strings.Cut(code, "\n")
+	if number, rest, ok := strings.Cut(first, ": "); ok && askExcerptLineNumber(number) > 0 {
+		first = rest
+	}
+	signature = strings.Join(strings.Fields(signature), " ")
+	return signature != "" && strings.HasPrefix(strings.Join(strings.Fields(first), " "), signature)
+}
+
+// askExcerptLineNumber parses an excerpt line label such as "L42", or returns 0.
+func askExcerptLineNumber(label string) int {
+	digits, ok := strings.CutPrefix(label, "L")
+	if !ok {
+		return 0
+	}
+	number, err := strconv.Atoi(digits)
+	if err != nil {
+		return 0
+	}
+	return number
+}
+
+// askExcerptText rewrites a compact excerpt for text output. Lines holding only
+// closing brackets and separators are left out, and the footer states how many
+// definition lines were not printed. Whole definitions are returned unchanged,
+// and so is the code field of JSON output.
+func askExcerptText(code string, mcp bool) string {
+	lines := strings.Split(code, "\n")
+	pointer, ok := strings.CutPrefix(lines[len(lines)-1], "… (excerpt; full definition at ")
+	if ok {
+		pointer, ok = strings.CutSuffix(pointer, "; rerun with --full)")
+	}
+	match := askPointerPattern.FindStringSubmatch(pointer)
+	if !ok || match == nil {
+		return code
+	}
+	from, _ := strconv.Atoi(match[2])
+	to, _ := strconv.Atoi(match[3])
+	kept := make([]string, 0, len(lines))
+	printed := 0
+	for _, line := range lines[:len(lines)-1] {
+		label, text, numbered := strings.Cut(line, ": ")
+		if numbered && askExcerptLineNumber(label) > 0 {
+			if strings.Trim(text, " \t)]};,") == "" {
+				continue
+			}
+			printed++
+		}
+		kept = append(kept, line)
+	}
+	hint := "--full"
+	if mcp {
+		hint = "full: true"
+	}
+	return strings.Join(kept, "\n") + fmt.Sprintf("\n… +%d lines (%s)", to-from+1-printed, hint)
 }
 
 // askScopeFooterLines is the multi-scope footer: displayed hits per scope,
@@ -676,18 +779,41 @@ func askNoteBlock(note string) string {
 	return strings.Join(lines, "\n")
 }
 
-func askEscalationNudge(result graph.AskResult) string {
-	if result.Mode != "lexical" && result.Mode != "empty" || len(result.Hits) > 3 {
+// Match-strength thresholds on the top hit's query-term coverage: by name
+// (strong) and over the whole document (broad).
+const (
+	askWeakStrongCoverage = 0.1 // below this, the top hit's name barely matches
+	askWeakBroadCoverage  = 0.5 // below this, the document misses most of the query
+	askStrongCoverage     = 0.5 // at or above this, the top hit is inlined in prompt context
+)
+
+// askWeakMatch reports whether a ranked answer is too weak to act on: no hits,
+// or coverage recorded and low both by name and over the whole document.
+func askWeakMatch(result graph.AskResult) bool {
+	if len(result.Hits) == 0 {
+		return true
+	}
+	if result.Coverage == nil && result.CoverageStrong == nil {
+		return false
+	}
+	return askOptionalCoverage(result.CoverageStrong) < askWeakStrongCoverage && askOptionalCoverage(result.Coverage) < askWeakBroadCoverage
+}
+
+// askEscalationNudge ends a weak ranked answer with the next tool to try, named
+// for the surface that serves it.
+func askEscalationNudge(result graph.AskResult, mcp bool) string {
+	if result.Mode != "lexical" && result.Mode != "empty" || !askWeakMatch(result) {
 		return ""
 	}
+	lead := "weak match"
 	if len(result.Hits) == 0 {
-		return "\n\n[graft] no hits — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses."
+		lead = "no hits"
 	}
-	noun := "hit"
-	if len(result.Hits) != 1 {
-		noun = "hits"
+	term := cmp.Or(result.Distinctive, "<literal>")
+	if mcp {
+		return fmt.Sprintf("\n\n[graft] %s — don't re-ask with new wording; switch tool: graft_find_all {\"pattern\":%q,\"ignore_case\":true} for every occurrence · graft_file_api for a file's full API · graft_trace_calls for who-uses.", lead, term)
 	}
-	return fmt.Sprintf("\n\n[graft] only %d %s — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.", len(result.Hits), noun)
+	return fmt.Sprintf("\n\n[graft] %s — don't re-ask with new wording; switch tool: `graft grep -i %q` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.", lead, term)
 }
 
 // askCruxByPointer maps each node's path:span pointer to its crux excerpt;

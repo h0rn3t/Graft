@@ -124,7 +124,7 @@ func TestHookRetrievalFormatting(t *testing.T) {
 		Kind: "symbol", Title: "gen", Pointer: "src/pkce.ts:L6-L9", Snippet: "s", Score: 0.8,
 	}}}
 	got := stripHookANSI(formatHookRetrieval(inline, 5))
-	if !strings.Contains(got, "retrieved context, read these spans") || !strings.Contains(got, "```\na\nb\n```") {
+	if !strings.Contains(got, "retrieved context: cite these spans") || !strings.Contains(got, "```\na\nb\n```") {
 		t.Errorf("formatHookRetrieval(inline pack) = %q, want inlined code", got)
 	}
 	if got := stripHookANSI(formatHookRetrieval(inline, 1)); strings.Contains(got, "gen:") {

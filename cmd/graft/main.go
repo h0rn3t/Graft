@@ -39,6 +39,7 @@ type callersOptions struct {
 	queryNote          string
 	budgetOverhead     string
 	queryCache         *queryCache
+	mcp                bool // answer is served over MCP: hints name MCP tools and options
 	direction          string
 	depth              string
 	source             bool

@@ -57,7 +57,7 @@ func writeSkeletonHuman(stdout io.Writer, result graph.SkeletonResult) int {
 	for _, entry := range result.Entries {
 		line := fmt.Sprintf("- %s  %s %s", entry.Span, entry.Kind, entry.Name)
 		if entry.Signature != nil {
-			line += "  " + *entry.Signature
+			line = "- " + entry.Span + " " + *entry.Signature
 		}
 		if entry.Summary != nil {
 			line += " — " + *entry.Summary

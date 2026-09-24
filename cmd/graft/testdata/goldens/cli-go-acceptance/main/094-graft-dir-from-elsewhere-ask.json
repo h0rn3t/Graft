@@ -9,7 +9,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "graft ask — \"store\"  (lexical)\n\n1. openStore · function  [symbol]\n   src/store.ts:L7-L7\n   function openStore(): Store\n\n2. storeKeys · function  [symbol]\n   src/store_util.ts:L2-L2\n   function storeKeys(): string[]\n\n3. app.tsx · file  [symbol]\n   src/app.tsx\n\n4. testStore · function  [symbol]\n   src/store.test.ts:L2-L2\n   function testStore()\n\n5. format.js · file  [symbol]\n   src/format.js\n\n6. store.ts · file  [symbol]\n   src/store.ts\n\n7. store_util.ts · file  [symbol]\n   src/store_util.ts\n\n8. App · function  [symbol]\n   src/app.tsx:L2-L2\n   function App()\n",
+  "stdout": "1. openStore · function\n   src/store.ts:L7-L7\n   function openStore(): Store\n\n2. storeKeys · function\n   src/store_util.ts:L2-L2\n   function storeKeys(): string[]\n\n3. Store · class\n   src/store.ts:L2-L6\n   class Store\n\n4. src/app.tsx (file)\n\n5. testStore · function\n   src/store.test.ts:L2-L2\n   function testStore()\n\n6. src/format.js (file)\n\n7. src/store.ts (file)\n\n8. src/store_util.ts (file)\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

@@ -588,7 +588,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 			budget: askOpts.budget, intent: askOpts.intent, seen: askOpts.seen, references: askOpts.references,
 			queryNote: askOpts.queryNote,
 			limit:     strconv.Itoa(limit), source: true, full: args["full"] == true, in: mcpString(args["in"]), noRefresh: true,
-			queryCache: cache,
+			queryCache: cache, mcp: true,
 		})
 	case "graft_file_api":
 		file := mcpString(args["file"])

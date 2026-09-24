@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "graft ask — \"callers of zzqqxx\"  (empty)\n\n⚠ structural index: no entries for 'callers' — showing lexical matches; for precise edges try graft callers 'callers', or graft grep 'callers' for every reference (loosen the pattern if it returns nothing)\nno matching nodes — try different words, or `graft build` if graft/ is empty\n\n[graft] no hits — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
+  "stdout": "⚠ structural index: no entries for 'callers' — showing lexical matches; for precise edges try graft callers 'callers', or graft grep 'callers' for every reference (loosen the pattern if it returns nothing)\nno matching nodes — try different words, or `graft build` if graft/ is empty\n\n[graft] no hits — don't re-ask with new wording; switch tool: `graft grep -i \"callers\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

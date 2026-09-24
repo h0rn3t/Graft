@@ -184,3 +184,41 @@ func TestRewriteWiringContract(t *testing.T) {
 		})
 	}
 }
+
+func TestRewriteWiringUpgradesClaudeHooksKeepingUserHooks(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("GRAFT_MCP_COMMAND", "graft")
+	settingsPath := filepath.Join(root, ".claude", "settings.json")
+	legacy := `{"hooks":{
+		"PostToolUse":[
+			{"matcher":"Write","hooks":[{"type":"command","command":"echo user"}]},
+			{"matcher":"Bash|mcp__graft__|Read|Grep|Glob","hooks":[{"type":"command","command":"node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" tool-savings","timeout":8}]}
+		],
+		"Stop":[{"hooks":[{"type":"command","command":"node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" stop","timeout":8}]}]
+	}}`
+	if err := os.MkdirAll(filepath.Dir(settingsPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(settingsPath, []byte(legacy), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	env := hosts.Env{Home: home, BakedDir: "/pkg", Launch: hosts.ServerEntry()}
+	options := WiringOptions{Hooks: true, Statusline: true}
+	if err := RewriteWiring(t.Context(), root, []string{"claude"}, options, env); err != nil {
+		t.Fatalf("RewriteWiring(%q, claude) error = %v, want nil", root, err)
+	}
+	data, err := os.ReadFile(settingsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(data)
+	for _, want := range []string{`"echo user"`, `"matcher": "Grep|Bash"`, `"SubagentStop"`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("RewriteWiring(legacy claude settings) settings = %s, want %s", got, want)
+		}
+	}
+	if strings.Contains(got, "Bash|mcp__graft__|Read|Grep|Glob") {
+		t.Errorf("RewriteWiring(legacy claude settings) settings = %s, want the legacy matcher gone", got)
+	}
+}

@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "graft ask — \"source of truth\"  (lexical)\n\n1. notes.ts · file  [symbol]\n   packages/docs/src/notes.ts\n\n[graft] only 1 hit — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\n",
+  "stdout": "1. packages/docs/src/notes.ts (file)\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

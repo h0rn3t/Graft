@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json/jsontext"
 	"encoding/json/v2"
+	"errors"
+	"io"
 	"math"
 	"os"
 	"regexp"
@@ -130,12 +133,17 @@ func readHookTranscriptTail(path string) string {
 }
 
 func hookTranscriptEntries(path string) []hookTranscriptEntry {
-	tail := readHookTranscriptTail(path)
-	if tail == "" {
+	return parseHookTranscript(readHookTranscriptTail(path))
+}
+
+// parseHookTranscript decodes transcript JSON lines leniently, skipping lines
+// that do not parse.
+func parseHookTranscript(data string) []hookTranscriptEntry {
+	if data == "" {
 		return nil
 	}
 	var entries []hookTranscriptEntry
-	for line := range strings.SplitSeq(tail, "\n") {
+	for line := range strings.SplitSeq(data, "\n") {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
@@ -145,6 +153,84 @@ func hookTranscriptEntries(path string) []hookTranscriptEntry {
 		}
 	}
 	return entries
+}
+
+// countHookTranscriptTools adds the tool calls a transcript gained since the
+// session last read it to the session's graft and source-read counts. Only
+// complete lines are consumed, and a transcript that shrank is read afresh.
+func countHookTranscriptTools(root, id, path string) {
+	if path == "" {
+		return
+	}
+	file, err := os.Open(path)
+	if err != nil {
+		return
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		return
+	}
+	_ = updateHookSession(root, id, func(session *sessionState) bool {
+		offset := session.TranscriptOffsets[path]
+		if offset > info.Size() {
+			offset = 0
+		}
+		data := make([]byte, info.Size()-offset)
+		if _, err := file.ReadAt(data, offset); err != nil && !errors.Is(err, io.EOF) {
+			return false
+		}
+		complete := bytes.LastIndexByte(data, '\n') + 1
+		if complete == 0 {
+			return false
+		}
+		for _, entry := range parseHookTranscript(string(data[:complete])) {
+			blocks, _ := entry.Message.Content.([]any)
+			for _, block := range blocks {
+				use, _ := block.(map[string]any)
+				if use["type"] != "tool_use" {
+					continue
+				}
+				name, _ := use["name"].(string)
+				input, _ := use["input"].(map[string]any)
+				command, _ := input["command"].(string)
+				switch classifyHookToolUse(name, command) {
+				case hookToolGraft:
+					session.GraftReads++
+					session.TurnUsedGraft = new(true)
+				case hookToolSource:
+					session.SourceReads++
+				}
+			}
+		}
+		if session.TranscriptOffsets == nil {
+			session.TranscriptOffsets = make(map[string]int64)
+		}
+		session.TranscriptOffsets[path] = offset + int64(complete)
+		return true
+	})
+}
+
+// seedHookTranscriptOffset starts counting a transcript at its current end, so
+// a resumed session does not recount the history it replays.
+func seedHookTranscriptOffset(root, id, path string) {
+	if path == "" {
+		return
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
+	_ = updateHookSession(root, id, func(session *sessionState) bool {
+		if _, ok := session.TranscriptOffsets[path]; ok {
+			return false
+		}
+		if session.TranscriptOffsets == nil {
+			session.TranscriptOffsets = make(map[string]int64)
+		}
+		session.TranscriptOffsets[path] = info.Size()
+		return true
+	})
 }
 
 func isHookUserPrompt(entry hookTranscriptEntry) bool {

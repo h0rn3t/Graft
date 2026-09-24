@@ -26,7 +26,7 @@
   "stdout": "",
   "stderr": "",
   "files": {
-    "repo/graft/.cache/session/turn.json": "{\n  \"lastQuery\": null,\n  \"perAgentQuery\": {},\n  \"graftReads\": 0,\n  \"sourceReads\": 0,\n  \"savedTokens\": 0,\n  \"injectedPointers\": [],\n  \"nudges\": 0,\n  \"turnUsedGraft\": false,\n  \"inputCostMicros\": 56300,\n  \"inputTokensBilled\": 101010,\n  \"lastBillingUuid\": \"a1\",\n  \"graftTurns\": 1,\n  \"reportedTurns\": 1,\n  \"lastTallyUuid\": \"a1\"\n}",
+    "repo/graft/.cache/session/turn.json": "{\n  \"lastQuery\": null,\n  \"perAgentQuery\": {},\n  \"graftReads\": 0,\n  \"sourceReads\": 0,\n  \"savedTokens\": 0,\n  \"injectedPointers\": [],\n  \"transcriptOffsets\": {\n    \"<REPO>/transcript.jsonl\": 294\n  },\n  \"nudges\": 0,\n  \"turnUsedGraft\": false,\n  \"inputCostMicros\": 56300,\n  \"inputTokensBilled\": 101010,\n  \"lastBillingUuid\": \"a1\",\n  \"graftTurns\": 1,\n  \"reportedTurns\": 1,\n  \"lastTallyUuid\": \"a1\"\n}",
     "repo/graft/.cache/session/turn.json.lock": "",
     "repo/transcript.jsonl": "{\"type\":\"assistant\",\"uuid\":\"a1\",\"message\":{\"role\":\"assistant\",\"id\":\"msg-1\",\"model\":\"claude-opus-5\",\"content\":[{\"type\":\"text\",\"text\":\"🌱 graft saved ~3,000 tokens this turn\"}],\"usage\":{\"input_tokens\":10,\"cache_creation_input_tokens\":1000,\"cache_read_input_tokens\":100000,\"output_tokens\":20}}}\n"
   },

@@ -11,7 +11,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "graft skeleton — src/graph/invariants.ts\n- L44-L49  interface InvariantResult  interface InvariantResult\n- L52-L78  function checkGraphInvariants  function checkGraphInvariants(graph: GraphV1): InvariantResult\n",
+  "stdout": "graft skeleton — src/graph/invariants.ts\n- L44-L49 interface InvariantResult\n- L52-L78 function checkGraphInvariants(graph: GraphV1): InvariantResult\n",
   "stderr": "",
   "files": {}
 }

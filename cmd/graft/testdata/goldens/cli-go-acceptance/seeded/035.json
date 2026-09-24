@@ -11,7 +11,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "graft skeleton — internal/graph/invariants_test.go\n- L8-L29  function TestCheckInvariantsValidGraph  func TestCheckInvariantsValidGraph(t *testing.T)\n- L31-L68  function TestCheckInvariantsReportsMalformedGraph  func TestCheckInvariantsReportsMalformedGraph(t *testing.T)\n- L70-L83  function TestCheckInvariantsAllowsExternalTargets  func TestCheckInvariantsAllowsExternalTargets(t *testing.T)\n",
+  "stdout": "graft skeleton — internal/graph/invariants_test.go\n- L8-L29 func TestCheckInvariantsValidGraph(t *testing.T)\n- L31-L68 func TestCheckInvariantsReportsMalformedGraph(t *testing.T)\n- L70-L83 func TestCheckInvariantsAllowsExternalTargets(t *testing.T)\n",
   "stderr": "",
   "files": {}
 }

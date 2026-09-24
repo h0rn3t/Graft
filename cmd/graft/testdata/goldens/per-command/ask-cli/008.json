@@ -17,7 +17,7 @@
     "src/root.ts": "export function root(): string {\n  return \"needle\";\n}\n"
   },
   "status": 0,
-  "stdout": "graft ask — \"who calls root\"  (structural)\n\ncallers / references of root\n\n- caller  src/caller.ts:L1-L3  (calls) — caller(): string\n",
+  "stdout": "callers / references of root\n\n- caller  src/caller.ts:L1-L3  (calls) — caller(): string\n",
   "stderr": "",
   "files": {}
 }

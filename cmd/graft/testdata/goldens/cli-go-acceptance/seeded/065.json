@@ -11,7 +11,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "graft skeleton — internal/graph/write_test.go\n- L11-L17  function TestWiringPathUsesGraphDirectory  func TestWiringPathUsesGraphDirectory(t *testing.T)\n- L19-L71  function TestWriteSortsAtomicallyAndStripsBodyText  func TestWriteSortsAtomicallyAndStripsBodyText(t *testing.T)\n- L73-L90  function TestReadReturnsErrorsForMissingAndInvalidGraphs  func TestReadReturnsErrorsForMissingAndInvalidGraphs(t *testing.T)\n- L92-L113  function TestWritePreservesAnotherTemporaryFile  func TestWritePreservesAnotherTemporaryFile(t *testing.T)\n",
+  "stdout": "graft skeleton — internal/graph/write_test.go\n- L11-L17 func TestWiringPathUsesGraphDirectory(t *testing.T)\n- L19-L71 func TestWriteSortsAtomicallyAndStripsBodyText(t *testing.T)\n- L73-L90 func TestReadReturnsErrorsForMissingAndInvalidGraphs(t *testing.T)\n- L92-L113 func TestWritePreservesAnotherTemporaryFile(t *testing.T)\n",
   "stderr": "",
   "files": {}
 }

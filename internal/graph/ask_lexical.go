@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"cmp"
 	"maps"
 	"math"
 	"regexp"
@@ -13,11 +14,12 @@ import (
 )
 
 // The lexical ranking combines bounded file ranking, comparable-scope fusion,
-// and personalized PageRank. Scores preserve the recorded TypeScript oracle bit
-// for bit, so every floating-point sum runs in the order the TypeScript Maps
-// and Sets iterate — insertion order — and every sort is stable with the
-// TypeScript comparator. Each product that feeds a sum is wrapped in float64()
-// so the compiler cannot fuse it into an FMA that JavaScript would not use.
+// personalized PageRank, and name-coverage tiers over the final selection. It
+// started as a bit-for-bit port of the TypeScript ranking and has since moved
+// on (inflection folding, tiers); the Go goldens and ranking tests now pin it.
+// Floating-point sums still run in insertion order and sorts stay stable, and
+// each product that feeds a sum is wrapped in float64() so the compiler cannot
+// fuse it into an FMA, which keeps scores reproducible across platforms.
 
 const (
 	askRescueFloorTS = 0.15
@@ -1009,6 +1011,9 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 				matchedStrongOf[hit] = 0
 			} else {
 				matchedStrongOf[hit] = askMatchedIDFShare(q, []map[string]int{doc.name}, idf, defaultIDF)
+				if testFactor(node.Path) == 1 {
+					hit.NameTerms = len(askMatchedStrongTerms(q, doc.name).terms)
+				}
 			}
 		} else {
 			matchedOf[hit], matchedStrongOf[hit] = 0, 0
@@ -1503,15 +1508,24 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 		for _, group := range projectedGroups {
 			queues = append(queues, group.hits)
 		}
-		selected = askRoundRobinQueues(queues, limit)
+		selected = askRoundRobinQueues(queues, math.Inf(1))
 	case fileFirst:
 		groups := make([]string, 0, len(scored))
 		for index, hit := range scored {
 			groups = append(groups, groupOf(hit, "ungrouped:"+strconv.Itoa(index)))
 		}
-		selected = askFileFirstRoundRobin(groups, scored, limit)
+		selected = askFileFirstRoundRobin(groups, scored, math.Inf(1))
 	default:
-		selected = scored
+		selected = slices.Clone(scored)
+	}
+	// Name-coverage tiers: the round-robin runs unbounded, a stable sort puts
+	// hits whose names match more query terms first, and only then is the
+	// selection cut, so file diversity and score order hold within each tier.
+	slices.SortStableFunc(selected, func(left, right *AskHit) int {
+		return cmp.Compare(right.NameTerms, left.NameTerms)
+	})
+	if capacity := JSQueueCap(limit); fileFirst && capacity >= 0 {
+		selected = selected[:min(capacity, len(selected))]
 	}
 	var top *AskHit
 	if len(selected) > 0 {
@@ -1535,6 +1549,23 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 	}
 
 	result := AskResult{Query: query, Mode: "empty", Hits: make([]AskHit, 0), Scopes: scopeMeta}
+	rarest := -1.0
+	for _, term := range q {
+		weight, ok := idf[term]
+		if !ok {
+			weight = defaultIDF
+		}
+		if weight > rarest {
+			result.Distinctive, rarest = term, weight
+		}
+	}
+	// Suggest the word as the query spelled it, not its folded stem.
+	for _, word := range askTokenSeparator.Split(strings.ToLower(askCamelBoundary.ReplaceAllString(query, "$1 $2")), -1) {
+		if word != "" && AskFold(word) == result.Distinctive {
+			result.Distinctive = word
+			break
+		}
+	}
 	if len(scored) > 0 {
 		result.Mode = "lexical"
 	} else {

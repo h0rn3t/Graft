@@ -223,12 +223,13 @@ var wordmark = []string{
 	"   |                           |",
 }
 
-// wordmarkStatsLine is the wordmark line that carries the graph stats.
-const wordmarkStatsLine = 7
-
 // wordmarkVersionLine is the wordmark line that carries the version, right-aligned
 // under the lettering.
 const wordmarkVersionLine = 8
+
+// wordmarkStatsLine is the wordmark line that carries the graph stats, the
+// gopher's last line, right-aligned under the lettering.
+const wordmarkStatsLine = 10
 
 // Grouped renders an integer with en-US thousands separators.
 func Grouped(value int) string {
@@ -253,24 +254,22 @@ func FormatInitEpilogue(graphBuilt bool, nodes, edges int, version string, tty b
 			mark[i] = indigo(mark[i])
 		}
 	}
-	if version != "" {
-		label := "v" + version
-		width := 0
-		for _, line := range wordmark[:wordmarkVersionLine] {
-			width = max(width, len(line))
-		}
-		pad := max(1, width-len(wordmark[wordmarkVersionLine])-len(label))
+	lettering := 0
+	for _, line := range wordmark[:wordmarkVersionLine] {
+		lettering = max(lettering, len(line))
+	}
+	alignRight := func(line int, label string) {
+		pad := max(1, lettering-len(wordmark[line])-width(label))
 		if tty {
 			label = muted(label)
 		}
-		mark[wordmarkVersionLine] += strings.Repeat(" ", pad) + label
+		mark[line] += strings.Repeat(" ", pad) + label
+	}
+	if version != "" {
+		alignRight(wordmarkVersionLine, "v"+version)
 	}
 	if graphBuilt {
-		stats := fmt.Sprintf("  %s nodes · %s edges", Grouped(nodes), Grouped(edges))
-		if tty {
-			stats = muted(stats)
-		}
-		mark[wordmarkStatsLine] += stats
+		alignRight(wordmarkStatsLine, fmt.Sprintf("%s nodes · %s edges", Grouped(nodes), Grouped(edges)))
 	}
 	type step struct {
 		label, command string

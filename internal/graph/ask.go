@@ -95,6 +95,9 @@ type AskHit struct {
 	// ScopeAfterCode serializes scope after code: a workspace hit gains its
 	// scope by object spread, which appends a key the child hit lacked.
 	ScopeAfterCode bool `json:"-"`
+	// NameTerms counts the distinct query terms the hit's name matches, the
+	// name-coverage tier; it stays zero on downranked paths (tests, copies).
+	NameTerms int `json:"-"`
 }
 
 // MarshalJSON keeps the TypeScript key order, including a workspace hit's
@@ -136,6 +139,9 @@ type AskResult struct {
 	Note           string              `json:"note,omitempty"`
 	Saved          *AskSavings         `json:"saved,omitempty"`
 	Ranking        *AskRankingMetadata `json:"-"`
+	// Distinctive is the query term rarest in the graph, suggested as a next
+	// search when the answer is weak; it is not part of the JSON contract.
+	Distinctive string `json:"-"`
 }
 
 // AskRankingGroup is one file queue used by file-aware ranking.
@@ -431,8 +437,10 @@ func askTermCounts(text string) map[string]int {
 	return counts
 }
 
-// askTerms is the TypeScript tokenize: camelCase split, lower-cased, cut on
-// non-alphanumerics, one-letter tokens and stop words dropped, order kept.
+// askTerms tokenizes like the TypeScript ask: camelCase split, lower-cased, cut
+// on non-alphanumerics, one-letter tokens and stop words dropped, order kept.
+// Each term is then folded with AskFold, so the index and the query share one
+// vocabulary.
 func askTerms(text string) []string {
 	text = askCamelBoundary.ReplaceAllString(text, "$1 $2")
 	// JavaScript lower-cases U+0130 to "i" plus a combining dot, which then
@@ -446,9 +454,42 @@ func askTerms(text string) []string {
 		if _, stop := askStopWords[term]; stop {
 			continue
 		}
-		terms = append(terms, term)
+		terms = append(terms, AskFold(term))
 	}
 	return terms
+}
+
+// AskFold folds regular English inflections of a lower-case term so that its
+// forms match: a plural -s, -es or -ies, then -ing or -ed (undoubling a final
+// consonant), then a trailing -e. Every step keeps a stem of three or more
+// letters, so short words stay as they are.
+func AskFold(term string) string {
+	endsWith := func(word string, suffixes ...string) bool {
+		return slices.ContainsFunc(suffixes, func(suffix string) bool { return strings.HasSuffix(word, suffix) })
+	}
+	switch {
+	case len(term) >= 5 && strings.HasSuffix(term, "ies"):
+		term = term[:len(term)-3] + "y"
+	case len(term) >= 5 && strings.HasSuffix(term, "es") && endsWith(term[:len(term)-2], "s", "x", "z", "ch", "sh"):
+		term = term[:len(term)-2]
+	case len(term) >= 4 && strings.HasSuffix(term, "s") && !endsWith(term, "ss", "us", "is"):
+		term = term[:len(term)-1]
+	}
+	for _, suffix := range []string{"ing", "ed"} {
+		stem, ok := strings.CutSuffix(term, suffix)
+		if !ok || len(stem) < 3 {
+			continue
+		}
+		if n := len(stem); n >= 4 && stem[n-1] == stem[n-2] && strings.IndexByte("bdgmnprt", stem[n-1]) >= 0 {
+			stem = stem[:n-1]
+		}
+		term = stem
+		break
+	}
+	if len(term) >= 4 && strings.HasSuffix(term, "e") {
+		term = term[:len(term)-1]
+	}
+	return term
 }
 
 func sameAskHit(left, right AskHit) bool {
@@ -481,7 +522,7 @@ func askFallthroughNote(subject string) string {
 }
 
 func askUsableIndex(index *AskIndex, wiring GraphV1) *AskIndex {
-	if index == nil || index.Version != 1 || index.DocCount != len(wiring.Nodes) || index.DocCount != len(index.Docs) {
+	if index == nil || index.Version != AskIndexVersion || index.DocCount != len(wiring.Nodes) || index.DocCount != len(index.Docs) {
 		return nil
 	}
 	for _, node := range wiring.Nodes {

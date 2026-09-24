@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/h0rn3t/Graft/internal/jsonjs"
@@ -119,5 +120,46 @@ func TestNoGlobalKeepsHomeUntouched(t *testing.T) {
 	}
 	if !slices.ContainsFunc(result.Hooks, func(write ConfigWrite) bool { return write.ID == "cursor-hooks" }) {
 		t.Errorf("--no-global hooks = %+v, want Cursor's repo-local hooks", result.Hooks)
+	}
+}
+
+func TestMergeGraftSettingsNarrowsToolHookAndAddsSubagentStop(t *testing.T) {
+	const legacy = `{"hooks":{
+		"PostToolUse":[
+			{"matcher":"Write","hooks":[{"type":"command","command":"echo user"}]},
+			{"matcher":"Bash|mcp__graft__|Read|Grep|Glob","hooks":[{"type":"command","command":"node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" tool-savings","timeout":8}]}
+		],
+		"SubagentStop":[{"hooks":[{"type":"command","command":"echo user-subagent"}]}]
+	}}`
+	value, err := jsonjs.Parse([]byte(legacy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	existing, _ := jsonjs.AsObject(value)
+	merged, warnings := MergeGraftSettings(existing, true)
+	if len(warnings) != 0 {
+		t.Errorf("MergeGraftSettings(legacy hooks) warnings = %v, want none", warnings)
+	}
+	hooks := func(object *jsonjs.Object) string {
+		value, _ := object.Get("hooks")
+		return jsonjs.Stringify(value, 0)
+	}
+	got := hooks(merged)
+	for _, want := range []string{`"matcher":"Write"`, `echo user"`, `"matcher":"Grep|Bash"`, `graft-hooks.cjs\" stop`, `echo user-subagent`} {
+		if !strings.Contains(got, want) {
+			t.Errorf("MergeGraftSettings(legacy hooks) hooks = %s, want %s", got, want)
+		}
+	}
+	if strings.Contains(got, "Bash|mcp__graft__|Read|Grep|Glob") {
+		t.Errorf("MergeGraftSettings(legacy hooks) hooks = %s, want the legacy tool-savings matcher replaced", got)
+	}
+	subagent, _ := jsonjs.AsObject(mustGet(merged, "hooks"))
+	if entries, _ := jsonjs.AsArray(mustGet(subagent, "SubagentStop")); len(entries) != 2 {
+		t.Errorf("MergeGraftSettings(legacy hooks) SubagentStop = %v, want the user entry and graft's stop entry", entries)
+	}
+
+	dropGraftHooks(merged)
+	if got := hooks(merged); strings.Contains(got, "graft-hooks.cjs") || !strings.Contains(got, "echo user-subagent") || !strings.Contains(got, `echo user"`) {
+		t.Errorf("dropGraftHooks(merged) hooks = %s, want every graft entry gone and the user entries kept", got)
 	}
 }

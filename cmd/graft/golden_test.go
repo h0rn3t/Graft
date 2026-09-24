@@ -352,8 +352,8 @@ func TestCLIAcceptanceSQL(t *testing.T) {
 		want string
 	}{
 		{[]string{"callers", "billing.customers"}, "billing.invoices"},
-		{[]string{"skeleton", "db/schema.sql"}, "type billing.customers"},
-		{[]string{"skeleton", "db/schema.sql"}, "function billing.total_due"},
+		{[]string{"skeleton", "db/schema.sql"}, "CREATE TABLE billing.customers"},
+		{[]string{"skeleton", "db/schema.sql"}, "CREATE FUNCTION billing.total_due"},
 		{[]string{"ask", "open invoices", "--json"}, "db/schema.sql:"},
 		{[]string{"grep", "REFERENCES"}, "billing.invoices"},
 	} {
