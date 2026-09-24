@@ -7,10 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
-	"unicode/utf16"
+	"sync"
 
+	"github.com/h0rn3t/Graft/internal/savings"
 	"golang.org/x/text/collate"
 	textlanguage "golang.org/x/text/language"
 )
@@ -34,8 +36,40 @@ func localeCompare() func(a, b string) int {
 	return collate.New(textlanguage.English).CompareString
 }
 
-func utf16Len(text string) int {
-	return len(utf16.Encode([]rune(text)))
+// localeSortKeys returns the collation key of every text: comparing two keys
+// bytewise orders their texts as localeCompare does. A large sort then runs
+// the collation algorithm once per text rather than once per comparison. The
+// keys are computed in parallel; a collator is not safe for concurrent use, so
+// every worker builds its own.
+func localeSortKeys(texts []string) [][]byte {
+	const minChunk = 1024
+	keys := make([][]byte, len(texts))
+	workers := min(runtime.GOMAXPROCS(0), max(1, len(texts)/minChunk))
+	chunk := (len(texts) + workers - 1) / workers
+	var wg sync.WaitGroup
+	for start := 0; start < len(texts); start += chunk {
+		end := min(start+chunk, len(texts))
+		wg.Go(func() {
+			collator := collate.New(textlanguage.English)
+			var buffer collate.Buffer // Keys stay valid while nothing resets it.
+			for index := start; index < end; index++ {
+				keys[index] = collator.KeyFromString(&buffer, texts[index])
+			}
+		})
+	}
+	wg.Wait()
+	return keys
+}
+
+// localeOrder is the stable permutation that sorts items by compare, which
+// reads the collation keys localeSortKeys computed for them.
+func localeOrder(count int, compare func(a, b int) int) []int {
+	order := make([]int, count)
+	for index := range order {
+		order[index] = index
+	}
+	slices.SortStableFunc(order, compare)
+	return order
 }
 
 var (
@@ -163,7 +197,7 @@ func discoverScopes(root string, relFiles []string) []ScopeV1 {
 	}
 	compare := localeCompare()
 	slices.SortStableFunc(scopes, func(a, b ScopeV1) int {
-		return cmp.Or(utf16Len(b.Prefix)-utf16Len(a.Prefix), compare(a.Prefix, b.Prefix))
+		return cmp.Or(savings.Length(b.Prefix)-savings.Length(a.Prefix), compare(a.Prefix, b.Prefix))
 	})
 	return scopes
 }

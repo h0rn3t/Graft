@@ -1,10 +1,12 @@
 package graph
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 )
 
@@ -110,4 +112,49 @@ func TestWritePreservesAnotherTemporaryFile(t *testing.T) {
 	if string(got) != "another writer" {
 		t.Errorf("temporary file = %q, want %q", got, "another writer")
 	}
+}
+
+func TestLocaleKeysOrderLikeLocaleCompare(t *testing.T) {
+	words := []string{
+		"", "a", "A", "b", "B", "_a", "a_b", "a-b", "a.b", "a/b", "a#b", "a~2", "a~10",
+		"src/app.ts", "src/App.ts", "src/app.ts#greet", "src/app.ts#Greet", "src/app.tsx",
+		"internal/graph/build.go#BuildGraph", "internal/graph/build.go#buildGraph",
+		"café", "cafe", "Café", "résumé", "resume", "naïve", "straße", "strasse",
+		"über", "Uber", "日本", "😀", "a😀", "1", "10", "2", "a1", "a10", "a2", " a", "a ",
+		"calls", "contains", "imports", "references", "extends", "implements", "�",
+	}
+	// Enough copies to spread the keys over several workers.
+	var texts []string
+	for range 200 {
+		texts = append(texts, words...)
+	}
+	keys := localeSortKeys(texts)
+	compare := localeCompare()
+	sign := func(n int) int { return min(max(n, -1), 1) }
+	for a := range words {
+		for b := range words {
+			x, y := a+len(words)*(a%200), b+len(words)*(199-b%200)
+			if got, want := sign(bytes.Compare(keys[x], keys[y])), sign(compare(words[a], words[b])); got != want {
+				t.Errorf("bytes.Compare(localeSortKeys(%q), localeSortKeys(%q)) = %d, want %d", words[a], words[b], got, want)
+			}
+		}
+	}
+}
+
+func TestSortNodesByIDIsStableLocaleOrder(t *testing.T) {
+	nodes := []NodeV1{{ID: "b", Name: "1"}, {ID: "A", Name: "2"}, {ID: "a", Name: "3"}, {ID: "b", Name: "4"}, {ID: "_c", Name: "5"}}
+	want := slices.Clone(nodes)
+	compare := localeCompare()
+	slices.SortStableFunc(want, func(a, b NodeV1) int { return compare(a.ID, b.ID) })
+	if got := sortNodesByID(nodes); !slices.Equal(names(got), names(want)) {
+		t.Errorf("sortNodesByID(%v) = %v, want %v", names(nodes), names(got), names(want))
+	}
+}
+
+func names(nodes []NodeV1) []string {
+	out := make([]string, 0, len(nodes))
+	for _, node := range nodes {
+		out = append(out, node.ID+"/"+node.Name)
+	}
+	return out
 }

@@ -305,29 +305,16 @@ func mapSortedLanguages(paths []string) []string {
 	return languages
 }
 
+// mapLanguageLabel is the language a build records for path, or "".
 func mapLanguageLabel(path string) string {
-	path = strings.ToLower(filepath.ToSlash(path))
-	labels := []struct {
-		ext   string
-		label string
-	}{
-		{".tsx", "tsx"},
-		{".jsx", "jsx"},
-		{".mts", "typescript"},
-		{".cts", "typescript"},
-		{".ts", "typescript"},
-		{".mjs", "javascript"},
-		{".cjs", "javascript"},
-		{".js", "javascript"},
-		{".pyi", "python"},
-		{".py", "python"},
-		{".go", "go"},
-		{".java", "java"},
+	if _, label, ok := languageOf(path); ok {
+		return label
 	}
-	for _, entry := range labels {
-		if strings.HasSuffix(path, entry.ext) {
-			return entry.label
-		}
+	if generic, ok := genericLanguageOf(path); ok {
+		return generic
+	}
+	if strings.EqualFold(filepath.Ext(path), ".sql") {
+		return "sql"
 	}
 	return ""
 }

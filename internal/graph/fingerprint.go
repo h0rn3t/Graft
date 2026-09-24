@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/h0rn3t/Graft/internal/fsutil"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
@@ -144,37 +145,8 @@ func WriteFingerprint(outDir, extractor string, files map[string]FingerprintFile
 	if err != nil {
 		return fmt.Errorf("encode graph fingerprint: %w", err)
 	}
-	if err := writeAtomicSidecar(path, data); err != nil {
+	if err := fsutil.WriteFileAtomic(path, data, 0o644); err != nil {
 		return fmt.Errorf("write graph fingerprint: %w", err)
-	}
-	return nil
-}
-
-func writeAtomicSidecar(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create directory: %w", err)
-	}
-	temporary, err := os.CreateTemp(dir, filepath.Base(path)+".*.tmp")
-	if err != nil {
-		return fmt.Errorf("create temporary file: %w", err)
-	}
-	temporaryPath := temporary.Name()
-	defer func() {
-		_ = temporary.Close()
-		_ = os.Remove(temporaryPath)
-	}()
-	if err := temporary.Chmod(0o644); err != nil {
-		return fmt.Errorf("set temporary file permissions: %w", err)
-	}
-	if _, err := temporary.Write(data); err != nil {
-		return fmt.Errorf("write temporary file: %w", err)
-	}
-	if err := temporary.Close(); err != nil {
-		return fmt.Errorf("close temporary file: %w", err)
-	}
-	if err := os.Rename(temporaryPath, path); err != nil {
-		return fmt.Errorf("replace file: %w", err)
 	}
 	return nil
 }
@@ -222,6 +194,9 @@ func probeDrift(root, outDir string, opts sourcefiles.Options, fingerprint *Fing
 		}
 		text, readable, err := sourcefiles.Read(file.Abs)
 		if err != nil {
+			// Its stats changed and its content is unknown, so it cannot be
+			// assumed unchanged.
+			drift.Changed = append(drift.Changed, file.Rel)
 			continue
 		}
 		if !readable {

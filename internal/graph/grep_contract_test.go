@@ -8,6 +8,21 @@ import (
 	"testing"
 )
 
+func TestGrepMatchesLineEndOnCRLF(t *testing.T) {
+	dir := t.TempDir()
+	writeGrepFile(t, dir, "src/a.ts", "export function root() {\r\n  return tail\r\n}\r\n")
+	file := grepContractNode("src/a.ts", "a.ts", "file", "src/a.ts", "L1-L3", 0)
+	root := grepContractNode("src/a.ts#root", "root", "function", "src/a.ts", "L1-L3", 0)
+	result, err := Grep(GraphV1{Nodes: []NodeV1{file, root}}, dir, "tail$", GrepOptions{})
+	if err != nil {
+		t.Fatalf("Grep(%q) error = %v, want nil", "tail$", err)
+	}
+	want := []GrepHit{{Line: 2, Text: "return tail"}}
+	if result.TotalHits != 1 || len(result.Groups) != 1 || !reflect.DeepEqual(result.Groups[0].Hits, want) {
+		t.Errorf("Grep(%q) = %#v, want one hit %v", "tail$", result, want)
+	}
+}
+
 func TestGrepContract(t *testing.T) {
 	dir := t.TempDir()
 	writeGrepFile(t, dir, "src/a.ts", "NEEDLE module\nexport function root() {\n  NEEDLE root\n}\n")

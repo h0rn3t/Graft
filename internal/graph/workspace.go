@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/h0rn3t/Graft/internal/fsutil"
 )
 
 // WorkspaceChild pairs a workspace repository's directory name with its graph.
@@ -195,7 +197,7 @@ func WriteWorkspace(outDir string, children []string) error {
 	if err != nil {
 		return fmt.Errorf("encode workspace index: %w", err)
 	}
-	if err := writeAtomicSidecar(filepath.Join(outDir, "workspace.json"), append(data, '\n')); err != nil {
+	if err := fsutil.WriteFileAtomic(filepath.Join(outDir, "workspace.json"), append(data, '\n'), 0o644); err != nil {
 		return fmt.Errorf("write workspace index: %w", err)
 	}
 	return nil

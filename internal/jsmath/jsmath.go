@@ -7,15 +7,7 @@
 // float64 conversion, which the Go specification guarantees is not fused.
 package jsmath
 
-import (
-	"math"
-	"runtime"
-)
-
-// contracted reports whether V8's C++ math on this architecture is built with
-// floating-point contraction. Node's arm64 builds contract multiply-adds within
-// an expression; x86-64 builds have no FMA in the baseline instruction set.
-var contracted = runtime.GOARCH == "arm64"
+import "math"
 
 const (
 	ln2Hi = 6.93147180369123816490e-01
@@ -33,12 +25,15 @@ func mul(a, b float64) float64 {
 	return float64(a * b)
 }
 
-// madd is a*b+c as the C compiler that built V8 evaluates it.
+// madd is a*b+c as one fused multiply-add, the way Node's arm64 builds compile
+// V8's fdlibm; x86-64 builds, lacking FMA in the baseline instruction set,
+// round the product first and differ from it by one ulp on some inputs. The
+// arm64 mode is fixed rather than taken from the running architecture, so a
+// graph ranks the same on every machine, and it is the mode the committed
+// goldens were generated with on darwin/arm64. math.FMA is exact everywhere,
+// in software where the CPU lacks the instruction.
 func madd(a, b, c float64) float64 {
-	if contracted {
-		return math.FMA(a, b, c)
-	}
-	return mul(a, b) + c
+	return math.FMA(a, b, c)
 }
 
 // Log is Math.log: fdlibm's e_log.c, the implementation V8 ships.

@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/h0rn3t/Graft/internal/fsutil"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
@@ -282,7 +283,7 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		if err != nil {
 			return BuildResult{}, fmt.Errorf("encode graph extraction cache: %w", err)
 		}
-		_ = writeAtomicSidecar(cachePath, data) // A cache write failure only costs reuse on the next build.
+		_ = fsutil.WriteFileAtomic(cachePath, data, 0o644) // A cache write failure only costs reuse on the next build.
 	}
 
 	edges := resolveEdges(nodes, rawEdges, modules)

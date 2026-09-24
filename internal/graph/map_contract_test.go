@@ -2,9 +2,18 @@ package graph
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 )
+
+func TestMapLanguagesCoverEveryNativeLanguage(t *testing.T) {
+	paths := []string{"a.ts", "b.TSX", "c.py", "d.go", "e.java", "f.rs", "g.c", "h.hpp", "i.cc", "j.SQL", "k.md"}
+	want := []string{"c", "cpp", "go", "java", "python", "rust", "sql", "tsx", "typescript"}
+	if got := mapSortedLanguages(paths); !slices.Equal(got, want) {
+		t.Errorf("mapSortedLanguages(%q) = %q, want %q", paths, got, want)
+	}
+}
 
 func TestBuildRepoMapContract(t *testing.T) {
 	graph := mapContractGraph()

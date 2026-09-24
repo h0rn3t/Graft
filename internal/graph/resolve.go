@@ -45,13 +45,24 @@ func familyOf(file string) string {
 
 // reachable reports whether a reference in file could reach a definition in
 // candidate; an unknown family never filters.
-func reachable(file, candidate string) bool {
-	from := familyOf(file)
+func (ix *resolveIndex) reachable(file, candidate string) bool {
+	from := ix.familyOf(file)
 	if from == "" {
 		return true
 	}
-	to := familyOf(candidate)
+	to := ix.familyOf(candidate)
 	return to == "" || from == to
+}
+
+// familyOf memoizes the package familyOf per path; resolution asks it for
+// every candidate of every reference.
+func (ix *resolveIndex) familyOf(file string) string {
+	family, ok := ix.family[file]
+	if !ok {
+		family = familyOf(file)
+		ix.family[file] = family
+	}
+	return family
 }
 
 type resolved struct {
@@ -71,6 +82,10 @@ type resolveIndex struct {
 	rustCrateRoots    []string
 	classParents      map[string][]string
 	goModules         []goModule
+	// sqlTypesBySegment holds the SQL type definitions with a dotted name,
+	// keyed by its last segment: `users` finds `app.users`.
+	sqlTypesBySegment map[string][]NodeV1
+	family            map[string]string
 }
 
 // resolveEdges turns raw edge intents into GraphV1 edges (resolve.ts resolveEdges).
@@ -80,7 +95,7 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) []Ed
 		perFileName: make(map[string]map[string][]NodeV1), ownerMethod: make(map[string][]NodeV1),
 		goFilesByDir: make(map[string][]string), javaFilesBySuffix: make(map[string][]string),
 		cFilesBySuffix: make(map[string][]string), classParents: make(map[string][]string),
-		goModules: goModules,
+		goModules: goModules, sqlTypesBySegment: make(map[string][]NodeV1), family: make(map[string]string),
 	}
 	pushSuffixes := func(index map[string][]string, node NodeV1) {
 		parts := strings.Split(node.Path, "/")
@@ -111,6 +126,10 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) []Ed
 			continue
 		}
 		ix.globalName[node.Name] = append(ix.globalName[node.Name], node)
+		if dot := strings.LastIndexByte(node.Name, '.'); dot >= 0 && node.Kind == "type" && strings.EqualFold(path.Ext(node.Path), ".sql") {
+			segment := node.Name[dot+1:]
+			ix.sqlTypesBySegment[segment] = append(ix.sqlTypesBySegment[segment], node)
+		}
 		if ix.perFileName[node.Path] == nil {
 			ix.perFileName[node.Path] = make(map[string][]NodeV1)
 		}
@@ -217,15 +236,7 @@ func (ix *resolveIndex) resolveReference(edge rawEdge, add func(string, string, 
 			}
 		}
 		if len(candidates) == 0 && !strings.Contains(edge.name, ".") {
-			for name, named := range ix.globalName {
-				if strings.HasSuffix(name, "."+edge.name) {
-					for _, candidate := range named {
-						if strings.EqualFold(path.Ext(candidate.Path), ".sql") && candidate.Kind == "type" {
-							candidates = append(candidates, candidate)
-						}
-					}
-				}
-			}
+			candidates = ix.sqlTypesBySegment[edge.name]
 		}
 		if len(candidates) == 1 {
 			confidence := Confidence("inferred")
@@ -305,7 +316,7 @@ func (ix *resolveIndex) resolveName(name, file string, kinds []Kind) (resolved, 
 	}
 	var global []NodeV1
 	for _, node := range ix.globalName[name] {
-		if slices.Contains(kinds, node.Kind) && reachable(file, node.Path) {
+		if slices.Contains(kinds, node.Kind) && ix.reachable(file, node.Path) {
 			global = append(global, node)
 		}
 	}
@@ -339,7 +350,7 @@ func narrowByArity(candidates []NodeV1, argCount *int) []NodeV1 {
 func (ix *resolveIndex) reachableMethods(key, file string) []NodeV1 {
 	var out []NodeV1
 	for _, candidate := range ix.ownerMethod[key] {
-		if reachable(file, candidate.Path) {
+		if ix.reachable(file, candidate.Path) {
 			out = append(out, candidate)
 		}
 	}

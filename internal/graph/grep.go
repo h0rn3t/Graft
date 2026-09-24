@@ -2,17 +2,15 @@ package graph
 
 import (
 	"cmp"
-	"encoding/binary"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
-	"unicode/utf16"
-	"unicode/utf8"
 
 	"github.com/h0rn3t/Graft/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/savings"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
 const (
@@ -119,6 +117,7 @@ func Grep(wiring GraphV1, repoRoot, pattern string, opts GrepOptions) (GrepResul
 	}
 
 	inDegree := grepInDegree(wiring.Edges)
+	symbolsByPath := grepSymbols(wiring.Nodes)
 	groupIndexes := make(map[string]int)
 	hitPaths := make(map[string]struct{})
 	for _, file := range wiring.Nodes {
@@ -126,14 +125,15 @@ func Grep(wiring GraphV1, repoRoot, pattern string, opts GrepOptions) (GrepResul
 			continue
 		}
 		result.FilesSearched++
-		text, readable := readGrepSource(filepath.Join(repoRoot, filepath.FromSlash(file.Path)))
-		if !readable {
+		text, readable, err := sourcefiles.Read(filepath.Join(repoRoot, filepath.FromSlash(file.Path)))
+		if err != nil || !readable {
 			result.Truncated.Files++
 			continue
 		}
-		symbols := grepSymbols(wiring.Nodes, file.Path)
+		symbols := symbolsByPath[file.Path]
 		for lineIndex, raw := range strings.Split(text, "\n") {
-			if !matcher.MatchString(raw) {
+			// A CRLF line still ends where `$` looks for it.
+			if !matcher.MatchString(strings.TrimSuffix(raw, "\r")) {
 				continue
 			}
 			if result.TotalHits >= maxHits {
@@ -179,22 +179,26 @@ type grepSymbolSpan struct {
 	start, end int
 }
 
-func grepSymbols(nodes []NodeV1, path string) []grepSymbolSpan {
-	symbols := make([]grepSymbolSpan, 0)
+// grepSymbols groups the symbols with a line span by path, each group in
+// span-start order and otherwise in node order.
+func grepSymbols(nodes []NodeV1) map[string][]grepSymbolSpan {
+	byPath := make(map[string][]grepSymbolSpan)
 	for index := range nodes {
 		node := &nodes[index]
-		if node.Kind == Kind("file") || node.Path != path {
+		if node.Kind == Kind("file") {
 			continue
 		}
 		start, end, ok := grepSpanBounds(node.Span)
 		if ok {
-			symbols = append(symbols, grepSymbolSpan{node: node, start: start, end: end})
+			byPath[node.Path] = append(byPath[node.Path], grepSymbolSpan{node: node, start: start, end: end})
 		}
 	}
-	slices.SortStableFunc(symbols, func(left, right grepSymbolSpan) int {
-		return cmp.Compare(left.start, right.start)
-	})
-	return symbols
+	for _, symbols := range byPath {
+		slices.SortStableFunc(symbols, func(left, right grepSymbolSpan) int {
+			return cmp.Compare(left.start, right.start)
+		})
+	}
+	return byPath
 }
 
 func grepSpanBounds(span string) (int, int, bool) {
@@ -266,26 +270,8 @@ func grepSavings(nodes []NodeV1, paths map[string]struct{}) *GrepSavings {
 	return saved
 }
 
-func readGrepSource(path string) (string, bool) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", false
-	}
-	if len(data) >= 2 && data[0] == 0xfe && data[1] == 0xff {
-		return "", false
-	}
-	if len(data) >= 2 && data[0] == 0xff && data[1] == 0xfe {
-		words := make([]uint16, (len(data)-2)/2)
-		for index := range words {
-			words[index] = binary.LittleEndian.Uint16(data[2+index*2:])
-		}
-		return string(utf16.Decode(words)), true
-	}
-	return strings.ToValidUTF8(string(data), string(utf8.RuneError)), true
-}
-
 func truncateGrepText(text string) string {
-	if len(utf16.Encode([]rune(text))) <= maxGrepHitText {
+	if savings.Length(text) <= maxGrepHitText {
 		return text
 	}
 	var output strings.Builder

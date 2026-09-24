@@ -3,6 +3,7 @@ package graph
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"testing"
 	"time"
@@ -155,6 +156,23 @@ func TestProbeDriftContract(t *testing.T) {
 				writeFingerprintContractFile(t, root, "outside.ts", "new")
 			},
 			want: Drift{Changed: []string{}, Added: []string{}, Removed: []string{}},
+		},
+		{
+			name: "changed stats with an unreadable source",
+			setup: func(t *testing.T, root, outDir string) {
+				if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+					t.Skip("file modes do not deny reads here")
+				}
+				writeFingerprintContractFile(t, root, "src/a.ts", "old")
+				writeFingerprintContract(t, root, outDir, nil)
+				writeFingerprintContractFile(t, root, "src/a.ts", "new content")
+				path := filepath.Join(root, "src", "a.ts")
+				if err := os.Chmod(path, 0); err != nil {
+					t.Fatalf("Chmod(%q) error = %v", path, err)
+				}
+				t.Cleanup(func() { _ = os.Chmod(path, 0o600) }) // lets TempDir cleanup remove it
+			},
+			want: Drift{Changed: []string{"src/a.ts"}, Added: []string{}, Removed: []string{}},
 		},
 		{
 			name: "stat fast path trusts matching size and mtime",

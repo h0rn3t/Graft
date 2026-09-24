@@ -3,8 +3,8 @@ package graph
 import (
 	"fmt"
 	"path/filepath"
-	"slices"
 
+	"github.com/h0rn3t/Graft/internal/fsutil"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
@@ -46,11 +46,7 @@ func WriteAskIndex(outDir string, graph GraphV1) error {
 		}
 		return out
 	}
-	nodes := slices.Clone(graph.Nodes)
-	compare := localeCompare()
-	slices.SortStableFunc(nodes, func(a, b NodeV1) int {
-		return compare(a.ID, b.ID)
-	})
+	nodes := sortNodesByID(graph.Nodes)
 	docs := make([]document, 0, len(nodes))
 	df := askBag{counts: make(map[string]int)}
 	length := 0
@@ -87,7 +83,7 @@ func WriteAskIndex(outDir string, graph GraphV1) error {
 	if err != nil {
 		return fmt.Errorf("encode ask index: %w", err)
 	}
-	if err := writeAtomicSidecar(filepath.Join(outDir, ".cache", "ask-index.json"), append(data, '\n')); err != nil {
+	if err := fsutil.WriteFileAtomic(filepath.Join(outDir, ".cache", "ask-index.json"), append(data, '\n'), 0o644); err != nil {
 		return fmt.Errorf("write ask index: %w", err)
 	}
 	return nil

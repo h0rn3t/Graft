@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/h0rn3t/Graft/internal/fsutil"
 )
 
 // mainWorktreeRoot resolves a linked worktree's primary checkout from its Git metadata.
@@ -129,7 +131,7 @@ func seedGraphFromWorktree(root, outDir string) (string, bool, error) {
 		if err != nil {
 			return "", false, fmt.Errorf("read main worktree graph cache %q: %w", name, err)
 		}
-		if err := writeAtomicSidecar(filepath.Join(cacheDir, name), data); err != nil {
+		if err := fsutil.WriteFileAtomic(filepath.Join(cacheDir, name), data, 0o644); err != nil {
 			return "", false, fmt.Errorf("copy main worktree graph cache %q: %w", name, err)
 		}
 	}
@@ -137,7 +139,7 @@ func seedGraphFromWorktree(root, outDir string) (string, bool, error) {
 	if err != nil {
 		return "", false, fmt.Errorf("read main worktree graph: %w", err)
 	}
-	if err := writeAtomicSidecar(WiringPath(outDir), data); err != nil {
+	if err := fsutil.WriteFileAtomic(WiringPath(outDir), data, 0o644); err != nil {
 		return "", false, fmt.Errorf("install main worktree graph: %w", err)
 	}
 	return main, false, nil

@@ -403,6 +403,10 @@ func askPreparePartitions(wiring GraphV1, partitionOf func(string) (string, bool
 	return partitions
 }
 
+// askPageRankTS is a personalized PageRank from seeds over topology. Ranks
+// live in slices indexed by first-visit order, which is the insertion order
+// the TypeScript Maps iterate in, so every sum runs in the same order and the
+// scores stay bit-identical to a map-per-iteration walk.
 func askPageRankTS(topology askTopology, seeds *askScores) *askScores {
 	const (
 		alpha = 0.25
@@ -417,54 +421,77 @@ func askPageRankTS(topology askTopology, seeds *askScores) *askScores {
 	if seedTotal <= 0 {
 		return newAskScores()
 	}
-	restart := newAskScores()
+	var ids []string
+	index := make(map[string]int)
+	visit := func(id string) int {
+		at, ok := index[id]
+		if !ok {
+			at = len(ids)
+			index[id] = at
+			ids = append(ids, id)
+		}
+		return at
+	}
+	var restart []float64
 	for _, id := range seeds.ids {
 		if _, ok := topology.ids[id]; ok && seeds.values[id] > 0 {
-			restart.set(id, seeds.values[id]/seedTotal)
+			visit(id)
+			restart = append(restart, seeds.values[id]/seedTotal)
 		}
 	}
-	rank := newAskScores()
-	for _, id := range restart.ids {
-		rank.set(id, restart.values[id])
-	}
+	// neighbours[i] lists node i's neighbours by index; it is filled the
+	// first time node i spreads its rank, which is when a Map-based walk
+	// would first insert them.
+	var neighbours [][]int
+	rank := slices.Clone(restart)
+	next := make([]float64, 0, len(rank))
 	for range iters {
-		next := newAskScores()
-		for _, id := range restart.ids {
-			next.set(id, alpha*restart.values[id])
+		next = next[:0]
+		for _, value := range restart {
+			next = append(next, alpha*value)
 		}
 		dangling := 0.0
-		for _, id := range rank.ids {
-			mass := rank.values[id]
-			neighbours := topology.adjacency[id]
-			if len(neighbours) == 0 {
+		for at, mass := range rank {
+			if at == len(neighbours) {
+				linked := topology.adjacency[ids[at]]
+				indexes := make([]int, len(linked))
+				for position, id := range linked {
+					indexes[position] = visit(id)
+				}
+				neighbours = append(neighbours, indexes)
+			}
+			if len(neighbours[at]) == 0 {
 				dangling += mass
 				continue
 			}
-			share := ((1 - alpha) * mass) / float64(len(neighbours))
-			for _, neighbour := range neighbours {
-				next.set(neighbour, next.values[neighbour]+share)
+			share := ((1 - alpha) * mass) / float64(len(neighbours[at]))
+			for _, neighbour := range neighbours[at] {
+				for len(next) <= neighbour {
+					next = append(next, 0)
+				}
+				next[neighbour] += share
 			}
 		}
 		if dangling > 0 {
 			spread := (1 - alpha) * dangling
-			for _, id := range restart.ids {
-				next.set(id, next.values[id]+float64(spread*restart.values[id]))
+			for at, value := range restart {
+				next[at] += float64(spread * value)
 			}
 		}
-		rank = next
+		rank, next = next, rank
 	}
 	maximum := 0.0
-	for _, id := range rank.ids {
-		if rank.values[id] > maximum {
-			maximum = rank.values[id]
+	for _, value := range rank {
+		if value > maximum {
+			maximum = value
 		}
 	}
 	out := newAskScores()
 	if maximum <= 0 {
 		return out
 	}
-	for _, id := range rank.ids {
-		out.set(id, rank.values[id]/maximum)
+	for at, value := range rank {
+		out.set(ids[at], value/maximum)
 	}
 	return out
 }
