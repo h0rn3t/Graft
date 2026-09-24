@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.0 - 2026-09-24
+
+### Changed
+
+- **Ranking tolerates regular English inflections.** Query words and indexed terms fold plural `-s`/`-es`/`-ies`, `-ing` and `-ed`, so `timeouts` finds `hookTimeout`. An exact match still ranks at least as high as a folded one. `grep` and `graft_find_all` keep matching literally.
+- **Symbols whose names match more query terms are listed first** among the selected hits, ahead of graph centrality and file order. Tests, fixtures and copied source are not lifted unless the query asks for them. The ask index format changed, so existing graphs rebuild once on the next query.
+- **Retrieval text is shorter.** `ask`, `graft_find_code`, `skeleton` and `graft_file_api` no longer repeat the signature above an excerpt that starts with it, echo the query, or tag hits with their kind. A truncated excerpt ends with `… +N lines (--full)`. Excerpt windows skip blank and bracket-only lines, bare file hits take one line, and skeleton entries read `<span> <signature>`. JSON output is unchanged.
+- **Weak answers name a concrete next step.** When no hit's name covers the query's distinctive terms, the answer ends with one notice naming the tool and a term to try: MCP tool names over MCP, CLI commands on the CLI.
+- **Exhaustive search lists production code first.** `grep` and `graft_find_all` put production groups before testdata, fixture, generated and vendored groups. Every hit and the totals are unchanged.
+- **Hooks repeat less and cost less.** The post-edit blast radius is shown once per file and agent context until its dependents change. The prompt hook inlines code only for a strong top hit and gives the rest as one-line pointers. For Claude Code, the per-call PostToolUse hook now runs only for `Grep|Bash`. Graft and source-read counts come from the transcript at `Stop` and the new `SubagentStop` hook. Upkeep rewrites existing installations and keeps unrelated user hooks.
+- `graft init` shows the graph's node and edge counts under the `graft` lettering, beside the gopher's last line.
+- The generated agent instructions and the graft skill are shorter, and they say when to use each tool.
+
 ## 0.1.3 - 2026-09-24
 
 ### Changed

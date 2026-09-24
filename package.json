@@ -1,6 +1,6 @@
 {
   "name": "@nanonets/graft",
-  "version": "0.1.3",
+  "version": "0.2.0",
   "description": "Build a repo's context graph as a local, regenerable cache for coding agents.",
   "keywords": [
     "agents",
@@ -41,4 +41,3 @@
     "node": ">=20"
   }
 }
-
