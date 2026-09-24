@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/hosts"
-	"github.com/NanoNets/context-graph-engine/internal/upkeep"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/hosts"
+	"github.com/h0rn3t/Graft/internal/upkeep"
 )
 
 type initOptions struct {

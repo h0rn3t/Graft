@@ -14,7 +14,7 @@ import (
 	"sync/atomic"
 	"unicode/utf16"
 
-	"github.com/NanoNets/context-graph-engine/internal/jsmath"
+	"github.com/h0rn3t/Graft/internal/jsmath"
 )
 
 // inputRate holds the float64 bits of the session's $/Mtok input rate; zero

@@ -14,11 +14,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/brain"
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
-	"github.com/NanoNets/context-graph-engine/internal/telemetry"
-	"github.com/NanoNets/context-graph-engine/internal/upkeep"
+	"github.com/h0rn3t/Graft/internal/brain"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/telemetry"
+	"github.com/h0rn3t/Graft/internal/upkeep"
 )
 
 type callersOptions struct {

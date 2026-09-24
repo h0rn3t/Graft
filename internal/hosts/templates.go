@@ -7,7 +7,7 @@ import (
 	"embed"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 // The templates are generated from the TypeScript sources and checked against

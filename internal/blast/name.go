@@ -15,8 +15,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/llm"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/llm"
 )
 
 // Cluster is one group of files to name.

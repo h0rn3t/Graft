@@ -33,7 +33,7 @@
   "requests": [],
   "normalizeMS": true,
   "status": 0,
-  "stdout": "telemetry: off — you disabled it (`graft telemetry enable` to turn it back on)\n  contract:  https://github.com/NanoNets/context-graph-engine/blob/main/TELEMETRY.md\n  endpoint:  http://127.0.0.1:1\n  queued:    2 events waiting for the next daily flush\n  enable:    graft telemetry enable\n  inspect:   graft telemetry debug   (prints the exact batch, sends nothing)\n",
+  "stdout": "telemetry: off — you disabled it (`graft telemetry enable` to turn it back on)\n  contract:  https://github.com/h0rn3t/Graft/blob/main/TELEMETRY.md\n  endpoint:  http://127.0.0.1:1\n  queued:    2 events waiting for the next daily flush\n  enable:    graft telemetry enable\n  inspect:   graft telemetry debug   (prints the exact batch, sends nothing)\n",
   "stderr": "",
   "files": {
     "home/.codex/config.toml": "[mcp_servers.graft]\ncommand = \"npx\"\nargs = [\"-y\", \"@nanonets/graft\", \"mcp\"]\n",

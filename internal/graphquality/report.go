@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	graphmodel "github.com/NanoNets/context-graph-engine/internal/graph"
+	graphmodel "github.com/h0rn3t/Graft/internal/graph"
 )
 
 // Node is the subset of a graph node used by the quality report.

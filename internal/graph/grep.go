@@ -12,7 +12,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 const (

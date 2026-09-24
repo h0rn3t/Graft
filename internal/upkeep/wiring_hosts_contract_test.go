@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NanoNets/context-graph-engine/internal/hosts"
+	"github.com/h0rn3t/Graft/internal/hosts"
 )
 
 func TestWiredHostIDsContract(t *testing.T) {

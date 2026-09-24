@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 // Dir is the local configuration directory under a repository root.

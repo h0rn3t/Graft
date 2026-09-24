@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/savings"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/savings"
 )
 
 var hookANSIPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)

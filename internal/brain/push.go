@@ -20,8 +20,8 @@ import (
 
 	jsonv2 "encoding/json/v2"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 const (

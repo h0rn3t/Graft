@@ -8,10 +8,10 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/brain"
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
-	"github.com/NanoNets/context-graph-engine/internal/telemetry"
+	"github.com/h0rn3t/Graft/internal/brain"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/telemetry"
 )
 
 func parseBrainHandoff(value string) (brain.Link, error) {

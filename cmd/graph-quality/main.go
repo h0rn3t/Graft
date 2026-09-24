@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/NanoNets/context-graph-engine/internal/graphquality"
+	"github.com/h0rn3t/Graft/internal/graphquality"
 )
 
 func main() {

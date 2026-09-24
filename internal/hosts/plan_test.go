@@ -8,7 +8,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 func listFiles(t *testing.T, roots ...string) []string {

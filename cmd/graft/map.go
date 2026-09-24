@@ -5,8 +5,8 @@ import (
 	"io"
 	"strconv"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 func runMap(opts callersOptions, stdout, stderr io.Writer) int {

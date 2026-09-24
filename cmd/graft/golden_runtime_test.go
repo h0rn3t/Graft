@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/h0rn3t/Graft/internal/graph"
 )
 
 func TestMCPGoParityGoldensMatchGo(t *testing.T) {

@@ -5,9 +5,9 @@ import (
 	"io"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
-	"github.com/NanoNets/context-graph-engine/internal/savings"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/savings"
 )
 
 func runSkeleton(opts callersOptions, stdout, stderr io.Writer) int {

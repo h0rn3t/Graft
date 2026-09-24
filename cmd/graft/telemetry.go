@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/savings"
-	"github.com/NanoNets/context-graph-engine/internal/telemetry"
-	"github.com/NanoNets/context-graph-engine/internal/upkeep"
+	"github.com/h0rn3t/Graft/internal/savings"
+	"github.com/h0rn3t/Graft/internal/telemetry"
+	"github.com/h0rn3t/Graft/internal/upkeep"
 )
 
 // queryNote carries what a query command resolved, for its `query` event.

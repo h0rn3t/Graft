@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/h0rn3t/Graft/internal/graph"
 )
 
 func TestCacheIsStaleAtTheTTLEdges(t *testing.T) {

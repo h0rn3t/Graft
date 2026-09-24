@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
 // RefreshOptions configures a fail-soft graph refresh.

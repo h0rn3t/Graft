@@ -11,7 +11,7 @@ separately patched.
 Please do not open a public GitHub issue for security vulnerabilities.
 
 Report vulnerabilities privately via
-[GitHub Security Advisories](https://github.com/NanoNets/Graft/security/advisories/new),
+[GitHub Security Advisories](https://github.com/h0rn3t/Graft/security/advisories/new),
 or email shrish@nanonets.com.
 
 We'll acknowledge your report within 3 business days and aim to ship a fix or

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
 func TestFingerprintReadContract(t *testing.T) {

@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/jsmath"
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/jsmath"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 // The lexical ranking combines bounded file ranking, comparable-scope fusion,

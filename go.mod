@@ -1,4 +1,4 @@
-module github.com/NanoNets/context-graph-engine
+module github.com/h0rn3t/Graft
 
 go 1.27.0
 

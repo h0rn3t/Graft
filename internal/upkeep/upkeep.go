@@ -12,8 +12,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/climeta"
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/climeta"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 // UpdateTTL is the period for which a registry answer remains current.

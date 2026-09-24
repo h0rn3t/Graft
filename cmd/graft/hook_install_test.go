@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
-	"github.com/NanoNets/context-graph-engine/internal/telemetry"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/telemetry"
 )
 
 func TestRunHookInstallOncePerVersion(t *testing.T) {

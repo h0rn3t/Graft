@@ -7,7 +7,7 @@
 <a href="https://trendshift.io/repositories/92209?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-92209" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/92209/daily?language=Go" alt="trailhq/Graft | Trendshift" width="250" height="55"/></a>
 
 <p>
-  <a href="https://github.com/NanoNets/Graft"><img src="https://img.shields.io/github/stars/NanoNets/Graft?style=for-the-badge&logo=github&logoColor=white&label=Star%20on%20GitHub&color=FFC83D" /></a>
+  <a href="https://github.com/h0rn3t/Graft"><img src="https://img.shields.io/github/stars/NanoNets/Graft?style=for-the-badge&logo=github&logoColor=white&label=Star%20on%20GitHub&color=FFC83D" /></a>
   <a href="https://trailhq.com/graft"><img src="https://img.shields.io/badge/website-trailhq.com/graft-E5484D?style=for-the-badge" /></a>
   <a href="https://discord.gg/zxmKweAA29"><img src="https://img.shields.io/badge/Discord-join-5865F2?style=for-the-badge&logo=discord&logoColor=white" /></a>
   <a href="https://www.npmjs.com/package/@nanonets/graft"><img src="https://img.shields.io/npm/v/%40nanonets%2Fgraft?style=for-the-badge&logo=npm&logoColor=white&label=npm" /></a>
@@ -16,7 +16,7 @@
   <img src="https://img.shields.io/badge/Go-1.27-00ADD8?style=for-the-badge&logo=go&logoColor=white" />
   <img src="https://img.shields.io/badge/License-MIT-20C997?style=for-the-badge" />
   <a href="TELEMETRY.md"><img src="https://img.shields.io/badge/telemetry-anonymous%2C%20opt--out-546FFF?style=for-the-badge" /></a>
-  <a href="https://scorecard.dev/viewer/?uri=github.com/NanoNets/Graft"><img src="https://img.shields.io/ossf-scorecard/github.com/NanoNets/Graft?style=for-the-badge&label=openssf%20scorecard" /></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/h0rn3t/Graft"><img src="https://img.shields.io/ossf-scorecard/github.com/h0rn3t/Graft?style=for-the-badge&label=openssf%20scorecard" /></a>
   <a href="https://app.trailhq.com/get-started?step=pick"><img src="https://img.shields.io/badge/Trail%20Brain-try%20it-E5484D?style=for-the-badge&logoColor=white" /></a>
 </p>
 
@@ -524,7 +524,7 @@ Two clones of PocketBase at the same commit: one wired with `graft init`, one un
 The published package is a thin npm launcher around the native Go binary. Go 1.27 is required to build from source.
 
 ```bash
-git clone https://github.com/NanoNets/context-graph-engine.git && cd context-graph-engine
+git clone https://github.com/h0rn3t/Graft.git && cd context-graph-engine
 npm install
 npm run build       # builds bin/graft-<platform>-<arch>
 npm test            # plain-JS launcher, shim, and postinstall tests

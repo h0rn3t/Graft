@@ -12,9 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
-	"github.com/NanoNets/context-graph-engine/internal/telemetry"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
+	"github.com/h0rn3t/Graft/internal/telemetry"
 )
 
 func runBuild(opts callersOptions, stdout, stderr io.Writer) int {

@@ -6,7 +6,7 @@ import (
 	"slices"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/telemetry"
+	"github.com/h0rn3t/Graft/internal/telemetry"
 )
 
 const (

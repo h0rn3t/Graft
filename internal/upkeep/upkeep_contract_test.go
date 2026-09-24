@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/brain"
+	"github.com/h0rn3t/Graft/internal/brain"
 )
 
 func TestUpdateCacheContract(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
 func TestQueryRefreshContract(t *testing.T) {

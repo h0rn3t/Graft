@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 // WiringOptions holds the init choices replayed when agent wiring is refreshed.

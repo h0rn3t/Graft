@@ -9,8 +9,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/NanoNets/context-graph-engine/internal/blast"
-	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/h0rn3t/Graft/internal/blast"
+	"github.com/h0rn3t/Graft/internal/graph"
 )
 
 const blastDefaultDepth = 2

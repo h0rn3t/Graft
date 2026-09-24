@@ -10,8 +10,8 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/NanoNets/context-graph-engine/internal/grammars/python"
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
+	"github.com/h0rn3t/Graft/internal/grammars/python"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	golang "github.com/tree-sitter/tree-sitter-go/bindings/go"
 	java "github.com/tree-sitter/tree-sitter-java/bindings/go"

@@ -5,7 +5,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
 type sqlToken struct {

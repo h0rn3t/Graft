@@ -28,7 +28,7 @@
   "requests": [],
   "normalizeMS": true,
   "status": 0,
-  "stdout": "telemetry: off — this build has no telemetry key (a fork, or a local `npm run build`); nothing can be sent\n  contract:  https://github.com/NanoNets/context-graph-engine/blob/main/TELEMETRY.md\n  disable:   graft telemetry disable  (or set DO_NOT_TRACK=1)\n  inspect:   graft telemetry debug   (prints the exact batch, sends nothing)\n",
+  "stdout": "telemetry: off — this build has no telemetry key (a fork, or a local `npm run build`); nothing can be sent\n  contract:  https://github.com/h0rn3t/Graft/blob/main/TELEMETRY.md\n  disable:   graft telemetry disable  (or set DO_NOT_TRACK=1)\n  inspect:   graft telemetry debug   (prints the exact batch, sends nothing)\n",
   "stderr": "",
   "files": {
     "home/.codex/config.toml": "[mcp_servers.graft]\ncommand = \"npx\"\nargs = [\"-y\", \"@nanonets/graft\", \"mcp\"]\n",

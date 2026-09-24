@@ -11,7 +11,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
 // ExtractorID names the native extractor in its cache and fingerprint sidecars.

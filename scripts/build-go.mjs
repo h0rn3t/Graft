@@ -27,7 +27,7 @@ if (host && !/^https:\/\/[A-Za-z0-9.-]+(:\d+)?$/.test(host)) {
   process.exit(1);
 }
 
-const telemetry = "github.com/NanoNets/context-graph-engine/internal/telemetry";
+const telemetry = "github.com/h0rn3t/Graft/internal/telemetry";
 const ldflags = ["-s", "-w"];
 if (key) ldflags.push(`-X ${telemetry}.bakedKey=${key}`);
 if (host) ldflags.push(`-X ${telemetry}.bakedHost=${host}`);

@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 // RetractAction is what retracting one target did.

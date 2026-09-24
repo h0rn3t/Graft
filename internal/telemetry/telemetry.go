@@ -22,7 +22,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 // bakedKey is set at release time with -ldflags "-X …/telemetry.bakedKey=…".
@@ -34,7 +34,7 @@ var bakedHost = "https://events.nanonets.com"
 
 const (
 	// DocURL is the public telemetry contract.
-	DocURL = "https://github.com/NanoNets/context-graph-engine/blob/main/TELEMETRY.md"
+	DocURL = "https://github.com/h0rn3t/Graft/blob/main/TELEMETRY.md"
 	// FlushTTL is the minimum time between flush attempts.
 	FlushTTL        = 24 * time.Hour
 	maxQueueBytes   = 256 * 1024

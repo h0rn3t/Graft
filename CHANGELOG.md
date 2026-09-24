@@ -533,12 +533,12 @@
   was dropped for being ambiguous." The note now states how many definitions
   share the name.
 
-[#33]: https://github.com/NanoNets/Graft/issues/33
-[#34]: https://github.com/NanoNets/Graft/issues/34
-[#35]: https://github.com/NanoNets/Graft/issues/35
-[#36]: https://github.com/NanoNets/Graft/issues/36
-[#37]: https://github.com/NanoNets/Graft/issues/37
-[#39]: https://github.com/NanoNets/Graft/issues/39
+[#33]: https://github.com/h0rn3t/Graft/issues/33
+[#34]: https://github.com/h0rn3t/Graft/issues/34
+[#35]: https://github.com/h0rn3t/Graft/issues/35
+[#36]: https://github.com/h0rn3t/Graft/issues/36
+[#37]: https://github.com/h0rn3t/Graft/issues/37
+[#39]: https://github.com/h0rn3t/Graft/issues/39
 
 ## 0.8.2
 

@@ -11,11 +11,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/NanoNets/context-graph-engine.git"
+    "url": "git+https://github.com/h0rn3t/Graft.git"
   },
-  "homepage": "https://github.com/NanoNets/context-graph-engine#readme",
+  "homepage": "https://github.com/h0rn3t/Graft#readme",
   "bugs": {
-    "url": "https://github.com/NanoNets/context-graph-engine/issues"
+    "url": "https://github.com/h0rn3t/Graft/issues"
   },
   "publishConfig": {
     "access": "public"

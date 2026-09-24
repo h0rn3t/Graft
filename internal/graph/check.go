@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
 // GraphCheckResult describes structural drift and summary coverage in a wiring graph.

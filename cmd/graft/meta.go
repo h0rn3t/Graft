@@ -10,7 +10,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/climeta"
+	"github.com/h0rn3t/Graft/internal/climeta"
 )
 
 // runVersion prints the installed version and the latest one on npm. An

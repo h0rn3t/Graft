@@ -11,7 +11,7 @@ import (
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
+	"github.com/h0rn3t/Graft/internal/graph"
 )
 
 // FullDepth walks the whole connected closure.

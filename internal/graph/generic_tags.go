@@ -6,7 +6,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	c "github.com/tree-sitter/tree-sitter-c/bindings/go"
 	cpp "github.com/tree-sitter/tree-sitter-cpp/bindings/go"

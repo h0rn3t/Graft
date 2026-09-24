@@ -9,8 +9,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 // federateGrep greps every loaded child of a workspace and merges the groups

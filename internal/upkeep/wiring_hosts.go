@@ -8,7 +8,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/NanoNets/context-graph-engine/internal/hosts"
+	"github.com/h0rn3t/Graft/internal/hosts"
 )
 
 // WiredHostIDs lists the hosts a previous init wired here, read off disk: the
