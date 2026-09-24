@@ -653,6 +653,9 @@ func formatAskText(result graph.AskResult, mcp bool) string {
 			if hit.Snippet != "" && !askExcerptStartsWith(hit.Code, hit.Snippet) {
 				lines = append(lines, "   "+hit.Snippet)
 			}
+			if hit.Doc != "" {
+				lines = append(lines, "   "+hit.Doc)
+			}
 			if hit.Code != "" {
 				lines = append(lines, "", "```", askExcerptText(hit.Code, mcp), "```")
 			}

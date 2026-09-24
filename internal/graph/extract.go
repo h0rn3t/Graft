@@ -158,8 +158,19 @@ var callTypes = map[language][]string{
 
 var functionValueTypes = []string{"arrow_function", "function", "function_expression", "generator_function"}
 
-// extractFile parses one supported source file into its nodes and unresolved edges.
+// extractFile parses one supported source file into its nodes and unresolved
+// edges, with each symbol's leading documentation comment as its summary.
 func extractFile(rel, source string) (extractResult, error) {
+	result, err := extractSource(rel, source)
+	if err != nil {
+		return extractResult{}, err
+	}
+	attachLeadingDocs(rel, source, result.nodes)
+	return result, nil
+}
+
+// extractSource dispatches a file to the extractor for its language.
+func extractSource(rel, source string) (extractResult, error) {
 	if strings.EqualFold(path.Ext(rel), ".sql") {
 		return extractSQL(rel, source)
 	}

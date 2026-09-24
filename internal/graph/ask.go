@@ -78,10 +78,12 @@ type AskIndex struct {
 
 // AskHit is one structural or lexical result returned by Ask.
 type AskHit struct {
-	Kind     string   `json:"kind"`
-	Title    string   `json:"title"`
-	Pointer  string   `json:"pointer"`
-	Snippet  string   `json:"snippet"`
+	Kind    string `json:"kind"`
+	Title   string `json:"title"`
+	Pointer string `json:"pointer"`
+	Snippet string `json:"snippet"`
+	// Doc is the first line of a ranked symbol's documentation comment.
+	Doc      string   `json:"doc,omitempty"`
 	Relation Relation `json:"relation,omitempty"`
 	Score    float64  `json:"score"`
 	// Scope names the ranking scope of a multi-scope hit; the root is "".
@@ -112,13 +114,14 @@ func (hit AskHit) MarshalJSON() ([]byte, error) {
 		Title      string   `json:"title"`
 		Pointer    string   `json:"pointer"`
 		Snippet    string   `json:"snippet"`
+		Doc        string   `json:"doc,omitempty"`
 		Relation   Relation `json:"relation,omitempty"`
 		Score      float64  `json:"score"`
 		Code       string   `json:"code,omitempty"`
 		Scope      *string  `json:"scope,omitempty"`
 		ContentRef string   `json:"contentRef,omitempty"`
 		Unchanged  bool     `json:"unchanged,omitempty"`
-	}{hit.Kind, hit.Title, hit.Pointer, hit.Snippet, hit.Relation, hit.Score, hit.Code, hit.Scope, hit.ContentRef, hit.Unchanged}, "")
+	}{hit.Kind, hit.Title, hit.Pointer, hit.Snippet, hit.Doc, hit.Relation, hit.Score, hit.Code, hit.Scope, hit.ContentRef, hit.Unchanged}, "")
 }
 
 // AskSavings records the whole-file baseline for returned hits.

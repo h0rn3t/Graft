@@ -104,3 +104,16 @@ func TestAskBudgetIncludesCLIRefreshNotice(t *testing.T) {
 		t.Errorf("runAsk(refresh, budget=128) combined output=%d tokens, want <=128; stdout=%q; stderr=%q", got, stdout.String(), stderr.String())
 	}
 }
+
+func TestAskBudgetDropsDocBeforeSignature(t *testing.T) {
+	result := graph.AskResult{Query: "run", Mode: "lexical", Hits: []graph.AskHit{
+		{Kind: "symbol", Title: "run · function", Pointer: "run.go:L1-L3", Snippet: "func run() error", Doc: strings.Repeat("documented ", 100)},
+	}}
+	got, err := fitAskBudget(result, 128, false, false)
+	if err != nil {
+		t.Fatalf("fitAskBudget(128) error = %v, want nil", err)
+	}
+	if len(got.Hits) != 1 || got.Hits[0].Doc != "" || got.Hits[0].Snippet != "func run() error" {
+		t.Errorf("fitAskBudget(128) hits = %+v, want one hit with the signature and no doc", got.Hits)
+	}
+}

@@ -123,6 +123,10 @@ func fitAskBudget(result graph.AskResult, budget int, asJSON, mcp bool, overhead
 			last.ContentRef = ""
 			continue
 		}
+		if last.Doc != "" {
+			last.Doc = ""
+			continue
+		}
 		if last.Snippet != "" {
 			last.Snippet = ""
 			continue

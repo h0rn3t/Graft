@@ -94,6 +94,29 @@ func TestAskTextRenderContract(t *testing.T) {
 			want:    []string{"no matches."},
 			notWant: []string{"graft ask", "absent"},
 		},
+		{
+			name:   "doc line follows the signature without source",
+			result: graph.AskResult{Mode: "lexical", Hits: []graph.AskHit{{Kind: "symbol", Title: "run · function", Pointer: "pkg/run.go:L10-L40", Snippet: "func run(a int) error", Doc: "Runs the job once."}}},
+			want:   []string{"1. run · function\n   pkg/run.go:L10-L40\n   func run(a int) error\n   Runs the job once.\n"},
+		},
+		{
+			name:    "doc line precedes the excerpt that repeats the signature",
+			result:  graph.AskResult{Mode: "lexical", Hits: []graph.AskHit{{Kind: "symbol", Title: "run · function", Pointer: "pkg/run.go:L10-L40", Snippet: "func run(a int)  error", Doc: "Runs the job once.", Code: excerpt}}},
+			want:    []string{"   pkg/run.go:L10-L40\n   Runs the job once.\n\n```\nL10: func run(a int) error {"},
+			notWant: []string{"   func run(a int)  error"},
+		},
+		{
+			name:   "doc line over MCP",
+			result: graph.AskResult{Mode: "lexical", Hits: []graph.AskHit{{Kind: "symbol", Title: "run · function", Pointer: "pkg/run.go:L10-L40", Snippet: "func run(a int) error", Doc: "Runs the job once.", Code: full}}},
+			mcp:    true,
+			want:   []string{"   func run(a int) error\n   Runs the job once.\n\n```\nfunc tiny() {"},
+		},
+		{
+			name:    "structural answers carry no doc line",
+			result:  graph.AskResult{Mode: "structural", Hits: []graph.AskHit{{Kind: "symbol", Title: "run", Pointer: "pkg/run.go:L10-L40", Relation: "calls", Snippet: "func run(a int) error", Doc: "Runs the job once."}}},
+			want:    []string{"- run  pkg/run.go:L10-L40  (calls) — func run(a int) error"},
+			notWant: []string{"Runs the job once."},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -109,6 +132,16 @@ func TestAskTextRenderContract(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestAskTextUndocumentedHitIsUnchanged(t *testing.T) {
+	result := graph.AskResult{Mode: "lexical", Hits: []graph.AskHit{{Kind: "symbol", Title: "tiny · function", Pointer: "pkg/tiny.go:L1-L3", Snippet: "func tiny(a int)", Code: "L2: \twork()"}}}
+	want := "1. tiny · function\n   pkg/tiny.go:L1-L3\n   func tiny(a int)\n\n```\nL2: \twork()\n```\n"
+	for _, mcp := range []bool{false, true} {
+		if got := formatAskText(result, mcp); got != want {
+			t.Errorf("formatAskText(undocumented, mcp=%t) = %q, want %q", mcp, got, want)
+		}
 	}
 }
 

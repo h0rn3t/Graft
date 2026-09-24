@@ -10,7 +10,6 @@ import (
 	"strings"
 
 	"github.com/h0rn3t/Graft/internal/jsmath"
-	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 // The lexical ranking combines bounded file ranking, comparable-scope fusion,
@@ -1004,6 +1003,9 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 			Snippet: askNodeSnippetTS(node),
 			Score:   score,
 		}
+		if doc := firstSummaryLine(node.Summary); doc != nil {
+			hit.Doc = *doc
+		}
 		hit.Scope = scope
 		if doc, ok := docsByID[id]; ok {
 			matchedOf[hit] = askMatchedIDFShare(q, []map[string]int{doc.name, doc.path, doc.body}, idf, defaultIDF)
@@ -1622,12 +1624,9 @@ func askRankingMetadataTS(groups []askGroupTS, baselineScored []*AskHit, limit f
 	return metadata
 }
 
-// askNodeSnippetTS is the first line of the summary, trimmed like JavaScript's
-// trim, else the signature.
+// askNodeSnippetTS is the node's signature. A documented node's summary goes
+// to AskHit.Doc instead, so hook pointers keep carrying the signature.
 func askNodeSnippetTS(node NodeV1) string {
-	if node.Summary != nil {
-		return jsonjs.TrimSpace(strings.SplitN(*node.Summary, "\n", 2)[0])
-	}
 	if node.Signature != nil {
 		return *node.Signature
 	}

@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "1. größe · function\n   src/ünï_code.ts:L2-L2\n   function größe(): string\n",
+  "stdout": "1. größe · function\n   src/ünï_code.ts:L2-L2\n   function größe(): string\n   ünïcödé 😀 — keeps UTF-16 lengths honest\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

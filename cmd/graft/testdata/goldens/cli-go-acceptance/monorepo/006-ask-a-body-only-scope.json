@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "1. packages/docs/src/notes.ts (file)\n",
+  "stdout": "1. packages/docs/src/notes.ts (file)\n\n2. note0 · function\n   packages/docs/src/notes.ts:L2-L2\n   function note0()\n   the store keeps values; the store is the source of truth\n\n3. note1 · function\n   packages/docs/src/notes.ts:L4-L4\n   function note1()\n   the store keeps values; the store is the source of truth\n\n4. note2 · function\n   packages/docs/src/notes.ts:L6-L6\n   function note2()\n   the store keeps values; the store is the source of truth\n\n5. note3 · function\n   packages/docs/src/notes.ts:L8-L8\n   function note3()\n   the store keeps values; the store is the source of truth\n\n6. note4 · function\n   packages/docs/src/notes.ts:L10-L10\n   function note4()\n   the store keeps values; the store is the source of truth\n\n7. note5 · function\n   packages/docs/src/notes.ts:L12-L12\n   function note5()\n   the store keeps values; the store is the source of truth\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

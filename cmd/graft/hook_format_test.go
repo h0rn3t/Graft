@@ -337,3 +337,11 @@ func writeHookTestGraph(t *testing.T, root string, wiring graph.GraphV1) {
 		t.Fatalf("graph.Write(%q) error = %v, want nil", out, err)
 	}
 }
+
+func TestHookRetrievalBodyOmitsDoc(t *testing.T) {
+	hits := []graph.AskHit{{Kind: "symbol", Title: "load · function", Pointer: "a.go:L2-L2", Snippet: "func load() error", Doc: "Reads the persisted settings from disk."}}
+	got := hookRetrievalBody(hits)
+	if want := "\n 1. load · function: a.go:L2-L2 — func load() error"; !strings.HasSuffix(got, want) || strings.Contains(got, hits[0].Doc) {
+		t.Errorf("hookRetrievalBody(documented hit) = %q, want it to end with %q and carry no doc line", got, want)
+	}
+}
