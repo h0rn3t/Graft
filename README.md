@@ -92,6 +92,15 @@ Each teammate generates their own local graph with `graft build` or `graft init`
 
 To update a Go installation, run the same `go install ...@latest` command.
 
+### Install the latest `main` with Go
+
+`@latest` installs the newest tagged release. To run the tip of `main` instead, fetch it straight from GitHub; `GOPROXY=direct` bypasses the module proxy cache, so you get the commit that was just pushed:
+
+```bash
+GOPROXY=direct go install github.com/h0rn3t/Graft/cmd/graft@main
+graft init
+```
+
 ### npm distribution (alternative)
 
 If you prefer the prebuilt npm package, it still runs the same native Go binary:

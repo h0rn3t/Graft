@@ -226,6 +226,10 @@ var wordmark = []string{
 // wordmarkStatsLine is the wordmark line that carries the graph stats.
 const wordmarkStatsLine = 7
 
+// wordmarkVersionLine is the wordmark line that carries the version, right-aligned
+// under the lettering.
+const wordmarkVersionLine = 8
+
 // Grouped renders an integer with en-US thousands separators.
 func Grouped(value int) string {
 	sign := ""
@@ -240,13 +244,26 @@ func Grouped(value int) string {
 }
 
 // FormatInitEpilogue renders init's closing wordmark and next steps. nodes and
-// edges are shown when a graph exists.
-func FormatInitEpilogue(graphBuilt bool, nodes, edges int, tty bool) string {
+// edges are shown when a graph exists; version, when non-empty, is shown under
+// the lettering.
+func FormatInitEpilogue(graphBuilt bool, nodes, edges int, version string, tty bool) string {
 	mark := slices.Clone(wordmark)
 	if tty {
 		for i := range mark {
 			mark[i] = indigo(mark[i])
 		}
+	}
+	if version != "" {
+		label := "v" + version
+		width := 0
+		for _, line := range wordmark[:wordmarkVersionLine] {
+			width = max(width, len(line))
+		}
+		pad := max(1, width-len(wordmark[wordmarkVersionLine])-len(label))
+		if tty {
+			label = muted(label)
+		}
+		mark[wordmarkVersionLine] += strings.Repeat(" ", pad) + label
 	}
 	if graphBuilt {
 		stats := fmt.Sprintf("  %s nodes · %s edges", Grouped(nodes), Grouped(edges))

@@ -1,9 +1,6 @@
 ---
 name: graft
-description: This repo is indexed by graft/. Use it for code work here,
-  whether understanding how something works, finding where code lives, tracing
-  what calls a symbol or what a change breaks, or scoping an edit: get your
-  context from graft before grepping or reading source files.
+description: This repo is indexed by graft/. Use it for code work here (understanding how something works, finding where code lives, tracing what calls a symbol or what a change breaks, scoping an edit) and get your context from graft before grepping or reading source files.
 ---
 
 # graft

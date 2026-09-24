@@ -127,7 +127,7 @@ func initRepo(repo string, env hosts.Env, opts initOptions, stderr io.Writer) in
 		}
 	}
 	nodes, edges, built := epilogueGraphs(repo, children, opts.contextDir)
-	writeDiagnostic(stderr, "\n%s\n", hosts.FormatInitEpilogue(built, nodes, edges, tty))
+	writeDiagnostic(stderr, "\n%s\n", hosts.FormatInitEpilogue(built, nodes, edges, currentVersion(), tty))
 	return 0
 }
 
