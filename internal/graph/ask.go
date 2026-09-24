@@ -47,8 +47,6 @@ type AskOptions struct {
 	NoGraphRank bool
 	// Index supplies the build-time token sidecar for a slim persisted graph.
 	Index *AskIndex
-	// Concepts supplies prose nodes loaded from root-level context markdown.
-	Concepts []AskConcept
 	// FileFirst controls whether lexical results emit one leader per file before
 	// sibling spans. Nil preserves the CLI default of true.
 	FileFirst *bool
@@ -60,16 +58,6 @@ type AskOptions struct {
 	FileTopLock *bool
 	// IncludeRankingMetadata exposes internal file queues for workspace fusion.
 	IncludeRankingMetadata bool
-}
-
-// AskConcept is a prose node participating in lexical Ask ranking.
-type AskConcept struct {
-	Slug    string
-	Name    string
-	Sources []string
-	Related []string
-	Snippet string
-	Text    string
 }
 
 // AskIndexDoc contains token-count fields for one graph node.
@@ -95,9 +83,7 @@ type AskHit struct {
 	Pointer  string   `json:"pointer"`
 	Snippet  string   `json:"snippet"`
 	Relation Relation `json:"relation,omitempty"`
-	// Related is set, possibly empty, on concept hits only.
-	Related []string `json:"related,omitzero"`
-	Score   float64  `json:"score"`
+	Score    float64  `json:"score"`
 	// Scope names the ranking scope of a multi-scope hit; the root is "".
 	Scope *string `json:"scope,omitempty"`
 	Code  string  `json:"code,omitempty"`
@@ -119,11 +105,10 @@ func (hit AskHit) MarshalJSON() ([]byte, error) {
 		Pointer  string   `json:"pointer"`
 		Snippet  string   `json:"snippet"`
 		Relation Relation `json:"relation,omitempty"`
-		Related  []string `json:"related,omitzero"`
 		Score    float64  `json:"score"`
 		Code     string   `json:"code,omitempty"`
 		Scope    *string  `json:"scope,omitempty"`
-	}{hit.Kind, hit.Title, hit.Pointer, hit.Snippet, hit.Relation, hit.Related, hit.Score, hit.Code, hit.Scope}, "")
+	}{hit.Kind, hit.Title, hit.Pointer, hit.Snippet, hit.Relation, hit.Score, hit.Code, hit.Scope}, "")
 }
 
 // AskSavings records the whole-file baseline for returned hits.
@@ -147,7 +132,7 @@ type AskResult struct {
 	Ranking        *AskRankingMetadata `json:"-"`
 }
 
-// AskRankingGroup is one file or concept queue used by file-aware ranking.
+// AskRankingGroup is one file queue used by file-aware ranking.
 type AskRankingGroup struct {
 	Key            string
 	Hits           []AskHit
@@ -156,7 +141,7 @@ type AskRankingGroup struct {
 	CoverageStrong float64
 }
 
-// AskRankingEntry ties a baseline hit to its file or concept queue.
+// AskRankingEntry ties a baseline hit to its file queue.
 type AskRankingEntry struct {
 	Group string
 	Hit   AskHit
@@ -483,22 +468,6 @@ func askNodePointer(node NodeV1) string {
 		return node.Path
 	}
 	return node.Path + ":" + node.Span
-}
-
-func askConceptPointer(concept AskConcept) string {
-	if len(concept.Sources) > 0 {
-		return strings.Join(concept.Sources, ", ")
-	}
-	return concept.Slug
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, value := range values {
-		if value != "" {
-			return value
-		}
-	}
-	return ""
 }
 
 func askFallthroughNote(subject string) string {

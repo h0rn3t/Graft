@@ -1,0 +1,18 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh",
+    "--depth",
+    "nope"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ --depth must be a positive number or \"all\", got \"nope\"\n",
+  "files": {},
+  "checkFiles": true
+}

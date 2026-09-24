@@ -6,11 +6,11 @@ graft or falls back to grep, which commands earn their place, and what breaks in
 the wild.
 
 This document is the complete, authoritative contract: **if an event or property
-is not listed here, graft does not send it.** The implementation lives in
-[`src/telemetry/contract.ts`](src/telemetry/contract.ts) and enforces this list
-as a hard allowlist — unknown events and unknown properties are dropped before
-anything is written, let alone sent. The code and this file are kept in
-lockstep, and because the repo is open source you can verify that yourself.
+is not listed here, graft does not send it.** The native implementation in
+[`internal/telemetry/telemetry.go`](internal/telemetry/telemetry.go) enforces this
+list as a hard allowlist — unknown events and unknown properties are dropped
+before anything is written, let alone sent. `cmd/graft/commander_contract_test.go`
+keeps the production environment inventory synchronized with `docs/cli-contract.json`.
 
 Nothing is ever sent from a command you run. Events are appended to a local file
 and a detached background process posts them at most once a day, so no `graft
@@ -31,7 +31,7 @@ Every event carries only these common properties:
 | `app_version` | `0.12.0` | The graft version that produced the event |
 | `os` | `darwin` / `win32` / `linux` | Platform, nothing more |
 | `arch` | `arm64` / `x64` | CPU architecture |
-| `node_major` | `20` | Major version only |
+| `node_major` | `1` | Go runtime major version; retained under the historical property name for wire compatibility |
 | `ci` | `false` | Always false — CI never sends (see below) |
 | `agent_host` | `claude-code` / `cursor` / `mcp` / `cli` | Which surface graft ran under |
 | `repo_id` | a random UUID | See "How it stays anonymous" |
@@ -43,7 +43,7 @@ The events:
 | `install` | `global` (`true` for `npm i -g`, `false` for a project dependency) | The npm postinstall hook runs — once per machine per version |
 | `first_run` | — | Once, the first time a graft command runs on a machine |
 | `init_completed` | `agents` (the ids you selected, sorted), `consent` | `graft init` finishes |
-| `build_completed` | `files_bucket`, `langs`, `mode` (`fast`/`deep`), `duration_bucket`, `incremental` | A build succeeds |
+| `build_completed` | `files_bucket`, `langs`, `mode`, `duration_bucket`, `incremental` | A structural build succeeds; `mode` is currently `fast` |
 | `build_failed` | `stage`, `code` — both fixed enums | A build throws |
 | `query` | `command`, `surface` (`cli`/`mcp`/`hook`), `hit` (`ask` only) | Any query command |
 | `brain_signup_opened` | — | `graft brain push` on a repo with no brain opens your browser to make one |
@@ -69,9 +69,9 @@ An example event, in full:
   "timestamp": "2026-08-21T09:14:22.417Z",
   "properties": {
     "app_version": "0.12.0", "os": "darwin", "arch": "arm64",
-    "node_major": "20", "ci": "false", "agent_host": "claude-code",
+    "node_major": "1", "ci": "false", "agent_host": "claude-code",
     "repo_id": "6f2c1e90-...", "distinct_id": "b1f3a9c2-...",
-    "files_bucket": "200-999", "langs": "go,ts", "mode": "deep",
+    "files_bucket": "200-999", "langs": "go,ts", "mode": "fast",
     "duration_bucket": "30s-2m", "incremental": "true",
     "$process_person_profile": false
   }
@@ -136,10 +136,10 @@ Any one of these fully disables telemetry:
    than `0`. Respected unconditionally — it outranks graft's own setting.
 4. **Run in CI.** `CI`, `GITHUB_ACTIONS`, `GITLAB_CI` and friends switch it off
    without being asked. A build server is not a user.
-5. **Build from source.** The PostHog key is stamped in only at publish time
-   (`scripts/stamp-telemetry-key.mjs`); a clone, a fork, or a local
-   `npm run build` compiles with an empty key and the telemetry module is inert.
-   Forks never send events anywhere.
+5. **Build from source without a baked key.** `scripts/build-go.mjs` stamps
+   `GRAFT_POSTHOG_KEY` only when the build environment provides one; a clone,
+   fork, or ordinary local build compiles with an empty key and the telemetry
+   module is inert. Forks never send events anywhere.
 
 ## Where the events go
 

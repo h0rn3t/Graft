@@ -10,15 +10,11 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/NanoNets/context-graph-engine/internal/grammars/kotlin"
 	"github.com/NanoNets/context-graph-engine/internal/grammars/python"
-	"github.com/NanoNets/context-graph-engine/internal/grammars/swift"
 	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
-	treesitterr "github.com/r-lib/tree-sitter-r/bindings/go"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	golang "github.com/tree-sitter/tree-sitter-go/bindings/go"
 	java "github.com/tree-sitter/tree-sitter-java/bindings/go"
-	php "github.com/tree-sitter/tree-sitter-php/bindings/go"
 	typescript "github.com/tree-sitter/tree-sitter-typescript/bindings/go"
 )
 
@@ -31,14 +27,10 @@ const (
 	langPython     language = "python"
 	langGo         language = "go"
 	langJava       language = "java"
-	langKotlin     language = "kotlin"
-	langSwift      language = "swift"
-	langPHP        language = "php"
-	langR          language = "r"
 )
 
-// depthExtensions mirrors src/graph/extract.ts EXTENSIONS: longest suffix first,
-// the grammar that parses a file and the label a build reports for it.
+// depthExtensions lists the grammar and build label for each supported suffix,
+// longest suffix first.
 var depthExtensions = []struct {
 	ext     string
 	grammar language
@@ -56,11 +48,6 @@ var depthExtensions = []struct {
 	{".py", langPython, "python"},
 	{".go", langGo, "go"},
 	{".java", langJava, "java"},
-	{".kt", langKotlin, "kotlin"},
-	{".kts", langKotlin, "kotlin"},
-	{".swift", langSwift, "swift"},
-	{".php", langPHP, "php"},
-	{".r", langR, "r"},
 }
 
 // languageOf returns the depth-tier grammar for file and its display label.
@@ -82,10 +69,6 @@ var grammars = map[language]func() *sitter.Language{
 	langPython:     func() *sitter.Language { return sitter.NewLanguage(python.Language()) },
 	langGo:         func() *sitter.Language { return sitter.NewLanguage(golang.Language()) },
 	langJava:       func() *sitter.Language { return sitter.NewLanguage(java.Language()) },
-	langKotlin:     func() *sitter.Language { return sitter.NewLanguage(kotlin.Language()) },
-	langSwift:      func() *sitter.Language { return sitter.NewLanguage(swift.Language()) },
-	langPHP:        func() *sitter.Language { return sitter.NewLanguage(php.LanguagePHP()) },
-	langR:          func() *sitter.Language { return sitter.NewLanguage(treesitterr.Language()) },
 }
 
 type rawEdge struct {
@@ -123,8 +106,6 @@ type walkCtx struct {
 	enclosingClass string
 	goReceiverVar  string
 	imported       map[string]importBinding
-	rR6Access      string
-	rSuperClass    string
 }
 
 type defDescriptor struct {
@@ -140,13 +121,12 @@ type defDescriptor struct {
 }
 
 type extractor struct {
-	source    []byte
-	lang      language
-	bindings  *fileBindings
-	rGenerics map[string]struct{}
-	minted    map[string]struct{}
-	nodes     []NodeV1
-	edges     []rawEdge
+	source   []byte
+	lang     language
+	bindings *fileBindings
+	minted   map[string]struct{}
+	nodes    []NodeV1
+	edges    []rawEdge
 }
 
 const (
@@ -171,10 +151,6 @@ var callTypes = map[language][]string{
 	langPython:     {"call"},
 	langGo:         {"call_expression"},
 	langJava:       {"method_invocation", "object_creation_expression"},
-	langKotlin:     {"call_expression"},
-	langSwift:      {"call_expression"},
-	langPHP:        {"function_call_expression", "member_call_expression", "nullsafe_member_call_expression", "scoped_call_expression"},
-	langR:          {"call"},
 }
 
 var functionValueTypes = []string{"arrow_function", "function", "function_expression", "generator_function"}
@@ -218,9 +194,6 @@ func extractFile(rel, source string) (extractResult, error) {
 			Span: fmt.Sprintf("L1-L%d", root.EndPosition().Row+1), Exported: true,
 			Origin: "ast", BodyHash: sourcefiles.Hash(source), Chars: &chars, SummaryState: "pending",
 		}},
-	}
-	if lang == langR {
-		x.rGenerics = collectRGenerics(root, sourceBytes)
 	}
 	ctx := walkCtx{rel: rel, lang: lang, parentID: rel, imported: x.collectImportedSymbols(root)}
 	x.walkNamedChildren(namedChildren(root), ctx)
@@ -301,10 +274,6 @@ func (x *extractor) mintID(base string) string {
 }
 
 func (x *extractor) walkNamedChildren(children []*sitter.Node, ctx walkCtx) {
-	if ctx.lang == langPHP {
-		x.walkPHPChildren(children, ctx)
-		return
-	}
 	for _, child := range children {
 		x.walk(child, ctx)
 	}
@@ -315,16 +284,6 @@ func (x *extractor) walk(node *sitter.Node, ctx walkCtx) {
 		x.emitDefinition(node, desc, ctx)
 		return
 	}
-	if ctx.lang == langR && ctx.enclosingKind == "class" && ctx.rR6Access == "" && node.Kind() == "argument" {
-		if access, list := x.rR6AccessList(node); list != nil {
-			entry := ctx
-			entry.rR6Access = access
-			for _, argument := range rCallArgs(list) {
-				x.walk(argument, entry)
-			}
-			return
-		}
-	}
 
 	kinds := callTypes[ctx.lang]
 	switch {
@@ -334,17 +293,9 @@ func (x *extractor) walk(node *sitter.Node, ctx walkCtx) {
 		}
 		return
 	case slices.Contains(kinds, node.Kind()):
-		if ctx.lang == langR && x.rConsumedClassCall(node) {
-			break
-		}
 		if callee, ok := x.calleeName(node, ctx.lang); ok {
 			x.edges = append(x.edges, x.callEdge(node, callee, ctx))
 		}
-	case ctx.lang == langPHP && node.Kind() == "use_declaration":
-		for _, trait := range namedChildrenOfKind(node, "name", "qualified_name") {
-			x.edges = append(x.edges, rawEdge{source: ctx.parentID, relation: "implements", name: lastBackslashSegment(x.text(trait)), file: ctx.rel})
-		}
-		return
 	case node.Kind() == "identifier" && !isDirectCallee(node, kinds) && !isDeclarationName(node):
 		if imported, ok := ctx.imported[x.text(node)]; ok {
 			x.edges = append(x.edges, rawEdge{source: ctx.parentID, relation: "references", name: imported.name, specifier: imported.specifier, file: ctx.rel})
@@ -356,20 +307,10 @@ func (x *extractor) walk(node *sitter.Node, ctx walkCtx) {
 	x.walkNamedChildren(namedChildren(node), ctx)
 }
 
-// callEdge builds a call's raw edge. A bare lowercase Swift call inside a type
-// carries its implicit-`self` member reading, with the free-function reading
-// as the resolver's fallback.
 func (x *extractor) callEdge(node *sitter.Node, callee callee, ctx walkCtx) rawEdge {
 	edge := rawEdge{source: ctx.parentID, relation: "calls", name: callee.name, viaMember: callee.viaMember, file: ctx.rel, kinds: callee.kinds}
-	switch ctx.lang {
-	case langJava:
+	if ctx.lang == langJava {
 		edge.argCount = javaArgCount(node)
-	case langSwift:
-		edge.argCount = swiftArgCount(node)
-	}
-	if ctx.lang == langSwift && !callee.viaMember && callee.kinds == nil && ctx.enclosingClass != "" && !startsUpper(callee.name) {
-		edge.viaMember, edge.recvType, edge.implicitSelf = true, ctx.enclosingClass, true
-		return edge
 	}
 	edge.recvType = x.bindings.resolveRecvType(callee.receiver, ctx)
 	return edge
@@ -396,17 +337,11 @@ func (x *extractor) emitDefinition(node *sitter.Node, desc *defDescriptor, ctx w
 		Arity: desc.arity, Variadic: truePointer(desc.variadic), SummaryState: "pending",
 	})
 	x.edges = append(x.edges, rawEdge{source: ctx.parentID, relation: "contains", targetID: id, file: ctx.rel})
-	typeDecl := desc.kind == "class" ||
-		(ctx.lang == langJava && slices.Contains(javaTypeKinds, desc.kind)) ||
-		(ctx.lang == langKotlin && slices.Contains(kotlinTypeKinds, desc.kind)) ||
-		(ctx.lang == langSwift && slices.Contains(swiftTypeKinds, desc.kind))
+	typeDecl := desc.kind == "class" || (ctx.lang == langJava && slices.Contains(javaTypeKinds, desc.kind))
 	if typeDecl {
 		x.edges = append(x.edges, x.heritageEdges(node, id, ctx)...)
 	}
-	switch ctx.lang {
-	case langPHP:
-		x.edges = append(x.edges, x.phpAttributeReferences(node, id, ctx)...)
-	case langJava:
+	if ctx.lang == langJava {
 		x.edges = append(x.edges, x.javaAnnotationReferences(node, id, ctx)...)
 	}
 
@@ -425,17 +360,6 @@ func (x *extractor) emitDefinition(node *sitter.Node, desc *defDescriptor, ctx w
 	if desc.kind == "function" || desc.kind == "method" {
 		child.imported = x.withoutShadowedImports(ctx.imported, node)
 	}
-	child.rR6Access = ""
-	if desc.kind == "class" {
-		switch ctx.lang {
-		case langR:
-			child.rSuperClass = x.rR6ParentClass(node)
-		case langSwift:
-			child.rSuperClass = x.swiftSuperClassName(node)
-		default:
-			child.rSuperClass = ""
-		}
-	}
 	x.walkNamedChildren(namedChildren(node), child)
 }
 
@@ -445,16 +369,8 @@ func (x *extractor) exported(desc *defDescriptor, node *sitter.Node, ctx walkCtx
 		return !strings.HasPrefix(desc.name, "_")
 	case langGo:
 		return goExported(desc.name)
-	case langR:
-		return x.rExported(desc.name, ctx, node)
 	case langJava:
 		return javaExported(node)
-	case langKotlin:
-		return x.kotlinExported(node)
-	case langSwift:
-		return x.swiftExported(node)
-	case langPHP:
-		return x.phpExported(node)
 	}
 	for ancestor := node.Parent(); ancestor != nil; ancestor = ancestor.Parent() {
 		if ancestor.Kind() == "export_statement" {
@@ -468,16 +384,8 @@ func (x *extractor) describe(node *sitter.Node, ctx walkCtx) *defDescriptor {
 	switch ctx.lang {
 	case langGo:
 		return x.describeGo(node)
-	case langR:
-		return x.describeR(node, ctx)
 	case langJava:
 		return x.describeJava(node)
-	case langKotlin:
-		return x.describeKotlin(node, ctx)
-	case langSwift:
-		return x.describeSwift(node, ctx)
-	case langPHP:
-		return x.describePHP(node, ctx)
 	case langPython:
 		return x.describePython(node, ctx)
 	}
@@ -518,16 +426,8 @@ func (x *extractor) heritageEdges(node *sitter.Node, classID string, ctx walkCtx
 	switch ctx.lang {
 	case langJava:
 		return x.javaHeritage(node, classID, ctx)
-	case langKotlin:
-		return x.kotlinHeritage(node, classID, ctx)
-	case langSwift:
-		return x.swiftHeritage(node, classID, ctx)
 	case langPython:
 		return x.pythonHeritage(node, classID, ctx)
-	case langR:
-		return x.rHeritage(node, classID, ctx)
-	case langPHP:
-		return x.phpHeritage(node, classID, ctx)
 	}
 	var edges []rawEdge
 	for _, clause := range namedChildren(namedChildOfKind(node, "class_heritage")) {
@@ -553,12 +453,6 @@ func (x *extractor) calleeName(node *sitter.Node, lang language) (callee, bool) 
 	switch lang {
 	case langJava:
 		return x.javaCallee(node)
-	case langKotlin, langSwift:
-		return x.kotlinSwiftCallee(node, lang)
-	case langPHP:
-		return x.phpCallee(node)
-	case langR:
-		return x.rCallee(node)
 	}
 	function := node.ChildByFieldName("function")
 	if function == nil {
@@ -624,32 +518,20 @@ func (x *extractor) isImport(node *sitter.Node, lang language) bool {
 	switch lang {
 	case langGo:
 		return node.Kind() == "import_spec"
-	case langR:
-		return x.rIsImport(node)
-	case langJava, langSwift:
+	case langJava:
 		return node.Kind() == "import_declaration"
-	case langKotlin:
-		return node.Kind() == "import_header"
-	case langPHP:
-		return node.Kind() == "namespace_use_clause"
 	}
 	return node.Kind() == "import_statement" || node.Kind() == "import_from_statement"
 }
 
 func (x *extractor) importSpecifier(node *sitter.Node, lang language) string {
 	switch lang {
-	case langPHP:
-		return x.phpImportSpecifier(node)
 	case langPython:
 		return x.pythonImportSpecifier(node)
 	case langGo:
 		return x.goImportSpecifier(node)
-	case langR:
-		return x.rImportSpecifier(node)
 	case langJava:
 		return x.text(namedChildOfKind(node, "scoped_identifier", "identifier"))
-	case langKotlin, langSwift:
-		return x.text(namedChildOfKind(node, "identifier"))
 	}
 	str := namedChildOfKind(node, "string")
 	if str == nil {
@@ -690,10 +572,6 @@ func isDeclarationName(node *sitter.Node) bool {
 // recognized later as a symbol use.
 func (x *extractor) collectImportedSymbols(root *sitter.Node) map[string]importBinding {
 	imported := make(map[string]importBinding)
-	if x.lang == langPHP {
-		x.collectPHPImportedSymbols(root, imported)
-		return imported
-	}
 	if x.lang != langTypeScript && x.lang != langTSX {
 		return imported
 	}

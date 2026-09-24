@@ -1,0 +1,33 @@
+{
+  "args": [
+    "_hook",
+    "cursor-post-tool"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "CLAUDE_CONFIG_DIR": "<HOME>/.claude",
+    "CLAUDE_PROJECT_DIR": "<REPO>",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "inputs": {},
+  "stdin": {
+    "conversation_id": "cursor-1",
+    "tool_name": "Shell",
+    "tool_input": {
+      "command": "graft ask \"auth\""
+    },
+    "tool_output": "{\"stdout\":\"[graft] tokens saved ≈ 900 — …\"}"
+  },
+  "status": 0,
+  "stdout": "",
+  "stderr": "",
+  "files": {
+    "repo/graft/.cache/session/cursor-1.json": "{\n  \"lastQuery\": null,\n  \"perAgentQuery\": {},\n  \"graftReads\": 1,\n  \"sourceReads\": 0,\n  \"savedTokens\": 900,\n  \"injectedPointers\": [],\n  \"nudges\": 0,\n  \"turnUsedGraft\": true,\n  \"host\": \"cursor\"\n}"
+  },
+  "checkFiles": true
+}

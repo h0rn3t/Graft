@@ -16,11 +16,6 @@ Options:
   --name                name the affected areas with one cached LLM call (needs
                         GRAFT_API_KEY); without it, areas are named after their
                         hub symbol
-  --export-viz <dir>    also write the interactive page for this radius (one
-                        self-contained index.html — for CI, GitHub Pages, or an
-                        artifact)
-  --title <text>        subtitle beside the repo name on the exported page (e.g.
-                        "PR #171")
   --no-owners           do not suggest who to tag (by default, git history names
                         the people behind each affected area)
   --pr-author <who...>  GitHub login, git name or email of the PR author, so

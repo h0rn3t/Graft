@@ -16,52 +16,6 @@ type Origin string
 // Relation identifies the relationship represented by an edge.
 type Relation string
 
-// SourceRef records a source file and the content hash captured for it.
-type SourceRef struct {
-	Path string `json:"path"`
-	Hash string `json:"hash"`
-}
-
-// NodeLink is a context-node link to another node slug.
-type NodeLink struct {
-	To          string  `json:"to"`
-	Relation    string  `json:"relation"`
-	Description *string `json:"description,omitempty"`
-}
-
-// ContextNode is the on-disk context node contract.
-type ContextNode struct {
-	Name          string      `json:"name"`
-	Slug          string      `json:"slug"`
-	Type          string      `json:"type"`
-	Summary       string      `json:"summary"`
-	Sources       []SourceRef `json:"sources"`
-	SourcesDigest string      `json:"sourcesDigest"`
-	Links         []NodeLink  `json:"links"`
-	Human         string      `json:"human"`
-}
-
-// ManifestNode is the fast-read node roster entry in a manifest.
-type ManifestNode struct {
-	Slug          string   `json:"slug"`
-	Name          string   `json:"name"`
-	Type          string   `json:"type"`
-	Sources       []string `json:"sources"`
-	SourcesDigest string   `json:"sourcesDigest"`
-}
-
-// Manifest is the generated context index and repository staleness record.
-type Manifest struct {
-	Version    int            `json:"version"`
-	Model      string         `json:"model"`
-	RepoDigest string         `json:"repoDigest"`
-	Files      []SourceRef    `json:"files"`
-	Nodes      []ManifestNode `json:"nodes"`
-}
-
-// ManifestVersion is the current context manifest schema version.
-const ManifestVersion = 1
-
 // Crux is the meaning-layer excerpt selected for a node.
 type Crux struct {
 	Code string `json:"code"`

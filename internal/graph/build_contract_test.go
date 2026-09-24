@@ -73,6 +73,43 @@ func TestBuildGraphContract(t *testing.T) {
 	}
 }
 
+func TestBuildGraphDropsPriorMeaning(t *testing.T) {
+	root := t.TempDir()
+	outDir := filepath.Join(root, "graft")
+	sourcePath := filepath.Join(root, "src", "app.ts")
+	if err := os.MkdirAll(filepath.Dir(sourcePath), 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v, want nil", filepath.Dir(sourcePath), err)
+	}
+	if err := os.WriteFile(sourcePath, []byte("export function run() {}\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v, want nil", sourcePath, err)
+	}
+	opts := sourcefiles.Options{OutDir: outDir}
+	first, err := BuildGraph(root, opts)
+	if err != nil {
+		t.Fatalf("BuildGraph(%q, %#v) error = %v, want nil", root, opts, err)
+	}
+	summary := "old generated meaning"
+	crux := Crux{Code: "export function run() {}", Span: "L1-L1"}
+	for index := range first.Graph.Nodes {
+		first.Graph.Nodes[index].SummaryState = "ready"
+		first.Graph.Nodes[index].Summary = &summary
+		first.Graph.Nodes[index].Crux = &crux
+	}
+	if _, err := Write(first.Graph, outDir); err != nil {
+		t.Fatalf("Write(prior graph, %q) error = %v, want nil", outDir, err)
+	}
+
+	rebuilt, err := BuildGraph(root, opts)
+	if err != nil {
+		t.Fatalf("BuildGraph(%q, %#v) with old meaning error = %v, want nil", root, opts, err)
+	}
+	for _, node := range rebuilt.Graph.Nodes {
+		if node.SummaryState != "pending" || node.Summary != nil || node.Crux != nil {
+			t.Errorf("BuildGraph(%q) node %q meaning = (%q, %v, %v), want pending with nil summary and crux", root, node.ID, node.SummaryState, node.Summary, node.Crux)
+		}
+	}
+}
+
 func TestBuildGraphNoReuseAndWorktreeSeed(t *testing.T) {
 	t.Setenv("GRAFT_NO_SEED", "false")
 	main, worktree := newRefreshGitWorktree(t, "export function before() {}")

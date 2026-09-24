@@ -10,7 +10,6 @@ import (
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	c "github.com/tree-sitter/tree-sitter-c/bindings/go"
 	cpp "github.com/tree-sitter/tree-sitter-cpp/bindings/go"
-	ruby "github.com/tree-sitter/tree-sitter-ruby/bindings/go"
 	rust "github.com/tree-sitter/tree-sitter-rust/bindings/go"
 )
 
@@ -23,9 +22,6 @@ var cTags string
 //go:embed queries/cpp.scm
 var cppTags string
 
-//go:embed queries/ruby.scm
-var rubyTags string
-
 var genericNativeGrammars = map[string]struct {
 	language func() *sitter.Language
 	tags     *string
@@ -33,7 +29,6 @@ var genericNativeGrammars = map[string]struct {
 	"rust": {func() *sitter.Language { return sitter.NewLanguage(rust.Language()) }, &rustTags},
 	"c":    {func() *sitter.Language { return sitter.NewLanguage(c.Language()) }, &cTags},
 	"cpp":  {func() *sitter.Language { return sitter.NewLanguage(cpp.Language()) }, &cppTags},
-	"ruby": {func() *sitter.Language { return sitter.NewLanguage(ruby.Language()) }, &rubyTags},
 }
 
 // extractGenericTags implements the shared tags-query tier for native grammars.

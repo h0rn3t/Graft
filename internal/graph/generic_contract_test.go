@@ -144,26 +144,6 @@ func TestCAndCPPGenericExtractorContract(t *testing.T) {
 	}
 }
 
-func TestRubyGenericExtractorContract(t *testing.T) {
-	const source = "class Widget\n  def render\n    self.draw\n  end\n  def draw\n    1\n  end\nend\n"
-	got, err := extractFile("widget.rb", source)
-	if err != nil {
-		t.Fatalf("extractFile(%q, source) error = %v, want nil", "widget.rb", err)
-	}
-	wantIDs := []string{"widget.rb", "widget.rb#Widget", "widget.rb#render", "widget.rb#draw"}
-	ids := make([]string, 0, len(got.nodes))
-	for _, node := range got.nodes {
-		ids = append(ids, node.ID)
-	}
-	if !reflect.DeepEqual(ids, wantIDs) {
-		t.Errorf("extractFile(%q, source) IDs = %v, want %v", "widget.rb", ids, wantIDs)
-	}
-	wantCall := rawEdge{source: "widget.rb#render", relation: "calls", name: "draw", file: "widget.rb"}
-	if !reflect.DeepEqual(got.rawEdges, []rawEdge{wantCall}) {
-		t.Errorf("extractFile(%q, source) edges = %#v, want %#v", "widget.rb", got.rawEdges, []rawEdge{wantCall})
-	}
-}
-
 func TestNativeGenericExtensionCoverage(t *testing.T) {
 	cases := []struct {
 		file, source, language string
@@ -194,7 +174,7 @@ func TestNativeGenericExtensionCoverage(t *testing.T) {
 }
 
 func TestExcludedLanguageIsNotNativeSource(t *testing.T) {
-	for _, file := range []string{"main.rb", "main.zig", "component.vue", "main.kt"} {
+	for _, file := range []string{"main.kt", "main.swift", "main.php", "main.r", "main.rb", "main.zig", "component.vue"} {
 		if nativeSupported(file) {
 			t.Errorf("nativeSupported(%q) = true, want false", file)
 		}

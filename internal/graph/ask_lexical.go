@@ -12,11 +12,10 @@ import (
 	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
 )
 
-// This file ports the lexical ranking of src/ask/ask.ts together with the
-// bounded file ranking (file-rank.ts), comparable-scope fusion (fuse.ts) and
-// personalized PageRank (graphrank.ts). Scores must match the TypeScript CLI
-// bit for bit, so every floating-point sum runs in the order the TypeScript
-// Maps and Sets iterate — insertion order — and every sort is stable with the
+// The lexical ranking combines bounded file ranking, comparable-scope fusion,
+// and personalized PageRank. Scores preserve the recorded TypeScript oracle bit
+// for bit, so every floating-point sum runs in the order the TypeScript Maps
+// and Sets iterate — insertion order — and every sort is stable with the
 // TypeScript comparator. Each product that feeds a sum is wrapped in float64()
 // so the compiler cannot fuse it into an FMA that JavaScript would not use.
 
@@ -74,12 +73,6 @@ type askLexDoc struct {
 	name map[string]int
 	path map[string]int
 	body map[string]int
-}
-
-type askLexConcept struct {
-	concept AskConcept
-	name    map[string]int
-	body    map[string]int
 }
 
 // askFileCandidate is file-rank.ts's FileRankCandidate.
@@ -884,8 +877,8 @@ func askFileFirstRoundRobin(groups []string, values []*AskHit, limit float64) []
 
 // ── lexical() ────────────────────────────────────────────────────────────────
 
-// askLexical ranks the graph's nodes and concepts against query exactly as the
-// TypeScript lexical() does.
+// askLexical ranks the graph's nodes against query exactly as the TypeScript
+// lexical() does.
 func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts AskOptions) AskResult {
 	fileFirst, fileComplement, fileTopLock := askFileOptions(opts)
 	includeRankingMetadata := opts.IncludeRankingMetadata
@@ -898,14 +891,6 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 			return askTestPenalty
 		}
 		return 1
-	}
-
-	conceptDocs := make([]askLexConcept, 0, len(opts.Concepts))
-	for _, concept := range opts.Concepts {
-		if prefix != "" && !slices.ContainsFunc(concept.Sources, func(path string) bool { return pathUnderPrefix(path, prefix) }) {
-			continue
-		}
-		conceptDocs = append(conceptDocs, askLexConcept{concept: concept, name: askTermCounts(concept.Name), body: askTermCounts(concept.Text)})
 	}
 
 	index := askUsableIndex(opts.Index, wiring)
@@ -931,10 +916,10 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 
 	useIndexStats := index != nil && prefix == ""
 	df := make(map[string]int)
-	documentCount := len(conceptDocs) + len(symbolDocs)
+	documentCount := len(symbolDocs)
 	if useIndexStats {
 		maps.Copy(df, index.DF)
-		documentCount = index.DocCount + len(conceptDocs)
+		documentCount = index.DocCount
 	}
 	countBag := func(fields ...map[string]int) {
 		seen := make(map[string]struct{})
@@ -946,9 +931,6 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 				}
 			}
 		}
-	}
-	for _, doc := range conceptDocs {
-		countBag(doc.name, doc.body)
 	}
 	if !useIndexStats {
 		for _, doc := range symbolDocs {
@@ -964,32 +946,6 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 	matchedOf := make(map[*AskHit]float64)
 	matchedStrongOf := make(map[*AskHit]float64)
 	selectionGroupOf := make(map[*AskHit]string)
-
-	conceptHits := make([]*AskHit, 0)
-	maxConcept := 0.0
-	for _, doc := range conceptDocs {
-		total := float64(askScoreTS(q, doc.name, idf)*3) + askScoreTS(q, doc.body, idf)
-		if total <= 0 {
-			continue
-		}
-		maxConcept = math.Max(maxConcept, total)
-		related := doc.concept.Related
-		if related == nil {
-			related = []string{}
-		}
-		hit := &AskHit{
-			Kind:    "concept",
-			Title:   firstNonEmpty(doc.concept.Name, doc.concept.Slug),
-			Pointer: askConceptPointer(doc.concept),
-			Snippet: doc.concept.Snippet,
-			Related: related,
-			Score:   total,
-		}
-		matchedOf[hit] = askMatchedIDFShare(q, []map[string]int{doc.name, doc.body}, idf, defaultIDF)
-		matchedStrongOf[hit] = askMatchedIDFShare(q, []map[string]int{doc.name}, idf, defaultIDF)
-		selectionGroupOf[hit] = "concept:" + doc.concept.Slug + ":" + strconv.Itoa(len(conceptHits))
-		conceptHits = append(conceptHits, hit)
-	}
 
 	byID := make(map[string]NodeV1, len(wiring.Nodes))
 	for _, node := range wiring.Nodes {
@@ -1429,24 +1385,17 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 		}
 	}
 
-	for _, hit := range conceptHits {
-		if maxConcept > 0 {
-			hit.Score /= maxConcept
-		} else {
-			hit.Score = 0
-		}
-	}
 	scoreOrder := func(a, b *AskHit) int {
 		if order := jsDiff(b.Score, a.Score); order != 0 {
 			return order
 		}
 		return compare(a.Title, b.Title)
 	}
-	scored := append(slices.Clone(conceptHits), symbolHits...)
+	scored := slices.Clone(symbolHits)
 	slices.SortStableFunc(scored, scoreOrder)
 	baselineScored := scored
 	if needsFileQueues {
-		baselineScored = append(slices.Clone(conceptHits), baselineSymbolHits...)
+		baselineScored = slices.Clone(baselineSymbolHits)
 		slices.SortStableFunc(baselineScored, scoreOrder)
 	}
 	groupOf := func(hit *AskHit, fallback string) string {
@@ -1455,16 +1404,7 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 		}
 		return fallback
 	}
-	unlockedGroups := make([]askGroupTS, 0, len(conceptHits)+len(fileGroups))
-	for index, hit := range conceptHits {
-		unlockedGroups = append(unlockedGroups, askGroupTS{
-			key:            groupOf(hit, "concept:"+strconv.Itoa(index)),
-			hits:           []*AskHit{hit},
-			coverage:       matchedOf[hit],
-			coverageStrong: matchedStrongOf[hit],
-		})
-	}
-	unlockedGroups = append(unlockedGroups, fileGroups...)
+	unlockedGroups := slices.Clone(fileGroups)
 	slices.SortStableFunc(unlockedGroups, func(a, b askGroupTS) int {
 		return scoreOrder(a.hits[0], b.hits[0])
 	})

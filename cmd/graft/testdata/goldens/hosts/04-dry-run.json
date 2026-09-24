@@ -1,0 +1,45 @@
+{
+  "args": [
+    "init",
+    "<REPO>",
+    "--dry-run"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1",
+    "GRAFT_MCP_NPX": "1",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "gitDirs": [
+    "repo"
+  ],
+  "dirs": [
+    "home",
+    "home/.adal",
+    "home/.codeium/windsurf",
+    "home/.codex",
+    "home/.config/opencode",
+    "home/.cursor",
+    "home/.gemini/config",
+    "home/.grok",
+    "home/.hermes",
+    "home/.kiro",
+    "repo"
+  ],
+  "inputs": {},
+  "status": 0,
+  "stdout": "",
+  "stderr": "would write — this repo:\n  .claude/settings.json                 graft statusline + hook blocks\n  .claude/helpers/graft-statusline.cjs  statusline shim\n  .claude/helpers/graft-hooks.cjs       hooks shim\n  .claude/skills/graft/SKILL.md         graft skill\n  .mcp.json                             mcpServers.graft\n  AGENTS.md                             fenced graft section\n  opencode.json                         mcp.graft\n  .adal/skills/graft/SKILL.md           graft-owned file\n  .cursor/rules/graft.mdc               graft-owned file\n  .cursor/mcp.json                      mcpServers.graft\n  .cursor/hooks/graft-hooks.cjs         session-scoring hook shim\n  .cursor/hooks.json                    postToolUse / afterMCPExecution / sessionEnd\n  GEMINI.md                             fenced graft section\n  .gemini/settings.json                 mcpServers.graft\n  .grok/skills/graft/SKILL.md           graft-owned file\n  .grok/config.toml                     [mcp_servers.graft]\n  AGENTS.md                             fenced graft section\n  AGENTS.md                             fenced graft section\n  .github/copilot-instructions.md       fenced graft section\n  .kiro/steering/graft.md               graft-owned file\n  .kiro/settings/mcp.json               mcpServers.graft\n  .windsurf/rules/graft.md              graft-owned file\n\nwould write — your machine, affects ALL repos:\n  ~/.claude/helpers/graft-hooks.cjs     hooks shim (user level)\n  ~/.claude/settings.json               SessionStart / UserPromptSubmit / PostToolUse / Stop\n  ~/.claude.json                        mcpServers.graft\n  ~/.codex/config.toml                  [mcp_servers.graft]\n  ~/.codex/hooks/graft/graft-hooks.cjs  post-edit hook shim\n  ~/.codex/hooks.json                   SessionStart / UserPromptSubmit / PostToolUse / Stop\n  ~/.gemini/config/mcp_config.json      mcpServers.graft\n  ~/.gemini/skills/graft/SKILL.md       graft skill (shared)\n\nsuppress the out-of-repo writes with --no-global\n\nnothing was written (--dry-run)\n",
+  "files": {
+    "home/.claude.json [644]": "{\n  \"numStartups\": 3,\n  \"mcpServers\": {\n    \"mine\": {\n      \"command\": \"mine\"\n    }\n  }\n}\n",
+    "home/.codex/config.toml [644]": "[mcp_servers.other]\ncommand = \"other\"\n",
+    "home/.codex/hooks.json [644]": "{\n  \"hooks\": {\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"echo mine\"\n          }\n        ]\n      }\n    ]\n  },\n  \"custom\": 1\n}\n",
+    "home/.graft/update-check.json [644]": "{\n  \"latest\": \"0.0.1\",\n  \"checkedAt\": 4102444800000\n}",
+    "repo/.claude/settings.json [644]": "{\n  \"2\": \"numeric key\",\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(npm test:*)\",\n      \"Bash(graft:*)\"\n    ],\n    \"deny\": [\n      \"Bash(rm:*)\"\n    ]\n  },\n  \"hooks\": {\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"echo done\"\n          }\n        ]\n      }\n    ]\n  },\n  \"statusLine\": {\n    \"type\": \"command\",\n    \"command\": \"my-statusline\"\n  }\n}\n",
+    "repo/.cursor/mcp.json [644]": "{\"mcpServers\":{\"other\":{\"command\":\"x\",\"args\":[\"1e3\",1000,0.1]}}}\n",
+    "repo/.github/workflows/ci.yml [644]": "on: push\n",
+    "repo/AGENTS.md [644]": "# Team notes\n\nKeep PRs small.\n",
+    "repo/src/main.ts [644]": "export function main() { return 1; }\n"
+  },
+  "checkFiles": true
+}

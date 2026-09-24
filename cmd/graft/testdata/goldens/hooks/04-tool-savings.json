@@ -1,0 +1,32 @@
+{
+  "args": [
+    "_hook",
+    "tool-savings"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "CLAUDE_CONFIG_DIR": "<HOME>/.claude",
+    "CLAUDE_PROJECT_DIR": "<REPO>",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "inputs": {},
+  "stdin": {
+    "session_id": "usage",
+    "tool_name": "Bash",
+    "tool_response": {
+      "stdout": "[graft] tokens saved ≈ 1,000 (90%) — …\n[graft] tokens saved ≈ 2,000 (95%) — …"
+    }
+  },
+  "status": 0,
+  "stdout": "",
+  "stderr": "",
+  "files": {
+    "repo/graft/.cache/session/usage.json": "{\n  \"lastQuery\": null,\n  \"perAgentQuery\": {},\n  \"graftReads\": 1,\n  \"sourceReads\": 0,\n  \"savedTokens\": 3000,\n  \"injectedPointers\": [],\n  \"nudges\": 0,\n  \"turnUsedGraft\": true,\n  \"host\": \"claude-code\"\n}"
+  },
+  "checkFiles": true
+}

@@ -1,0 +1,62 @@
+{
+  "args": [
+    "mcp",
+    "<REPO>"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "DO_NOT_TRACK": "1",
+    "GRAFT_MCP_NPX": "1"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "setup": [
+    {
+      "args": [
+        "build"
+      ]
+    }
+  ],
+  "inputs": {
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.1\",\n  \"checkedAt\": 4102444800000\n}",
+    "repo/src/math.ts": "export function add(a: number, b: number) { return a + b; }\n"
+  },
+  "messages": [
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/call",
+      "params": {
+        "name": "graft_ask",
+        "arguments": {
+          "query": "add"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/call",
+      "params": {
+        "name": "nope",
+        "arguments": {}
+      }
+    }
+  ],
+  "status": 0,
+  "stdout": "{\"replies\":{\"1\":{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"graft ask — \\\"add\\\"  (lexical)\\n\\n1. add · function  [symbol]\\n   src/math.ts:L1-L1\\n   function add(a: number, b: number)\\n\\n```\\nexport function add(a: number, b: number) { return a + b; }\\n```\\n\\n[graft] only 1 hit — don't re-ask with new wording; switch tool: `graft grep \\\"<literal>\\\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\\n\"}],\"isError\":false}},\"2\":{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"unknown tool: nope\"}],\"isError\":true}}},\"stray\":[]}",
+  "stderr": "",
+  "files": {
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.1\",\n  \"checkedAt\": 4102444800000\n}",
+    "repo/.gitignore": "# graft's local graph cache — regenerable, not committed (run `graft build`).\n/graft/\n",
+    "repo/.ignore": "# graft's cards are gitignored but should stay greppable: ripgrep reads\n# .ignore before .gitignore, so this re-admits the tree to search only.\n!graft/\ngraft/.cache/\ngraft/.graph/\n",
+    "repo/graft/.cache/ask-index.json": "{\"version\":1,\"avgBodyLen\":4.5,\"df\":[[\"math\",2],[\"ts\",2],[\"src\",2],[\"add\",1],[\"function\",1],[\"number\",1],[\"return\",1]],\"docCount\":2,\"docs\":[{\"id\":\"src/math.ts\",\"name\":[[\"math\",1],[\"ts\",1]],\"path\":[[\"src\",1],[\"math\",1],[\"ts\",1]],\"body\":[]},{\"id\":\"src/math.ts#add\",\"name\":[[\"add\",1]],\"path\":[[\"src\",1],[\"math\",1],[\"ts\",1]],\"body\":[[\"function\",2],[\"add\",2],[\"number\",4],[\"return\",1]]}]}\n",
+    "repo/graft/.graph/wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 2,\n    \"edgeCount\": 1,\n    \"languages\": [\n      \"typescript\"\n    ],\n    \"scopes\": [\n      {\n        \"prefix\": \"\",\n        \"label\": \"\",\n        \"markers\": []\n      }\n    ]\n  },\n  \"nodes\": [\n    {\n      \"id\": \"src/math.ts\",\n      \"name\": \"math.ts\",\n      \"kind\": \"file\",\n      \"path\": \"src/math.ts\",\n      \"span\": \"L1-L2\",\n      \"signature\": null,\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"d0ea6f33d17132678d4ecd944c2a2dd48dc55a7f7063c21c10d19320645bd2c4\",\n      \"chars\": 60,\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/math.ts#add\",\n      \"name\": \"add\",\n      \"kind\": \"function\",\n      \"path\": \"src/math.ts\",\n      \"span\": \"L1-L1\",\n      \"signature\": \"function add(a: number, b: number)\",\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"f551b81360b60994af62687ba877984a78071863304b58453e5671ae5c8ec44d\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    }\n  ],\n  \"edges\": [\n    {\n      \"source\": \"src/math.ts\",\n      \"target\": \"src/math.ts#add\",\n      \"relation\": \"contains\",\n      \"confidence\": \"extracted\"\n    }\n  ]\n}\n",
+    "repo/graft/INDEX.md": "# graft — repo map\n\nSmall markdown nodes summarising this repo. `grep` any term, symbol, or\nfilename here, or run `graft ask \"<task>\"`. Each node carries prose plus exact\n`file:line`; open a source file only to edit the named span.\n\nThe same graph is queryable as MCP tools (`graft_find_code`, `graft_find_all`,\n`graft_trace_calls`, `graft_file_api`, `graft_repo_map`) where a host exposes them, and\nas the `graft` CLI everywhere else. Edges — who calls what — live only in the\ngraph, not in these files: `graft callers <symbol>` is the only way to read them.\n\n## Files\n\n1 per-file wiring cards mirror the source tree under `graft/` (1 carry extracted symbols). They are deliberately not enumerated here —\n`grep` a symbol or `find`/`ls` a filename under `graft/` to land on the card for that file.\n",
+    "repo/graft/src/math.md": "# src/math.ts\n\n- add · function · L1-L1 — function add(a: number, b: number)\n",
+    "repo/src/math.ts": "export function add(a: number, b: number) { return a + b; }\n"
+  },
+  "checkFiles": true
+}

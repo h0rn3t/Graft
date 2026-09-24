@@ -16,7 +16,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/NanoNets/context-graph-engine/internal/contextcheck"
 	"github.com/NanoNets/context-graph-engine/internal/graph"
 	"github.com/NanoNets/context-graph-engine/internal/hosts"
 	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
@@ -258,7 +257,7 @@ func trackMCPQuery(root, name string) {
 func mcpUpkeepLines(root, _, current string) []string {
 	now := time.Now()
 	home := homeDir()
-	env := hosts.Env{Home: home, BakedDir: filepath.Join(packageRoot(), "dist", "claude"), Launch: hosts.ServerEntry()}
+	env := hosts.Env{Home: home, BakedDir: packageRoot(), Launch: hosts.ServerEntry()}
 	lines := make([]string, 0, 2)
 	if note := upkeep.ReconcileWiring(root, "", current, now,
 		func(repo string) ([]string, error) { return upkeep.WiredHostIDs(repo), nil },
@@ -747,23 +746,13 @@ func mcpGraphAvailable(contextDir string) bool {
 	return err == nil
 }
 
-// mcpCheckFreshness reports the context and graph checks exactly as the
-// TypeScript tool does: the context report, then the graph report when a graph
-// exists, never refreshing first.
+// mcpCheckFreshness reports graph freshness without refreshing first.
 func mcpCheckFreshness(root, contextDir string) string {
-	contextResult, err := contextcheck.Check(root, contextcheck.Options{ContextDir: contextDir})
-	if err != nil {
-		return err.Error()
-	}
 	graphResult, err := graph.CheckGraph(root, contextDir)
 	if err != nil {
 		return err.Error()
 	}
-	parts := []string{formatContextCheckReport(contextResult)}
-	if !graphResult.Missing {
-		parts = append(parts, graph.FormatGraphCheckReport(graphResult))
-	}
-	return strings.Join(parts, "\n\n")
+	return graph.FormatGraphCheckReport(graphResult)
 }
 
 func mcpWorkspaceCheckFreshness(root, contextDir string) mcpResult {
@@ -784,7 +773,6 @@ func mcpWorkspaceCheckFreshness(root, contextDir string) mcpResult {
 			{heading: "added", label: "added"},
 			{heading: "removed", label: "removed"},
 			{heading: "changed", label: "changed"},
-			{heading: "stale summaries", label: "stale"},
 		} {
 			for line := range strings.SplitSeq(report, "\n") {
 				prefix := group.heading + " ("

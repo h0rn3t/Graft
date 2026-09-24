@@ -1,0 +1,22 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh",
+    "--base",
+    "base",
+    "--depth",
+    "3.7",
+    "--format",
+    "mermaid"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "flowchart TB\n  A0((\"d<br/>1 symbol\"))\n  A1((\"view<br/>1 symbol\"))\n  classDef reached fill:#D9EDF3,stroke:#3AA7C9,stroke-width:1.5px,color:#0E313C;\n  class A0,A1 reached;\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": true
+}

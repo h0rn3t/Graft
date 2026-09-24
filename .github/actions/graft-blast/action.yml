@@ -38,20 +38,6 @@ inputs:
     description: Post/update the PR comment. Set false to only produce the outputs.
     required: false
     default: "true"
-  viewer-url:
-    description: >-
-      Public URL of the exported viewer for this PR, linked from the comment. Leave
-      empty to omit the link. The comment holds five circles and a table; the graph
-      a reviewer can actually click through lives here.
-    required: false
-    default: ""
-  export-viewer:
-    description: >-
-      Write the standalone viewer for this PR's radius to this directory
-      (`graft blast --export-viz`). Empty skips the export. Publishing it is the
-      caller's job — see blast-pages.yml.
-    required: false
-    default: ""
   token:
     description: "Token used to post the comment. Needs `pull-requests: write` permission."
     required: false
@@ -84,10 +70,6 @@ runs:
     # (ref, submodules, credentials), and doing it twice would silently discard
     # whatever the caller had set up. A missing merge base is reported by `graft
     # blast` itself, naming `fetch-depth: 0` as the fix.
-    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-      with:
-        node-version: "20"
-
     - name: Prepare the CLI
       if: inputs.setup-cmd != ''
       shell: bash
@@ -134,8 +116,6 @@ runs:
         # tells roughly half of all authors to tag themselves.
         PR_AUTHOR: ${{ github.event.pull_request.user.login }}
         PR_AUTHOR_EMAIL: ${{ github.event.pull_request.user.email }}
-        VIEWER_URL: ${{ inputs.viewer-url }}
-        EXPORT_VIZ: ${{ inputs.export-viewer }}
         GRAFT: ${{ inputs.graft-cmd }}
       run: |
         set -euo pipefail
@@ -149,9 +129,6 @@ runs:
         # --name never fails the step: with no key, a spent quota or a refused call
         # it prints one line on stderr and every area keeps its hub-symbol name.
         if [ "$NAME_AREAS" = "true" ]; then args+=(--name); fi
-        # One command for both outputs: the page and the comment then describe the
-        # same radius, named once. A second `viz --export` step could drift from it.
-        if [ -n "$EXPORT_VIZ" ]; then args+=(--export-viz "$EXPORT_VIZ"); fi
         if [ "$SUGGEST_REVIEWERS" = "true" ]; then
           # Both keys for the same person, and neither is reliable alone: CI has the
           # login, the commits have the email, and the webhook usually leaves the
@@ -166,9 +143,6 @@ runs:
         fi
         args+=(--format markdown)
         $GRAFT "${args[@]}" > blast.md
-        if [ -n "$VIEWER_URL" ]; then
-          printf '\n[**Open the interactive graph →**](%s) — click an area to see its dependent symbols at file:line.\n' "$VIEWER_URL" >> blast.md
-        fi
         cat blast.md >> "$GITHUB_STEP_SUMMARY"
         {
           echo "markdown<<GRAFT_EOF"

@@ -17,7 +17,7 @@ const (
 )
 
 var (
-	allowEntries    = []string{"Bash(graft:*)", "Bash(npx graft:*)", "Bash(graft-dev:*)", "Bash(node dist/cli.js:*)"}
+	allowEntries    = []string{"Bash(graft:*)", "Bash(npx graft:*)", "Bash(graft-dev:*)"}
 	graftAllowEntry = regexp.MustCompile(`^Bash\((?:graft|npx graft|graft-dev|node dist/cli\.js)(?::|\))`)
 )
 

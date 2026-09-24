@@ -6,7 +6,7 @@
   "env": {},
   "inputs": {},
   "status": 1,
-  "stdout": "graft check: NO GRAPH\n\nNo graft/ graph found. Run `graft build` first.\n",
+  "stdout": "graph check: NO GRAPH\n\nNo graft/.graph/wiring.json found. Run `graft build` first.\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

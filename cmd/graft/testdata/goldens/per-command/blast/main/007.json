@@ -1,0 +1,20 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh",
+    "--base",
+    "base",
+    "--format",
+    "text"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "blast radius — base...HEAD (depth 2)\n  changed: 10 files in 5 areas, 8 seed symbols\n  impacted: 2 symbols in 2 areas\n\n✗ render — 2 changed files, 0/2 reached by a test\n✗ get — 2 changed files, 0/1 reached by a test\n✗ e — 1 changed file, 0/1 reached by a test\n✗ f — 1 changed file, 0/1 reached by a test\n✗ g — 1 changed file, 0/1 reached by a test\n\nd — 1 symbol in 1 file\n  calls ← d (src/other/d.ts:L2-L2) [depth 2]\n\nview — 1 symbol in 1 file\n  calls ← view (src/ui/view.ts:L2-L2) [depth 1]\n\nwho to tag\n  Ann Author — 7 areas · 7 commits, last 9mo ago\n  @bobby — render · 1 commit, last 9mo ago\n\n⚠ 1 deleted file (src/core/old.ts) — their dependents cannot be computed from a graph built at this commit, since the files are gone from it.\n\n⚠ 1 changed file not in the graph (README.md) — no parser claims the extension, or the index predates the file.\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": true
+}

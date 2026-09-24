@@ -2,15 +2,12 @@ package graph
 
 import (
 	"fmt"
-	"math"
 	"path/filepath"
 	"slices"
 	"strings"
 
 	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
 )
-
-const pendingCheckSample = 8
 
 // GraphCheckResult describes structural drift and summary coverage in a wiring graph.
 type GraphCheckResult struct {
@@ -19,10 +16,6 @@ type GraphCheckResult struct {
 	Added       []string `json:"added"`
 	Removed     []string `json:"removed"`
 	Changed     []string `json:"changed"`
-	Stale       []string `json:"stale"`
-	Pending     int      `json:"pending"`
-	PendingIDs  []string `json:"pendingIds"`
-	Nodes       int      `json:"nodes"`
 	Partial     bool     `json:"partial,omitzero"`
 	Unsupported []string `json:"unsupported,omitzero"`
 	Errors      []string `json:"errors,omitzero"`
@@ -33,11 +26,9 @@ type GraphCheckResult struct {
 // and its sidecars on every path.
 func CheckGraph(root, outDir string) (GraphCheckResult, error) {
 	result := GraphCheckResult{
-		Added:      make([]string, 0),
-		Removed:    make([]string, 0),
-		Changed:    make([]string, 0),
-		Stale:      make([]string, 0),
-		PendingIDs: make([]string, 0),
+		Added:   make([]string, 0),
+		Removed: make([]string, 0),
+		Changed: make([]string, 0),
 	}
 	root, err := filepath.Abs(root)
 	if err != nil {
@@ -77,7 +68,6 @@ func CheckGraph(root, outDir string) (GraphCheckResult, error) {
 	for _, node := range committed.Nodes {
 		committedByID[node.ID] = node
 	}
-	result.Nodes = len(committedByID)
 	for _, node := range current.Graph.Nodes {
 		currentByID[node.ID] = node.BodyHash
 	}
@@ -88,13 +78,6 @@ func CheckGraph(root, outDir string) (GraphCheckResult, error) {
 		} else if bodyHash != node.BodyHash {
 			result.Changed = append(result.Changed, id)
 		}
-		if node.SummaryState == SummaryState("stale") {
-			result.Stale = append(result.Stale, id)
-		}
-		if node.SummaryState == SummaryState("pending") {
-			result.Pending++
-			result.PendingIDs = append(result.PendingIDs, id)
-		}
 	}
 	for _, node := range current.Graph.Nodes {
 		if _, ok := committedByID[node.ID]; !ok {
@@ -104,9 +87,7 @@ func CheckGraph(root, outDir string) (GraphCheckResult, error) {
 	slices.Sort(result.Added)
 	slices.Sort(result.Removed)
 	slices.Sort(result.Changed)
-	slices.Sort(result.Stale)
-	slices.Sort(result.PendingIDs)
-	result.OK = len(result.Added)+len(result.Removed)+len(result.Changed)+len(result.Stale) == 0 && !result.Partial
+	result.OK = len(result.Added)+len(result.Removed)+len(result.Changed) == 0 && !result.Partial
 	return result, nil
 }
 
@@ -116,11 +97,7 @@ func FormatGraphCheckReport(result GraphCheckResult) string {
 		return "graph check: NO GRAPH\n\nNo graft/.graph/wiring.json found. Run `graft build` first."
 	}
 	if result.OK {
-		if result.Pending == 0 {
-			return "graph check: OK — the wiring graph is in sync with the code."
-		}
-		percent := int(math.Round(float64(result.Nodes-result.Pending) / float64(result.Nodes) * 100))
-		return "graph check: OK — the wiring graph is in sync with the code. (" + formatPendingCheckNote(result, percent) + ")"
+		return "graph check: OK — the wiring graph is in sync with the code."
 	}
 
 	status := "STALE"
@@ -136,7 +113,6 @@ func FormatGraphCheckReport(result GraphCheckResult) string {
 		{name: "changed", paths: result.Changed, marker: "~"},
 		{name: "added", paths: result.Added, marker: "+"},
 		{name: "removed", paths: result.Removed, marker: "-"},
-		{name: "stale summaries", paths: result.Stale, marker: "!"},
 	} {
 		if len(group.paths) == 0 {
 			continue
@@ -161,31 +137,8 @@ func FormatGraphCheckReport(result GraphCheckResult) string {
 	lines = append(lines, "")
 	if result.Partial {
 		lines = append(lines, "Run `graft build` to repair the source errors and refresh the graph.")
-	} else {
-		if len(result.Added)+len(result.Removed)+len(result.Changed) > 0 {
-			lines = append(lines, "Run `graft build` to rebuild the structure, then commit graft/.")
-		}
-		if len(result.Stale) > 0 {
-			lines = append(lines, "Run `graft build --deep` to refresh stale summaries.")
-		}
+	} else if len(result.Added)+len(result.Removed)+len(result.Changed) > 0 {
+		lines = append(lines, "Run `graft build` to rebuild the structure, then commit graft/.")
 	}
 	return strings.Join(lines, "\n")
-}
-
-func formatPendingCheckNote(result GraphCheckResult, percent int) string {
-	sample := result.PendingIDs
-	if len(sample) > pendingCheckSample {
-		sample = sample[:pendingCheckSample]
-	}
-	named := ""
-	if len(sample) > 0 {
-		named = ": " + strings.Join(sample, ", ")
-		if len(result.PendingIDs) > pendingCheckSample {
-			named += fmt.Sprintf(", … +%d more", len(result.PendingIDs)-pendingCheckSample)
-		}
-	}
-	return fmt.Sprintf(
-		"meaning tier %d%% complete — %d of %d node(s) pending%s. Run `graft build --deep` to summarize them; if a deep build already left these pending, that meaning pass failed — see that build's errors (re-running alone will not clear them)",
-		percent, result.Pending, result.Nodes, named,
-	)
 }

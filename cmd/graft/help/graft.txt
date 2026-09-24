@@ -23,9 +23,7 @@ Commands:
   upgrade                           Upgrade the globally installed graft to the
                                     latest version on npm
   build [options] [dir]             Build graft/ from your code — wiring graph +
-                                    per-file cards ($0, no key). Add --deep for
-                                    the LLM concept map + per-symbol
-                                    summaries/crux.
+                                    per-file cards ($0, no key)
   ask [options] <query> [dir]       Query the graft/ graph — returns ranked
                                     nodes + exact file:line, routed to prose or
                                     wiring ($0, no key)
@@ -36,8 +34,6 @@ Commands:
                                     (for CI)
   stats [options] [dir]             Show this agent session's graft-vs-source
                                     usage mix and tokens saved
-  viz [options] [dir]               Serve an interactive visualization of the
-                                    context graph (and graph.json when present)
   mcp [dir]                         Serve the graph over MCP (stdio) — exposes
                                     graft_find_code, graft_trace_calls,
                                     graft_find_all, graft_file_api,

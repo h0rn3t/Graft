@@ -97,12 +97,16 @@ type callersOutput struct {
 }
 
 func main() {
-	if status := run(os.Args[1:], os.Stdout, os.Stderr); status != 0 {
+	if status := runWithInput(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); status != 0 {
 		os.Exit(status)
 	}
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	return runWithInput(args, strings.NewReader(""), stdout, stderr)
+}
+
+func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	queryNote.repo, queryNote.hit = "", ""
 	parsed, err := parseCommandLine(programSpec(), args)
 	var help *helpRequest
@@ -131,12 +135,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 	command := parsed.command.name
 	pendingAction = func() { preAction(command, stderr) }
-	status := dispatch(parsed, stdout, stderr)
+	status := dispatchWithInput(parsed, stdin, stdout, stderr)
 	postAction(command, status)
 	return status
 }
 
-func dispatch(parsed invocation, stdout, stderr io.Writer) int {
+func dispatchWithInput(parsed invocation, stdin io.Reader, stdout, stderr io.Writer) int {
 	args := parsed.args
 	switch parsed.command.path() {
 	case "_brain-refresh":
@@ -159,6 +163,24 @@ func dispatch(parsed invocation, stdout, stderr io.Writer) int {
 		actionStarted()
 		telemetry.RunFlush(homeDir())
 		return 0
+	case "_hook":
+		if len(args) == 0 {
+			return 1
+		}
+		runHook(args[0], stdin, stdout, stderr)
+		return 0
+	case "_statusline":
+		runHookStatusline(stdin, stdout)
+		return 0
+	case "_sync-run":
+		if len(args) == 0 {
+			return 0
+		}
+		runHookSync(args[0], stdout, stderr)
+		return 0
+	case "_install":
+		runHookInstall()
+		return 0
 	case "version":
 		return runVersion(stdout)
 	case "upgrade":
@@ -176,12 +198,6 @@ func dispatch(parsed invocation, stdout, stderr io.Writer) int {
 	actionStarted()
 	switch opts.command {
 	case "build":
-		if value, ok := parsed.flags.value("--concurrency"); ok {
-			if _, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err != nil || strings.TrimSpace(value) == "" {
-				writeDiagnostic(stderr, "✗ --concurrency must be a number, got \"%s\"\n", value)
-				return 1
-			}
-		}
 		return runBuild(opts, stdout, stderr)
 	case "check":
 		return runCheck(opts, stdout, stderr)
@@ -198,7 +214,7 @@ func dispatch(parsed invocation, stdout, stderr io.Writer) int {
 	case "map":
 		return runMap(opts, stdout, stderr)
 	case "mcp":
-		return runMCP(opts, os.Stdin, stdout, stderr)
+		return runMCP(opts, stdin, stdout, stderr)
 	case "ask":
 		return runAsk(opts, stdout, stderr)
 	default:

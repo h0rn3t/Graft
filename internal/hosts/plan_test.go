@@ -4,8 +4,11 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"testing"
+
+	"github.com/NanoNets/context-graph-engine/internal/jsonjs"
 )
 
 func listFiles(t *testing.T, roots ...string) []string {
@@ -42,9 +45,33 @@ func machine(t *testing.T) (string, string) {
 
 // TestPlanMatchesTheWritesAnApplyMakes checks the dry-run contract: the plan
 // touches nothing, and applying every host writes exactly the planned files.
+func TestMergeGraftSettingsRemovesLegacyAllowEntry(t *testing.T) {
+	existing := jsonjs.NewObject()
+	permissions := jsonjs.NewObject()
+	permissions.Set("allow", []jsonjs.Value{
+		"Bash(ls:*)", "Bash(node dist/cli.js:*)", "Bash(graft:*)",
+	})
+	existing.Set("permissions", permissions)
+	merged, warnings := MergeGraftSettings(existing, true)
+	if len(warnings) != 0 {
+		t.Errorf("MergeGraftSettings() warnings = %v, want none", warnings)
+	}
+	value, _ := merged.Get("permissions")
+	object, _ := jsonjs.AsObject(value)
+	allowValue, _ := object.Get("allow")
+	allow, _ := jsonjs.AsArray(allowValue)
+	got := make([]string, len(allow))
+	for i, value := range allow {
+		got[i] = jsonjs.String(value)
+	}
+	if !reflect.DeepEqual(got, []string{"Bash(ls:*)", "Bash(graft:*)", "Bash(npx graft:*)", "Bash(graft-dev:*)"}) {
+		t.Errorf("MergeGraftSettings() allow = %v, want legacy TS entry removed", got)
+	}
+}
+
 func TestPlanMatchesTheWritesAnApplyMakes(t *testing.T) {
 	repo, home := machine(t)
-	env := Env{Home: home, BakedDir: "/pkg/dist/claude", Launch: npxLaunch}
+	env := Env{Home: home, BakedDir: "/pkg", Launch: npxLaunch}
 	before := listFiles(t, repo, home)
 	plans := PlanInit(repo, home, env.Launch, nil)
 	if after := listFiles(t, repo, home); !slices.Equal(after, before) {
@@ -78,7 +105,7 @@ func TestPlanMatchesTheWritesAnApplyMakes(t *testing.T) {
 // home while repo-level targets, Cursor's hooks included, are still written.
 func TestNoGlobalKeepsHomeUntouched(t *testing.T) {
 	repo, home := machine(t)
-	env := Env{Home: home, BakedDir: "/pkg/dist/claude", Launch: npxLaunch}
+	env := Env{Home: home, BakedDir: "/pkg", Launch: npxLaunch}
 	before := listFiles(t, home)
 	if _, err := RunClaudeInit(repo, env, true, false); err != nil {
 		t.Fatal(err)

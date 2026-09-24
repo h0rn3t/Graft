@@ -6,10 +6,8 @@ name: Blast radius
 #
 # Which is exactly why it no longer posts. A `pull_request` job on a fork holds a
 # read-only token regardless of the `permissions:` block below, so this step's
-# comment 403s on most of the repo's open pull requests. `blast-pages.yml` posts it
-# instead, from a token that belongs to the base repo. What stays here is the part
-# only this workflow can do: run the PR's OWN build, and fail if the code in the PR
-# cannot produce a comment body at all — the rendered body lands in the step summary.
+# comment 403s on most of the repo's open pull requests. The step summary still
+# exposes the rendered body for every PR.
 on:
   pull_request:
     branches: [main]
@@ -20,8 +18,6 @@ permissions:
 jobs:
   blast:
     runs-on: ubuntu-latest
-    # Read-only now that it does not comment: least privilege, and it makes the
-    # split with blast-pages.yml legible from the permissions alone.
     permissions:
       contents: read
     steps:
@@ -30,22 +26,24 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build the PR's CLI
+        run: go build -o graft-ci ./cmd/graft
+
       - uses: ./.github/actions/graft-blast
         with:
           depth: "2"
-          # Computed, not posted — see the header. `blast-pages.yml` owns the comment
-          # so that fork PRs get one, and so two jobs never edit the same body.
           comment: "false"
           # graft reviews its own PRs with the code IN the PR, not with the last
           # release — a release cannot run a command the PR is adding.
-          setup-cmd: npm ci && npm run build
-          graft-cmd: node dist/cli.js
+          graft-cmd: ./graft-ci
           # A fork's PR gets no secrets, so naming would fail anyway; every area then
           # carries its hub-symbol name, which is still reviewable.
           name-areas: ${{ github.event.pull_request.head.repo.fork == false }}
-          # Still set so the step summary shows the same body the comment will
-          # carry, link included.
-          viewer-url: ${{ vars.BLAST_VIEWER_BASE != '' && format('{0}/pr/{1}/', vars.BLAST_VIEWER_BASE, github.event.pull_request.number) || '' }}
         env:
           GRAFT_API_KEY: ${{ secrets.GRAFT_API_KEY }}
           # Wire format stays `openai` for any OpenAI-compatible gateway; these two

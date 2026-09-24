@@ -47,7 +47,7 @@ func TestShortLabel(t *testing.T) {
 	tests := []struct {
 		in, want string
 	}{
-		{"Concept: Graph Store", "Graph Store"},
+		{"  Graph Store  ", "Graph Store"},
 		{"Incremental Build via Content Fingerprints", "Incremental Build"},
 		{"Reciprocal-Rank Fusion for Workspace Federation", "Reciprocal-Rank Fusion"},
 		{"Supercalifragilisticexpialidocious Everywhere", "Supercalifragilisticexpialidoc…"},
@@ -93,7 +93,7 @@ func TestRadiusSeedsInnermostSymbolAndSerializesFullDepth(t *testing.T) {
 		Edges: []graph.EdgeV1{{Source: "src/use.ts#use", Target: "src/cache.ts#Cache.get", Relation: "calls"}},
 	}
 	changed := []*ChangedFile{{Path: "src/cache.ts", Status: StatusModified, Ranges: []LineRange{{Start: 3, End: 3}}, Hunks: []*Hunk{}}}
-	report := Radius(wiring, changed, "working tree vs HEAD", FullDepth, ModuleIndex{})
+	report := Radius(wiring, changed, "working tree vs HEAD", FullDepth)
 	if len(report.Seeds) != 1 || report.Seeds[0].ID != "src/cache.ts#Cache.get" {
 		t.Fatalf("Radius seeds = %+v, want only Cache.get", report.Seeds)
 	}

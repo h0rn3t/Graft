@@ -1,0 +1,52 @@
+{
+  "args": [
+    "mcp",
+    "<REPO>"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "DO_NOT_TRACK": "1",
+    "GRAFT_MCP_NPX": "1"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "inputs": {
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.1\",\n  \"checkedAt\": 4102444800000\n}"
+  },
+  "messages": [
+    {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/list"
+    },
+    {
+      "jsonrpc": "2.0",
+      "id": 2,
+      "method": "tools/call",
+      "params": {
+        "name": "graft_trace_calls",
+        "arguments": {
+          "symbol": "add"
+        }
+      }
+    },
+    {
+      "jsonrpc": "2.0",
+      "id": 3,
+      "method": "tools/call",
+      "params": {
+        "name": "nope",
+        "arguments": {}
+      }
+    }
+  ],
+  "status": 0,
+  "stdout": "{\"replies\":{\"1\":{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"tools\":[]}},\"2\":{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"no graph found — run `graft build` first\"}],\"isError\":true}},\"3\":{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"unknown tool: nope\"}],\"isError\":true}}},\"stray\":[]}",
+  "stderr": "",
+  "files": {
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.1\",\n  \"checkedAt\": 4102444800000\n}"
+  },
+  "checkFiles": true
+}

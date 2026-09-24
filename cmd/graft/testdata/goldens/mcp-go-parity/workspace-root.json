@@ -1,0 +1,229 @@
+{
+  "args": [
+    "mcp",
+    "<REPO>"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "DO_NOT_TRACK": "1",
+    "GRAFT_MCP_NPX": "1",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "gitDirs": [
+    "repo/api",
+    "repo/web"
+  ],
+  "dirs": [
+    "home",
+    "repo",
+    "repo/docs/.git"
+  ],
+  "setup": [
+    {
+      "args": [
+        "build"
+      ],
+      "afterGit": false
+    }
+  ],
+  "inputs": {
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.1\",\n  \"checkedAt\": 4102444800000\n}",
+    "repo/api/src/index.ts": "export function serve() { return handle(); }\nexport function handle() { return 1; }\n",
+    "repo/web/src/index.ts": "export function render() { return 2; }\nexport function handle() { return 3; }\n"
+  },
+  "steps": [
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "initialize",
+        "params": {
+          "protocolVersion": "2024-11-05",
+          "capabilities": {},
+          "clientInfo": {
+            "name": "t",
+            "version": "1"
+          }
+        }
+      },
+      "reply": true,
+      "id": 1
+    },
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 2,
+        "method": "tools/list"
+      },
+      "reply": true,
+      "id": 2
+    },
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 3,
+        "method": "tools/call",
+        "params": {
+          "name": "graft_find_code",
+          "arguments": {
+            "query": "handle"
+          }
+        }
+      },
+      "reply": true,
+      "id": 3
+    },
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 4,
+        "method": "tools/call",
+        "params": {
+          "name": "graft_find_code",
+          "arguments": {
+            "query": "handle",
+            "in": "web/"
+          }
+        }
+      },
+      "reply": true,
+      "id": 4
+    },
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 5,
+        "method": "tools/call",
+        "params": {
+          "name": "graft_find_all",
+          "arguments": {
+            "pattern": "handle"
+          }
+        }
+      },
+      "reply": true,
+      "id": 5
+    },
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 6,
+        "method": "tools/call",
+        "params": {
+          "name": "graft_trace_calls",
+          "arguments": {
+            "symbol": "handle"
+          }
+        }
+      },
+      "reply": true,
+      "id": 6
+    },
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 7,
+        "method": "tools/call",
+        "params": {
+          "name": "graft_trace_calls",
+          "arguments": {
+            "symbol": "nothing_here"
+          }
+        }
+      },
+      "reply": true,
+      "id": 7
+    },
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 8,
+        "method": "tools/call",
+        "params": {
+          "name": "graft_repo_map",
+          "arguments": {}
+        }
+      },
+      "reply": true,
+      "id": 8
+    },
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 9,
+        "method": "tools/call",
+        "params": {
+          "name": "graft_check_freshness",
+          "arguments": {}
+        }
+      },
+      "reply": true,
+      "id": 9
+    },
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 10,
+        "method": "tools/call",
+        "params": {
+          "name": "graft_file_api",
+          "arguments": {
+            "file": "api/src/index.ts"
+          }
+        }
+      },
+      "reply": true,
+      "id": 10
+    },
+    {
+      "edit": {
+        "web/src/index.ts": "export function render() { return handle(); }\nexport function handle() { return 3; }\n"
+      }
+    },
+    {
+      "send": {
+        "jsonrpc": "2.0",
+        "id": 11,
+        "method": "tools/call",
+        "params": {
+          "name": "graft_trace_calls",
+          "arguments": {
+            "symbol": "handle",
+            "in": "web/"
+          }
+        }
+      },
+      "reply": true,
+      "id": 11
+    }
+  ],
+  "status": 0,
+  "stdout": "{\"replies\":{\"1\":{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"graft\",\"version\":\"<V>\"},\"instructions\":\"This repo is indexed by graft: a prebuilt graph of every symbol, its file:line\\nspan, and who calls what. Prefer these tools over grep/read — one call usually\\nreplaces several file reads.\\n\\n**If these tools are deferred (names shown, schemas withheld), load them all in ONE lookup:** ToolSearch \\\"select:mcp__graft__graft_find_code,mcp__graft__graft_find_all,mcp__graft__graft_trace_calls,mcp__graft__graft_file_api,mcp__graft__graft_repo_map\\\" — one round trip for the whole session. Never load them one at a time.\\n\\n- graft_find_code — \\\"how does X work\\\" / \\\"where is Y\\\": ranked hits, code inlined.\\n- graft_find_all — when you need EVERY occurrence; find_code is top-N and misses some.\\n- graft_trace_calls — who calls it, what it calls, blast radius before a rename.\\n- graft_file_api — a file's whole API in ~200 tokens.\\n- graft_repo_map — orientation in an unfamiliar repo.\\n\\nResults already reflect uncommitted edits — the graph refreshes before each query.\"}},\"2\":{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"tools\":[{\"name\":\"graft_find_code\",\"description\":\"Query the repo context graph in plain words. Returns ranked nodes with exact file:line spans and the relevant source inlined — usually the full answer, no file reads needed.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"query\":{\"type\":\"string\",\"description\":\"what you want to understand, in plain words\"},\"limit\":{\"type\":\"number\",\"description\":\"max results (default 5)\"},\"full\":{\"type\":\"boolean\",\"description\":\"inline whole definition spans instead of the default ≤8-line crux excerpts\"},\"in\":{\"type\":\"string\",\"description\":\"narrow to nodes under this path prefix, filtered before scoring (segment-aware, like scopeOf)\"}},\"required\":[\"query\"]}},{\"name\":\"graft_file_api\",\"description\":\"Signatures-only view of one file — every definition's signature + line span, ~10× cheaper than reading the file ($0, no LLM).\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"file\":{\"type\":\"string\",\"description\":\"repo-relative path (or unique basename) of the file\"}},\"required\":[\"file\"]}},{\"name\":\"graft_check_freshness\",\"description\":\"Report whether the committed graph is in sync with the code (drift check).\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}},{\"name\":\"graft_trace_calls\",\"description\":\"Structural edges for a symbol, over call/reference/import/implements/extends ($0, no LLM). Defaults to direct callers (who depends on it). Set direction:\\\"out\\\" for callees (what it calls); set depth>1 (or depth:\\\"all\\\" for the full closure) to walk transitively for the full blast radius — every source that breaks if it changes. Run before a multi-file refactor to find ALL affected files.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"symbol\":{\"type\":\"string\",\"description\":\"bare name, qualified (Class.method), or package-qualified (pkg.Fn); a file path also works\"},\"direction\":{\"type\":\"string\",\"enum\":[\"in\",\"out\"],\"description\":\"\\\"in\\\" (default) = callers/dependents; \\\"out\\\" = callees/dependencies\"},\"depth\":{\"description\":\"transitive walk depth for blast radius (default 1 = direct edges only); pass \\\"all\\\" for the full connected closure — every source that would be affected\"},\"in\":{\"type\":\"string\",\"description\":\"narrow matches to nodes at or under this repo-relative path prefix, e.g. server/src\"}},\"required\":[\"symbol\"]}},{\"name\":\"graft_find_all\",\"description\":\"Regex search over the graph's indexed files, hits grouped by innermost enclosing symbol and ranked by incoming-edge count (coupling) — which hit matters, not just where it is.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"pattern\":{\"type\":\"string\",\"description\":\"regex pattern (or literal string with fixed: true)\"},\"in\":{\"type\":\"string\",\"description\":\"narrow to files at or under this repo-relative path prefix, e.g. server/src\"},\"ignore_case\":{\"type\":\"boolean\",\"description\":\"case-insensitive match\"},\"fixed\":{\"type\":\"boolean\",\"description\":\"treat pattern as a literal string, not a regex\"}},\"required\":[\"pattern\"]}},{\"name\":\"graft_repo_map\",\"description\":\"Token-budgeted repo orientation — directory clusters, per-directory hubs, and global hotspots computed purely from the wiring graph ($0, no LLM). Use this to get oriented in an unfamiliar repo before diving into files.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"max_dirs\":{\"type\":\"number\",\"description\":\"max directory entries shown, rest counted into dropped (default 16)\"}}}}]}},\"3\":{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"graft ask — \\\"handle\\\"  (lexical)\\n\\n1. [api/] handle · function  [symbol]\\n   api/src/index.ts:L2-L2\\n   function handle()\\n\\n```\\nexport function handle() { return 1; }\\n```\\n\\n2. [web/] handle · function  [symbol]\\n   web/src/index.ts:L2-L2\\n   function handle()\\n\\n```\\nexport function handle() { return 3; }\\n```\\n\\n3. [api/] serve · function  [symbol]\\n   api/src/index.ts:L1-L1\\n   function serve()\\n\\n```\\nexport function serve() { return handle(); }\\n```\\n\\nmatched in: api/ (2) · web/ (1)\\n\\n[graft] only 3 hits — don't re-ask with new wording; switch tool: `graft grep \\\"<literal>\\\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\\n\"}],\"isError\":false}},\"4\":{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"graft ask — \\\"handle\\\"  (lexical)\\n\\n1. [web/] handle · function  [symbol]\\n   web/src/index.ts:L2-L2\\n   function handle()\\n\\n```\\nexport function handle() { return 3; }\\n```\\n\\nmatched in: web/ (1)\\n\\n[graft] only 1 hit — don't re-ask with new wording; switch tool: `graft grep \\\"<literal>\\\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.\\n\"}],\"isError\":false}},\"5\":{\"jsonrpc\":\"2.0\",\"id\":5,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"\\\"handle\\\" — 3 hits in 3 symbols across 2 files (searched 2 indexed files)\\n\\nhandle · function · api/src/index.ts:L2-L2 · 1 in-edges\\n  L2: export function handle() { return 1; }\\n\\nserve · function · api/src/index.ts:L1-L1 · 0 in-edges\\n  L1: export function serve() { return handle(); }\\n\\nhandle · function · web/src/index.ts:L2-L2 · 0 in-edges\\n  L2: export function handle() { return 3; }\\n\"}],\"isError\":false}},\"6\":{\"jsonrpc\":\"2.0\",\"id\":6,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"## api/\\nhandle · function · src/index.ts:L2-L2\\n  calls ← serve (src/index.ts:L1-L1)\\n\\n## web/\\nhandle · function · src/index.ts:L2-L2\\n  no indexed callers — the graph has no incoming call/reference edges for this symbol as written. Check the name (try the bare symbol, or \\\"Type.method\\\"), or find its uses with graft grep \\\"handle\\\". Fall back to raw grep -rn only for unindexed files\"}],\"isError\":false}},\"7\":{\"jsonrpc\":\"2.0\",\"id\":7,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"no symbol \\\"nothing_here\\\" in any of the 3 workspace repo(s) — check spelling or run graft build\"}],\"isError\":true}},\"8\":{\"jsonrpc\":\"2.0\",\"id\":8,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"workspace map — 3 repo(s)\\n\\n## api/\\nrepo map — 1 files · 2 symbols · 3 edges · typescript\\n\\nsrc/index.ts        1 files · 2 symbols   hubs: handle (index.ts, 1←)\\n\\nhotspots: handle · function · src/index.ts:L2-L2 · 1←\\n\\n## docs/\\nrepo map — 0 files · 0 symbols · 0 edges · \\n\\n\\nhotspots:\\n\\n## web/\\nrepo map — 1 files · 2 symbols · 2 edges · typescript\\n\\nsrc/index.ts        1 files · 2 symbols\\n\\nhotspots:\\n\"}],\"isError\":false}},\"9\":{\"jsonrpc\":\"2.0\",\"id\":9,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"workspace check — 3 repo(s)\\n\\napi/: OK\\ndocs/: OK\\nweb/: OK\\n\"}],\"isError\":false}},\"10\":{\"jsonrpc\":\"2.0\",\"id\":10,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"graft skeleton — api/src/index.ts\\n\\nno wiring graph — run `graft build` first\\n\"}],\"isError\":true}},\"11\":{\"jsonrpc\":\"2.0\",\"id\":11,\"result\":{\"content\":[{\"type\":\"text\",\"text\":\"nothing indexed under \\\"web/\\\" (or any path prefix)\"}],\"isError\":true}}},\"stray\":[]}",
+  "stderr": "",
+  "files": {
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.1\",\n  \"checkedAt\": 4102444800000\n}",
+    "repo/.gitignore": "# graft's local graph cache — regenerable, not committed (run `graft build`).\n/graft/\n",
+    "repo/api/.gitignore": "# graft's local graph cache — regenerable, not committed (run `graft build`).\n/graft/\n",
+    "repo/api/.ignore": "# graft's cards are gitignored but should stay greppable: ripgrep reads\n# .ignore before .gitignore, so this re-admits the tree to search only.\n!graft/\ngraft/.cache/\ngraft/.graph/\n",
+    "repo/api/graft/.cache/ask-index.json": "{\"version\":1,\"avgBodyLen\":3.6666666666666665,\"df\":[[\"index\",3],[\"ts\",3],[\"src\",3],[\"handle\",2],[\"function\",2],[\"return\",2],[\"serve\",1]],\"docCount\":3,\"docs\":[{\"id\":\"src/index.ts\",\"name\":[[\"index\",1],[\"ts\",1]],\"path\":[[\"src\",1],[\"index\",1],[\"ts\",1]],\"body\":[]},{\"id\":\"src/index.ts#handle\",\"name\":[[\"handle\",1]],\"path\":[[\"src\",1],[\"index\",1],[\"ts\",1]],\"body\":[[\"function\",2],[\"handle\",2],[\"return\",1]]},{\"id\":\"src/index.ts#serve\",\"name\":[[\"serve\",1]],\"path\":[[\"src\",1],[\"index\",1],[\"ts\",1]],\"body\":[[\"function\",2],[\"serve\",2],[\"return\",1],[\"handle\",1]]}]}\n",
+    "repo/api/graft/.graph/wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 3,\n    \"edgeCount\": 3,\n    \"languages\": [\n      \"typescript\"\n    ],\n    \"scopes\": [\n      {\n        \"prefix\": \"\",\n        \"label\": \"\",\n        \"markers\": []\n      }\n    ]\n  },\n  \"nodes\": [\n    {\n      \"id\": \"src/index.ts\",\n      \"name\": \"index.ts\",\n      \"kind\": \"file\",\n      \"path\": \"src/index.ts\",\n      \"span\": \"L1-L3\",\n      \"signature\": null,\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"5b6d75686f1919b0335c3cfea4fd3badbb300d816d3c1587f3e473df63d691d4\",\n      \"chars\": 84,\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/index.ts#handle\",\n      \"name\": \"handle\",\n      \"kind\": \"function\",\n      \"path\": \"src/index.ts\",\n      \"span\": \"L2-L2\",\n      \"signature\": \"function handle()\",\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"7f66b8935abe561e47220f7434d4b328776cbb9d657492d1ff8b2f480ecef54c\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/index.ts#serve\",\n      \"name\": \"serve\",\n      \"kind\": \"function\",\n      \"path\": \"src/index.ts\",\n      \"span\": \"L1-L1\",\n      \"signature\": \"function serve()\",\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"f22ad65726f6b8cadea564eb9b03f9251fadd9f81572a063a9e28215cce0a80b\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    }\n  ],\n  \"edges\": [\n    {\n      \"source\": \"src/index.ts\",\n      \"target\": \"src/index.ts#handle\",\n      \"relation\": \"contains\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"src/index.ts\",\n      \"target\": \"src/index.ts#serve\",\n      \"relation\": \"contains\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"src/index.ts#serve\",\n      \"target\": \"src/index.ts#handle\",\n      \"relation\": \"calls\",\n      \"confidence\": \"extracted\"\n    }\n  ]\n}\n",
+    "repo/api/graft/INDEX.md": "# graft — repo map\n\nSmall markdown nodes summarising this repo. `grep` any term, symbol, or\nfilename here, or run `graft ask \"<task>\"`. Each node carries prose plus exact\n`file:line`; open a source file only to edit the named span.\n\nThe same graph is queryable as MCP tools (`graft_find_code`, `graft_find_all`,\n`graft_trace_calls`, `graft_file_api`, `graft_repo_map`) where a host exposes them, and\nas the `graft` CLI everywhere else. Edges — who calls what — live only in the\ngraph, not in these files: `graft callers <symbol>` is the only way to read them.\n\n## Files\n\n1 per-file wiring cards mirror the source tree under `graft/` (1 carry extracted symbols). They are deliberately not enumerated here —\n`grep` a symbol or `find`/`ls` a filename under `graft/` to land on the card for that file.\n",
+    "repo/api/graft/src/index.md": "# src/index.ts\n\n- serve · function · L1-L1 — function serve()\n- handle · function · L2-L2 — function handle()\n",
+    "repo/api/src/index.ts": "export function serve() { return handle(); }\nexport function handle() { return 1; }\n",
+    "repo/docs/.gitignore": "# graft's local graph cache — regenerable, not committed (run `graft build`).\n/graft/\n",
+    "repo/docs/.ignore": "# graft's cards are gitignored but should stay greppable: ripgrep reads\n# .ignore before .gitignore, so this re-admits the tree to search only.\n!graft/\ngraft/.cache/\ngraft/.graph/\n",
+    "repo/docs/graft/.cache/ask-index.json": "{\"version\":1,\"avgBodyLen\":0,\"df\":[],\"docCount\":0,\"docs\":[]}\n",
+    "repo/docs/graft/.graph/wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 0,\n    \"edgeCount\": 0,\n    \"languages\": [],\n    \"scopes\": [\n      {\n        \"prefix\": \"\",\n        \"label\": \"\",\n        \"markers\": []\n      }\n    ]\n  },\n  \"nodes\": [],\n  \"edges\": []\n}\n",
+    "repo/docs/graft/INDEX.md": "# graft — repo map\n\nSmall markdown nodes summarising this repo. `grep` any term, symbol, or\nfilename here, or run `graft ask \"<task>\"`. Each node carries prose plus exact\n`file:line`; open a source file only to edit the named span.\n\nThe same graph is queryable as MCP tools (`graft_find_code`, `graft_find_all`,\n`graft_trace_calls`, `graft_file_api`, `graft_repo_map`) where a host exposes them, and\nas the `graft` CLI everywhere else. Edges — who calls what — live only in the\ngraph, not in these files: `graft callers <symbol>` is the only way to read them.\n",
+    "repo/graft/workspace.json": "{\n  \"version\": 1,\n  \"children\": [\n    \"api\",\n    \"docs\",\n    \"web\"\n  ]\n}\n",
+    "repo/web/.gitignore": "# graft's local graph cache — regenerable, not committed (run `graft build`).\n/graft/\n",
+    "repo/web/.ignore": "# graft's cards are gitignored but should stay greppable: ripgrep reads\n# .ignore before .gitignore, so this re-admits the tree to search only.\n!graft/\ngraft/.cache/\ngraft/.graph/\n",
+    "repo/web/graft/.cache/ask-index.json": "{\"version\":1,\"avgBodyLen\":3.6666666666666665,\"df\":[[\"index\",3],[\"ts\",3],[\"src\",3],[\"handle\",2],[\"function\",2],[\"return\",2],[\"render\",1]],\"docCount\":3,\"docs\":[{\"id\":\"src/index.ts\",\"name\":[[\"index\",1],[\"ts\",1]],\"path\":[[\"src\",1],[\"index\",1],[\"ts\",1]],\"body\":[]},{\"id\":\"src/index.ts#handle\",\"name\":[[\"handle\",1]],\"path\":[[\"src\",1],[\"index\",1],[\"ts\",1]],\"body\":[[\"function\",2],[\"handle\",2],[\"return\",1]]},{\"id\":\"src/index.ts#render\",\"name\":[[\"render\",1]],\"path\":[[\"src\",1],[\"index\",1],[\"ts\",1]],\"body\":[[\"function\",2],[\"render\",2],[\"return\",1],[\"handle\",1]]}]}\n",
+    "repo/web/graft/.graph/wiring.json": "{\n  \"meta\": {\n    \"version\": 1,\n    \"nodeCount\": 3,\n    \"edgeCount\": 3,\n    \"languages\": [\n      \"typescript\"\n    ],\n    \"scopes\": [\n      {\n        \"prefix\": \"\",\n        \"label\": \"\",\n        \"markers\": []\n      }\n    ]\n  },\n  \"nodes\": [\n    {\n      \"id\": \"src/index.ts\",\n      \"name\": \"index.ts\",\n      \"kind\": \"file\",\n      \"path\": \"src/index.ts\",\n      \"span\": \"L1-L3\",\n      \"signature\": null,\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"75924c8d60f6fc4de2a8612bf66a0517dabca7e327bc66f5be0c6acf4e696198\",\n      \"chars\": 85,\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/index.ts#handle\",\n      \"name\": \"handle\",\n      \"kind\": \"function\",\n      \"path\": \"src/index.ts\",\n      \"span\": \"L2-L2\",\n      \"signature\": \"function handle()\",\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"3480de87ad22e9697ffa4117ba06f7fe10fb3f48d3a9db01a6af4e7c16841e9e\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    },\n    {\n      \"id\": \"src/index.ts#render\",\n      \"name\": \"render\",\n      \"kind\": \"function\",\n      \"path\": \"src/index.ts\",\n      \"span\": \"L1-L1\",\n      \"signature\": \"function render()\",\n      \"exported\": true,\n      \"origin\": \"ast\",\n      \"body_hash\": \"bf64d067da9e1ca1902e4eb92f449dafab2d3552499f8bfdf75b582ad68f4e43\",\n      \"summary_state\": \"pending\",\n      \"summary\": null,\n      \"crux\": null\n    }\n  ],\n  \"edges\": [\n    {\n      \"source\": \"src/index.ts\",\n      \"target\": \"src/index.ts#handle\",\n      \"relation\": \"contains\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"src/index.ts\",\n      \"target\": \"src/index.ts#render\",\n      \"relation\": \"contains\",\n      \"confidence\": \"extracted\"\n    },\n    {\n      \"source\": \"src/index.ts#render\",\n      \"target\": \"src/index.ts#handle\",\n      \"relation\": \"calls\",\n      \"confidence\": \"extracted\"\n    }\n  ]\n}\n",
+    "repo/web/graft/INDEX.md": "# graft — repo map\n\nSmall markdown nodes summarising this repo. `grep` any term, symbol, or\nfilename here, or run `graft ask \"<task>\"`. Each node carries prose plus exact\n`file:line`; open a source file only to edit the named span.\n\nThe same graph is queryable as MCP tools (`graft_find_code`, `graft_find_all`,\n`graft_trace_calls`, `graft_file_api`, `graft_repo_map`) where a host exposes them, and\nas the `graft` CLI everywhere else. Edges — who calls what — live only in the\ngraph, not in these files: `graft callers <symbol>` is the only way to read them.\n\n## Files\n\n1 per-file wiring cards mirror the source tree under `graft/` (1 carry extracted symbols). They are deliberately not enumerated here —\n`grep` a symbol or `find`/`ls` a filename under `graft/` to land on the card for that file.\n",
+    "repo/web/graft/src/index.md": "# src/index.ts\n\n- render · function · L1-L1 — function render()\n- handle · function · L2-L2 — function handle()\n",
+    "repo/web/src/index.ts": "export function render() { return handle(); }\nexport function handle() { return 3; }\n"
+  },
+  "checkFiles": true
+}

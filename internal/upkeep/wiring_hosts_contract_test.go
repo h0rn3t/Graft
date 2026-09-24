@@ -137,7 +137,7 @@ func TestRewriteWiringContract(t *testing.T) {
 			if tt.nilContext {
 				ctx = nil
 			}
-			env := hosts.Env{Home: home, BakedDir: "/pkg/dist/claude", Launch: hosts.ServerEntry()}
+			env := hosts.Env{Home: home, BakedDir: "/pkg", Launch: hosts.ServerEntry()}
 			err := RewriteWiring(ctx, root, tt.hosts, tt.options, env)
 			if _, statErr := os.Stat(filepath.Join(root, ".cursor", "rules", "graft.mdc")); (statErr == nil) != tt.wantCursor {
 				t.Errorf("RewriteWiring(%q, %v) Cursor rule present = %t, want %t", root, tt.hosts, statErr == nil, tt.wantCursor)

@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"encoding/json/v2"
 	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -17,17 +21,46 @@ import (
 type goldenCase struct {
 	Args          []string          `json:"args"`
 	CWD           string            `json:"cwd"`
+	Root          string            `json:"root"`
 	Env           map[string]string `json:"env"`
 	Tracked       []string          `json:"tracked"`
+	Dirs          []string          `json:"dirs"`
+	Setup         []goldenCommand   `json:"setup"`
 	InitialInputs map[string]string `json:"initialInputs"`
 	Inputs        map[string]string `json:"inputs"`
+	Stdin         any               `json:"stdin,omitempty"`
+	Messages      []any             `json:"messages"`
+	Steps         []goldenStep      `json:"steps"`
+	Requests      []goldenRequest   `json:"requests"`
+	NormalizeMS   bool              `json:"normalizeMS,omitempty"`
 	Status        int               `json:"status"`
 	Stdout        string            `json:"stdout"`
 	Stderr        string            `json:"stderr"`
 	Files         map[string]string `json:"files"`
 	CheckFiles    bool              `json:"checkFiles"`
 	GitDirs       []string          `json:"gitDirs"`
+	GitCommands   []goldenCommand   `json:"gitCommands"`
+	GitEnv        map[string]string `json:"gitEnv"`
 	Mutations     goldenMutation    `json:"mutations"`
+}
+
+type goldenCommand struct {
+	Args     []string          `json:"args"`
+	CWD      string            `json:"cwd"`
+	Writes   map[string]string `json:"writes,omitempty"`
+	AfterGit bool              `json:"afterGit,omitempty"`
+}
+
+type goldenStep struct {
+	Send  any               `json:"send"`
+	Reply bool              `json:"reply"`
+	ID    int               `json:"id,omitempty"`
+	Edit  map[string]string `json:"edit,omitempty"`
+}
+
+type goldenRequest struct {
+	URL  string `json:"url"`
+	Body any    `json:"body"`
 }
 
 type goldenMutation struct {
@@ -59,20 +92,27 @@ func loadGolden(t *testing.T, name string) goldenCase {
 
 func TestDecodeGolden(t *testing.T) {
 	t.Parallel()
-	data := []byte(`{"args":["build","{{ROOT}}"],"cwd":"<REPO>/src","env":{"GRAFT_NO_REFRESH":"1"},"tracked":["src/a.ts"],"gitDirs":[".","packages/core"],"initialInputs":{"src/a.ts":"before\n"},"inputs":{"src/a.ts":"export function a() {}\n"},"mutations":{"writes":{"repo/src/a.ts":"changed\n"},"deletes":["repo/old.ts"]},"status":1,"stdout":"out","stderr":"err","files":{"graft/.graph/wiring.json":"{}\n"},"checkFiles":true}`)
+	data := []byte(`{"args":["build","{{ROOT}}"],"cwd":"<REPO>/src","env":{"GRAFT_NO_REFRESH":"1"},"tracked":["src/a.ts"],"dirs":["repo","home"],"setup":[{"args":["build"],"cwd":"<REPO>"}],"gitDirs":[".","packages/core"],"gitCommands":[{"args":["add","-A"],"writes":{"repo/src/a.ts":"changed\n"}}],"gitEnv":{"GIT_AUTHOR_DATE":"2000-01-01T00:00:00Z"},"initialInputs":{"src/a.ts":"before\n"},"inputs":{"src/a.ts":"export function a() {}\n"},"messages":[{"jsonrpc":"2.0","id":1}],"steps":[{"send":{"jsonrpc":"2.0","id":1},"reply":true,"id":1}],"requests":[{"url":"/api","body":{"ok":true}}],"mutations":{"writes":{"repo/src/a.ts":"changed\n"},"deletes":["repo/old.ts"]},"status":1,"stdout":"out","stderr":"err","files":{"graft/.graph/wiring.json":"{}\n"},"checkFiles":true}`)
 	want := goldenCase{
 		Args:          []string{"build", "{{ROOT}}"},
 		CWD:           "<REPO>/src",
 		Env:           map[string]string{"GRAFT_NO_REFRESH": "1"},
 		Tracked:       []string{"src/a.ts"},
-		GitDirs:       []string{".", "packages/core"},
+		Dirs:          []string{"repo", "home"},
+		Setup:         []goldenCommand{{Args: []string{"build"}, CWD: "<REPO>"}},
 		InitialInputs: map[string]string{"src/a.ts": "before\n"},
 		Inputs:        map[string]string{"src/a.ts": "export function a() {}\n"},
+		Messages:      []any{map[string]any{"jsonrpc": "2.0", "id": float64(1)}},
+		Steps:         []goldenStep{{Send: map[string]any{"jsonrpc": "2.0", "id": float64(1)}, Reply: true, ID: 1}},
+		Requests:      []goldenRequest{{URL: "/api", Body: map[string]any{"ok": true}}},
 		Status:        1,
 		Stdout:        "out",
 		Stderr:        "err",
 		Files:         map[string]string{"graft/.graph/wiring.json": "{}\n"},
 		CheckFiles:    true,
+		GitDirs:       []string{".", "packages/core"},
+		GitCommands:   []goldenCommand{{Args: []string{"add", "-A"}, Writes: map[string]string{"repo/src/a.ts": "changed\n"}}},
+		GitEnv:        map[string]string{"GIT_AUTHOR_DATE": "2000-01-01T00:00:00Z"},
 		Mutations: goldenMutation{
 			Writes:  map[string]string{"repo/src/a.ts": "changed\n"},
 			Deletes: []string{"repo/old.ts"},
@@ -478,6 +518,7 @@ func materializeGolden(value, base, repo, home, elsewhere string) string {
 	value = strings.ReplaceAll(value, "<ELSEWHERE>", elsewhere)
 	value = strings.ReplaceAll(value, "<REPO>", repo)
 	value = strings.ReplaceAll(value, "<HOME>", home)
+	value = strings.ReplaceAll(value, "<WORKTREE>", filepath.Join(repo, "..", "worktree"))
 	return strings.ReplaceAll(value, "<BASE>", base)
 }
 
@@ -801,5 +842,228 @@ func TestGraphQualityGoldensMatchGo(t *testing.T) {
 				t.Errorf("graph-quality %v stderr = %q, want %q", args, got, golden.Stderr)
 			}
 		})
+	}
+}
+
+func perCommandGoldenNames(t *testing.T, suite string) []string {
+	t.Helper()
+	pattern := filepath.Join("testdata", "goldens", "per-command", suite, "*.json")
+	paths, err := filepath.Glob(pattern)
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("filepath.Glob(%q) paths = %v, error = %v, want goldens", pattern, paths, err)
+	}
+	names := make([]string, len(paths))
+	for i, path := range paths {
+		rel, err := filepath.Rel(filepath.Join("testdata", "goldens"), path)
+		if err != nil {
+			t.Fatalf("filepath.Rel(%q, %q) error = %v, want nil", filepath.Join("testdata", "goldens"), path, err)
+		}
+		names[i] = strings.TrimSuffix(filepath.ToSlash(rel), ".json")
+	}
+	return names
+}
+
+func TestBlastGoldensMatchGo(t *testing.T) {
+	bundle, err := filepath.Abs(filepath.Join("testdata", "cli-go-acceptance", "blast", "fixture.bundle"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, suite := range []string{"main", "name"} {
+		t.Run(suite, func(t *testing.T) {
+			base := t.TempDir()
+			repo, home, elsewhere := filepath.Join(base, "repo"), filepath.Join(base, "home"), filepath.Join(base, "elsewhere")
+			clone := exec.Command("git", "clone", "--quiet", bundle, repo)
+			if output, err := clone.CombinedOutput(); err != nil {
+				t.Fatalf("git clone %q %q error = %v, output = %q", bundle, repo, err, output)
+			}
+			fetchBase := exec.Command("git", "fetch", "--quiet", bundle, "refs/heads/base:refs/heads/base")
+			fetchBase.Dir = repo
+			if output, err := fetchBase.CombinedOutput(); err != nil {
+				t.Fatalf("git fetch base in %q error = %v, output = %q", repo, err, output)
+			}
+			for _, args := range [][]string{{"config", "user.name", "Ann Author"}, {"config", "user.email", "ann@example.com"}} {
+				config := exec.Command("git", args...)
+				config.Dir = repo
+				if output, err := config.CombinedOutput(); err != nil {
+					t.Fatalf("git %v in %q error = %v, output = %q", args, repo, err, output)
+				}
+			}
+			storePath := filepath.Join(repo, "src", "core", "store.ts")
+			store, err := os.ReadFile(storePath)
+			if err != nil {
+				t.Fatalf("os.ReadFile(%q) error = %v, want nil", storePath, err)
+			}
+			if err := os.WriteFile(storePath, []byte(strings.Replace(string(store), "console.log(key);", "console.error(key);", 1)), 0o644); err != nil {
+				t.Fatalf("os.WriteFile(%q) error = %v, want nil", storePath, err)
+			}
+			for _, dir := range []string{home, elsewhere} {
+				if err := os.MkdirAll(dir, 0o755); err != nil {
+					t.Fatalf("os.MkdirAll(%q) error = %v, want nil", dir, err)
+				}
+			}
+			if err := os.MkdirAll(filepath.Join(home, ".graft"), 0o755); err != nil {
+				t.Fatalf("os.MkdirAll(%q) error = %v, want nil", filepath.Join(home, ".graft"), err)
+			}
+			update := fmt.Sprintf("{\n  \"latest\": \"0.0.0\",\n  \"checkedAt\": %d\n}", time.Now().UnixMilli())
+			if err := os.WriteFile(filepath.Join(home, ".graft", "update-check.json"), []byte(update), 0o644); err != nil {
+				t.Fatalf("os.WriteFile(update-check.json) error = %v, want nil", err)
+			}
+			names := perCommandGoldenNames(t, filepath.Join("blast", suite))
+			var server *httptest.Server
+			var requests atomic.Int64
+			if suite == "name" {
+				keyPattern := regexp.MustCompile(`^key: (\w+)$`)
+				server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					requests.Add(1)
+					body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 1<<20))
+					if err != nil {
+						http.Error(w, "request body too large", http.StatusBadRequest)
+						return
+					}
+					var request struct {
+						Messages []struct {
+							Content string `json:"content"`
+						} `json:"messages"`
+					}
+					if err := json.Unmarshal(body, &request); err != nil || len(request.Messages) < 2 {
+						http.Error(w, "invalid model request", http.StatusBadRequest)
+						return
+					}
+					names := make([]map[string]string, 0)
+					for line := range strings.SplitSeq(request.Messages[1].Content, "\n") {
+						match := keyPattern.FindStringSubmatch(strings.TrimSpace(line))
+						if len(match) != 2 {
+							continue
+						}
+						name := "mixed"
+						if len(names) > 0 {
+							name = fmt.Sprintf(`Area <%d> "Named"`, len(names))
+						}
+						names = append(names, map[string]string{"key": match[1], "name": name})
+					}
+					arguments, err := json.Marshal(map[string]any{"names": names})
+					if err != nil {
+						http.Error(w, "cannot encode model response", http.StatusInternalServerError)
+						return
+					}
+					response, err := json.Marshal(map[string]any{
+						"id": "x", "object": "chat.completion", "created": 0, "model": "m",
+						"choices": []any{map[string]any{
+							"index": 0, "finish_reason": "tool_calls",
+							"message": map[string]any{
+								"role": "assistant", "content": nil,
+								"tool_calls": []any{map[string]any{
+									"id": "c1", "type": "function",
+									"function": map[string]any{"name": "record_names", "arguments": string(arguments)},
+								}},
+							},
+						}},
+						"usage": map[string]any{"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+					})
+					if err != nil {
+						http.Error(w, "cannot encode model response", http.StatusInternalServerError)
+						return
+					}
+					w.Header().Set("Content-Type", "application/json")
+					if _, err := w.Write(response); err != nil {
+						return
+					}
+				}))
+				defer server.Close()
+			}
+
+			if suite == "name" {
+				setGoldenEnvironment(t, map[string]string{"DO_NOT_TRACK": "1", "GRAFT_NO_REFRESH": "1"}, base, repo, home, elsewhere)
+				if status, _, stderr := runGoldenCLI(t, []string{"build", repo}); status != 0 {
+					t.Fatalf("run(build %q) status = %d, want 0; stderr = %q", repo, status, stderr)
+				}
+			}
+			for i, name := range names {
+				if suite == "main" && i == 1 {
+					setGoldenEnvironment(t, map[string]string{"DO_NOT_TRACK": "1", "GRAFT_NO_REFRESH": "1"}, base, repo, home, elsewhere)
+					if status, _, stderr := runGoldenCLI(t, []string{"build", repo}); status != 0 {
+						t.Fatalf("run(build %q) status = %d, want 0; stderr = %q", repo, status, stderr)
+					}
+				}
+				golden := loadGolden(t, name)
+				if suite == "name" && i == 3 {
+					if err := os.Remove(filepath.Join(repo, "graft", ".cache", "areas.json")); err != nil {
+						t.Fatalf("os.Remove(areas.json) error = %v, want nil", err)
+					}
+				}
+				t.Run(filepath.Base(name), func(t *testing.T) {
+					env := make(map[string]string, len(golden.Env))
+					for key, value := range golden.Env {
+						switch value {
+						case "<TEST_KEY>":
+							env[key] = "sk-test"
+						case "<API_URL>":
+							if golden.Env["GRAFT_LLM_RETRIES"] == "0" {
+								env[key] = "http://127.0.0.1:1/v1"
+							} else {
+								env[key] = server.URL + "/v1"
+							}
+						default:
+							env[key] = value
+						}
+					}
+					setGoldenEnvironment(t, env, base, repo, home, elsewhere)
+					args := make([]string, len(golden.Args))
+					for i, arg := range golden.Args {
+						args[i] = materializeGolden(arg, base, repo, home, elsewhere)
+					}
+					status, stdout, stderr := runGoldenCLI(t, args)
+					if status != golden.Status {
+						t.Errorf("run(%v) status = %d, want %d; stderr = %q", args, status, golden.Status, stderr)
+					}
+					if got := normalizeGoldenText(stdout, base, repo, home, elsewhere); got != golden.Stdout {
+						t.Errorf("run(%v) stdout = %q, want %q", args, got, golden.Stdout)
+					}
+					if got := normalizeGoldenText(stderr, base, repo, home, elsewhere); got != golden.Stderr {
+						t.Errorf("run(%v) stderr = %q, want %q", args, got, golden.Stderr)
+					}
+					areaPath := filepath.Join(repo, "graft", ".cache", "areas.json")
+					wantAreas, wantAreaFile := golden.Files["graft/.cache/areas.json"]
+					gotAreas, err := os.ReadFile(areaPath)
+					if wantAreaFile && (err != nil || string(gotAreas) != wantAreas) {
+						t.Errorf("run(%v) areas.json = %q, error = %v, want %q", args, gotAreas, err, wantAreas)
+					} else if !wantAreaFile && !os.IsNotExist(err) {
+						t.Errorf("run(%v) areas.json read error = %v, want absent", args, err)
+					}
+				})
+			}
+			if suite == "name" && requests.Load() != 2 {
+				t.Errorf("--name requests = %d, want one call for the named and cached mixed areas", requests.Load())
+			}
+		})
+	}
+}
+
+func TestBlastNoGitGoldenMatchGo(t *testing.T) {
+	golden := loadGolden(t, "per-command/blast/no-git/001")
+	base := t.TempDir()
+	repo, home, elsewhere := filepath.Join(base, "repo"), filepath.Join(base, "home"), filepath.Join(base, "elsewhere")
+	for _, dir := range []string{repo, home, elsewhere} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("os.MkdirAll(%q) error = %v, want nil", dir, err)
+		}
+	}
+	for rel, content := range golden.Inputs {
+		writeCheckSource(t, repo, filepath.FromSlash(rel), materializeGolden(content, base, repo, home, elsewhere))
+	}
+	setGoldenEnvironment(t, golden.Env, base, repo, home, elsewhere)
+	args := make([]string, len(golden.Args))
+	for i, arg := range golden.Args {
+		args[i] = materializeGolden(arg, base, repo, home, elsewhere)
+	}
+	status, stdout, stderr := runGoldenCLI(t, args)
+	if status != golden.Status {
+		t.Errorf("run(%v) status = %d, want %d; stderr = %q", args, status, golden.Status, stderr)
+	}
+	if got := normalizeGoldenText(stdout, base, repo, home, elsewhere); got != golden.Stdout {
+		t.Errorf("run(%v) stdout = %q, want %q", args, got, golden.Stdout)
+	}
+	if got := normalizeGoldenText(stderr, base, repo, home, elsewhere); got != golden.Stderr {
+		t.Errorf("run(%v) stderr = %q, want %q", args, got, golden.Stderr)
 	}
 }

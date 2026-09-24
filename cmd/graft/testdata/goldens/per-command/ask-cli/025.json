@@ -25,7 +25,7 @@
     "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.0\",\n  \"checkedAt\": 9999999999999\n}"
   },
   "status": 0,
-  "stdout": "{\n  \"query\": \"amber cobalt\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"amberCobalt · function\",\n      \"pointer\": \"b.ts:L1-L1\",\n      \"snippet\": \"function amberCobalt()\",\n      \"score\": 1\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"amberShard · function\",\n      \"pointer\": \"a.ts:L1-L1\",\n      \"snippet\": \"function amberShard()\",\n      \"score\": 0.629400156450007\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"cobaltShard · function\",\n      \"pointer\": \"a.ts:L2-L2\",\n      \"snippet\": \"function cobaltShard()\",\n      \"score\": 0.5058668752666761\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
+  "stdout": "{\n  \"query\": \"amber cobalt\",\n  \"mode\": \"lexical\",\n  \"hits\": [\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"amberCobalt · function\",\n      \"pointer\": \"b.ts:L1-L1\",\n      \"snippet\": \"function amberCobalt()\",\n      \"score\": 1\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"amberShard · function\",\n      \"pointer\": \"a.ts:L1-L1\",\n      \"snippet\": \"function amberShard()\",\n      \"score\": 0.6294001564500071\n    },\n    {\n      \"kind\": \"symbol\",\n      \"title\": \"cobaltShard · function\",\n      \"pointer\": \"a.ts:L2-L2\",\n      \"snippet\": \"function cobaltShard()\",\n      \"score\": 0.5058668752666762\n    }\n  ],\n  \"coverage\": 1,\n  \"coverageStrong\": 1\n}\n",
   "stderr": "",
   "files": {}
 }

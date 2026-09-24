@@ -1,0 +1,50 @@
+{
+  "args": [
+    "uninstall",
+    "<REPO>",
+    "-y",
+    "--keep-cache"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1",
+    "GRAFT_MCP_NPX": "1",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "gitDirs": [
+    "repo"
+  ],
+  "dirs": [
+    "home",
+    "home/.adal",
+    "home/.codeium/windsurf",
+    "home/.codex",
+    "home/.config/opencode",
+    "home/.cursor",
+    "home/.gemini/config",
+    "home/.grok",
+    "home/.hermes",
+    "home/.kiro",
+    "repo"
+  ],
+  "inputs": {},
+  "status": 0,
+  "stdout": "",
+  "stderr": "kiro:\n  - removed: <REPO>/.kiro/steering/graft.md (graft-owned instruction file — deleted)\n  ⚠ removed: <REPO>/.kiro/settings/mcp.json — not valid JSON, left untouched (remove the graft entry by hand)\n\n⚠ 1 file(s) could not be parsed and were left as-is — see above.\n",
+  "files": {
+    "home/.claude.json [644]": "{\n  \"numStartups\": 3,\n  \"mcpServers\": {\n    \"mine\": {\n      \"command\": \"mine\"\n    }\n  }\n}\n",
+    "home/.codex/config.toml [644]": "[mcp_servers.other]\ncommand = \"other\"\n",
+    "home/.codex/hooks.json [644]": "{\n  \"hooks\": {\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"echo mine\"\n          }\n        ]\n      }\n    ]\n  },\n  \"custom\": 1\n}\n",
+    "home/.graft/update-check.json [644]": "{\n  \"latest\": \"0.0.1\",\n  \"checkedAt\": 4102444800000\n}",
+    "repo/.claude/settings.json [644]": "{\n  \"2\": \"numeric key\",\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(npm test:*)\"\n    ],\n    \"deny\": [\n      \"Bash(rm:*)\"\n    ]\n  },\n  \"hooks\": {\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"echo done\"\n          }\n        ]\n      }\n    ]\n  },\n  \"statusLine\": {\n    \"type\": \"command\",\n    \"command\": \"my-statusline\"\n  }\n}\n",
+    "repo/.cursor/hooks.json [644]": "{\n  \"version\": 1,\n  \"hooks\": {\n    \"postToolUse\": [\n      {\n        \"matcher\": \"Read|Grep|Glob|Search|Shell\",\n        \"command\": \"node \\\"<REPO>/.cursor/hooks/graft-hooks.cjs\\\" cursor-post-tool\"\n      }\n    ],\n    \"afterMCPExecution\": [\n      {\n        \"command\": \"node \\\"<REPO>/.cursor/hooks/graft-hooks.cjs\\\" cursor-mcp\"\n      }\n    ],\n    \"sessionEnd\": [\n      {\n        \"command\": \"node \\\"<REPO>/.cursor/hooks/graft-hooks.cjs\\\" cursor-session-end\"\n      }\n    ]\n  }\n}\n",
+    "repo/.cursor/hooks/graft-hooks.cjs [755]": "#!/usr/bin/env node\nconst path = require('path');\nconst fs = require('fs');\nconst { spawnSync } = require('child_process');\nconst dir = process.env.CLAUDE_PROJECT_DIR || process.cwd();\nconst BAKED = \"<BAKED>\";\n\nfunction fromPkg(base) {\n  try {\n    const pkg = require.resolve('@nanonets/graft/package.json', { paths: [base] });\n    return path.dirname(pkg);\n  } catch { return null; }\n}\n\nfunction globalRoot() {\n  try {\n    const root = require('child_process').execFileSync('npm', ['root', '-g'], {\n      encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'], shell: process.platform === 'win32',\n    }).trim();\n    return root || null;\n  } catch { return null; }\n}\n\nfunction versionOf(pkg) {\n  try { return JSON.parse(fs.readFileSync(path.join(pkg, 'package.json'), 'utf8')).version || null; }\n  catch { return null; }\n}\n\nfunction newer(a, b) {\n  if (!a) return false;\n  if (!b) return true;\n  const parts = (v) => String(v).split('-')[0].split('.').map((n) => Number(n) || 0);\n  const left = parts(a), right = parts(b);\n  for (let i = 0; i < Math.max(left.length, right.length); i++) {\n    const delta = (left[i] || 0) - (right[i] || 0);\n    if (delta !== 0) return delta > 0;\n  }\n  return false;\n}\n\nfunction binaryName() {\n  return `graft-${process.platform}-${process.arch}${process.platform === 'win32' ? '.exe' : ''}`;\n}\n\nfunction best(pkgs) {\n  const name = binaryName();\n  let selected = null, selectedVersion = null;\n  for (const pkg of pkgs) {\n    if (!pkg || !fs.existsSync(path.join(pkg, 'bin', name))) continue;\n    const version = versionOf(pkg);\n    if (selected === null || newer(version, selectedVersion)) {\n      selected = pkg;\n      selectedVersion = version;\n    }\n  }\n  return selected && path.join(selected, 'bin', name);\n}\n\nfunction entry() {\n  const cheap = [BAKED, fromPkg(dir), fromPkg(path.join(path.dirname(process.execPath), '..', 'lib'))];\n  const hit = best(cheap);\n  if (hit) return hit;\n  const root = globalRoot();\n  const global = root && path.join(root, '@nanonets', 'graft');\n  return global && fs.existsSync(path.join(global, 'bin', binaryName()))\n    ? path.join(global, 'bin', binaryName())\n    : null;\n}\n\nconst binary = entry();\nif (binary) {\n  const result = spawnSync(binary, ['_hook', process.argv[2]], { stdio: 'inherit' });\n  if (result.error) process.exit(0);\n  process.exit(result.status ?? 1);\n}\n",
+    "repo/.cursor/mcp.json [644]": "{\n  \"mcpServers\": {\n    \"other\": {\n      \"command\": \"x\",\n      \"args\": [\n        \"1e3\",\n        1000,\n        0.1\n      ]\n    }\n  }\n}\n",
+    "repo/.github/workflows/ci.yml [644]": "on: push\n",
+    "repo/.kiro/settings/mcp.json [644]": "{ not json",
+    "repo/AGENTS.md [644]": "# Team notes\n\nKeep PRs small.\n",
+    "repo/graft/.cache/wiring-stamp.json [644]": "{\n  \"version\": \"0.19.0\",\n  \"hosts\": [\n    \"kiro\"\n  ],\n  \"opts\": {\n    \"global\": true,\n    \"mcp\": true,\n    \"hooks\": true,\n    \"statusline\": true\n  },\n  \"at\": \"<AT>\"\n}",
+    "repo/src/main.ts [644]": "export function main() { return 1; }\n"
+  },
+  "checkFiles": true
+}

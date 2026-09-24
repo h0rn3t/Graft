@@ -154,3 +154,14 @@ func TestRunFlushWithAnEmptyQueueSendsNothing(t *testing.T) {
 		t.Errorf("FormatDebug() = %q, want the empty-queue message", got)
 	}
 }
+
+func TestIsTrackedCommandExcludesViz(t *testing.T) {
+	if IsTrackedCommand("viz") {
+		t.Error("IsTrackedCommand(viz) = true, want false")
+	}
+	for _, command := range []string{"ask", "grep", "callers", "skeleton", "map", "check", "blast"} {
+		if !IsTrackedCommand(command) {
+			t.Errorf("IsTrackedCommand(%q) = false, want true", command)
+		}
+	}
+}

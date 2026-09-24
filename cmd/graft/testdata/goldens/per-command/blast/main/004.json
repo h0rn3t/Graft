@@ -1,0 +1,18 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh",
+    "--format",
+    "mermaid"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "%% no dependents to draw\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": true
+}

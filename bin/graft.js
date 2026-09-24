@@ -3,35 +3,13 @@
  * The published `graft` entrypoint.
  *
  * Every command runs on the native Go binary shipped next to this file
- * (`bin/graft-<platform>-<arch>`), except the three invocations that stay on
- * the TypeScript CLI: `graft build --deep`, `graft viz`, and
- * `graft blast --export-viz`. A platform without a packaged binary falls back
- * to the TypeScript CLI, which is the behavioral oracle for the Go one.
+ * (`bin/graft-<platform>-<arch>`). A platform without a packaged binary is
+ * unsupported and exits with one clear error.
  */
 import { spawn } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-
-/** Program options that consume the next argument, as declared in src/cli.ts. */
-const VALUE_OPTIONS = new Set(["--dir", "--provider", "--model", "--api-key", "--base-url"]);
-
-/** Whether args (argv without node and script) must run on the TypeScript CLI. */
-export function routesToTypeScript(args) {
-  const end = args.indexOf("--");
-  const words = end === -1 ? args : args.slice(0, end);
-  let at = 0;
-  while (at < words.length && words[at].startsWith("-")) {
-    at += VALUE_OPTIONS.has(words[at]) ? 2 : 1;
-  }
-  const command = words[at];
-  const rest = words.slice(at + 1);
-  const has = (flag) => rest.some((word) => word === flag || word.startsWith(`${flag}=`));
-  if (command === "viz") return true;
-  if (command === "build") return has("--deep");
-  if (command === "blast") return has("--export-viz");
-  return false;
-}
+import { fileURLToPath } from "node:url";
 
 /** File name of the Go binary built for this platform by scripts/build-go.mjs. */
 export function nativeBinaryName(platform = process.platform, arch = process.arch) {
@@ -59,13 +37,12 @@ function runNative(binary, args) {
 
 function main() {
   const here = dirname(fileURLToPath(import.meta.url));
-  const args = process.argv.slice(2);
   const binary = join(here, nativeBinaryName());
-  if (!routesToTypeScript(args) && existsSync(binary)) {
-    runNative(binary, args);
-    return;
+  if (!existsSync(binary)) {
+    console.error(`✗ graft has no native binary for ${process.platform}-${process.arch}`);
+    process.exit(1);
   }
-  import(pathToFileURL(join(here, "..", "dist", "cli.js")).href);
+  runNative(binary, process.argv.slice(2));
 }
 
 // npm links this file into PATH, so compare real paths; importing it (tests)

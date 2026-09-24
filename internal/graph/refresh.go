@@ -1,6 +1,7 @@
 package graph
 
 import (
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -255,7 +256,7 @@ func waitForGraphLock(cache string) (bool, error) {
 	)
 	deadline := time.Now().Add(wait)
 	for {
-		acquired, err := acquireGraphLock(cache)
+		acquired, err := AcquireLock(cache)
 		if err != nil || acquired {
 			return acquired, err
 		}
@@ -266,18 +267,30 @@ func waitForGraphLock(cache string) (bool, error) {
 	}
 }
 
-// acquireGraphLock creates the shared lock or reclaims it when it is five minutes old.
-func acquireGraphLock(cache string) (bool, error) {
+// AcquireLock creates the shared graph/hook lock or reclaims it after five minutes.
+func AcquireLock(cache string) (bool, error) {
 	const staleAfter = 5 * time.Minute
 	if err := os.MkdirAll(cache, 0o755); err != nil {
 		return false, fmt.Errorf("create graph lock directory: %w", err)
+	}
+	payload, err := jsonv2.Marshal(struct {
+		PID int    `json:"pid"`
+		At  string `json:"at"`
+	}{PID: os.Getpid(), At: time.Now().UTC().Format("2006-01-02T15:04:05.000Z")})
+	if err != nil {
+		return false, fmt.Errorf("encode graph sync lock: %w", err)
 	}
 	lockPath := filepath.Join(cache, ".sync.lock")
 	for attempt := range 2 {
 		lock, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
 		if err == nil {
+			if _, err := lock.Write(payload); err != nil {
+				_ = lock.Close()
+				_ = os.Remove(lockPath)
+				return false, fmt.Errorf("write graph sync lock: %w", err)
+			}
 			if err := lock.Close(); err != nil {
-				_ = os.Remove(lockPath) // Do not leave a lock after failing to close it.
+				_ = os.Remove(lockPath)
 				return false, fmt.Errorf("close graph sync lock: %w", err)
 			}
 			return true, nil
@@ -292,9 +305,14 @@ func acquireGraphLock(cache string) (bool, error) {
 		if err == nil && time.Since(info.ModTime()) < staleAfter {
 			return false, nil
 		}
-		_ = os.Remove(lockPath) // Reclaim a stale lock before retrying exclusive creation.
+		_ = os.Remove(lockPath)
 	}
 	return false, nil
+}
+
+// ReleaseLock releases the shared graph/hook lock.
+func ReleaseLock(cache string) {
+	_ = os.Remove(filepath.Join(cache, ".sync.lock"))
 }
 
 func unsupportedFingerprintFiles(fingerprint *Fingerprint, drift *Drift) []string {

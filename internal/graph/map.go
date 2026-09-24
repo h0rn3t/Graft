@@ -323,11 +323,6 @@ func mapLanguageLabel(path string) string {
 		{".py", "python"},
 		{".go", "go"},
 		{".java", "java"},
-		{".kt", "kotlin"},
-		{".kts", "kotlin"},
-		{".swift", "swift"},
-		{".php", "php"},
-		{".r", "r"},
 	}
 	for _, entry := range labels {
 		if strings.HasSuffix(path, entry.ext) {

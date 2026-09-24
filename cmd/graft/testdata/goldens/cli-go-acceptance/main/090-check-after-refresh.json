@@ -6,7 +6,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "deep layer: not built (run `graft build --deep` for concept nodes) — wiring graph is the source of truth\n\ngraph check: OK — the wiring graph is in sync with the code. (meaning tier 0% complete — 211 of 211 node(s) pending: cmd/server/main.go, cmd/server/main.go#main, java/Worker.java, java/Worker.java#Worker, java/Worker.java#Worker.compute, java/Worker.java#Worker.run, native/codec.c, native/codec.c#encode, … +203 more. Run `graft build --deep` to summarize them; if a deep build already left these pending, that meaning pass failed — see that build's errors (re-running alone will not clear them))\n",
+  "stdout": "graph check: OK — the wiring graph is in sync with the code.\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

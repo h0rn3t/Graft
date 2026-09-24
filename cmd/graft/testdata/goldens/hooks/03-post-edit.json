@@ -1,0 +1,36 @@
+{
+  "args": [
+    "_hook",
+    "post-edit"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "CLAUDE_CONFIG_DIR": "<HOME>/.claude",
+    "CLAUDE_PROJECT_DIR": "<REPO>",
+    "GRAFT_TEST_CLI": "<REPO>/check-stub.cjs",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "inputs": {
+    "repo/check-stub.cjs": "process.stdout.write(\"{\\\"graph\\\":{\\\"changed\\\":[\\\"src/auth.ts\\\"],\\\"added\\\":[],\\\"removed\\\":[]}}\");\n",
+    "repo/graft/.graph/wiring.json": "{\"meta\":{\"nodeCount\":2,\"edgeCount\":1,\"languages\":[\"typescript\"]},\"nodes\":[{\"id\":\"src/auth.ts\",\"name\":\"auth.ts\",\"kind\":\"file\",\"path\":\"src/auth.ts\",\"span\":\"L1-L4\"},{\"id\":\"src/client.ts#call\",\"name\":\"call\",\"kind\":\"function\",\"path\":\"src/client.ts\",\"span\":\"L1-L1\"}],\"edges\":[{\"source\":\"src/client.ts#call\",\"target\":\"src/auth.ts\",\"relation\":\"calls\",\"confidence\":\"extracted\"}]}"
+  },
+  "stdin": {
+    "tool_input": {
+      "file_path": "<REPO>/src/auth.ts"
+    }
+  },
+  "status": 0,
+  "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"[graft] blast radius for auth.ts, who depends on it:\\n • calls ← call (client.ts)\"}}",
+  "stderr": "",
+  "files": {
+    "repo/check-stub.cjs": "process.stdout.write(\"{\\\"graph\\\":{\\\"changed\\\":[\\\"src/auth.ts\\\"],\\\"added\\\":[],\\\"removed\\\":[]}}\");\n",
+    "repo/graft/.cache/stats.json": "{\n  \"nodeCount\": 0,\n  \"edgeCount\": 0,\n  \"languages\": [],\n  \"totalCount\": 0,\n  \"readyCount\": 0,\n  \"staleCount\": 1,\n  \"dirty\": true,\n  \"syncing\": false,\n  \"syncedAt\": null,\n  \"lastFile\": \"auth.ts\"\n}",
+    "repo/graft/.graph/wiring.json": "{\"meta\":{\"nodeCount\":2,\"edgeCount\":1,\"languages\":[\"typescript\"]},\"nodes\":[{\"id\":\"src/auth.ts\",\"name\":\"auth.ts\",\"kind\":\"file\",\"path\":\"src/auth.ts\",\"span\":\"L1-L4\"},{\"id\":\"src/client.ts#call\",\"name\":\"call\",\"kind\":\"function\",\"path\":\"src/client.ts\",\"span\":\"L1-L1\"}],\"edges\":[{\"source\":\"src/client.ts#call\",\"target\":\"src/auth.ts\",\"relation\":\"calls\",\"confidence\":\"extracted\"}]}"
+  },
+  "checkFiles": true
+}

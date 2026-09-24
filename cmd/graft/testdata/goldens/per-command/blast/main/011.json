@@ -1,0 +1,20 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh",
+    "--base",
+    "HEAD",
+    "--format",
+    "markdown"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "### 🌱 graft blast radius\n\n**Nothing outside this diff depends on it.** 0 areas changed; no indexed dependents at depth 2.\n\n\n<sub>`graft blast` · HEAD...HEAD · depth 2 · 0 changed files</sub>\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": true
+}

@@ -34,28 +34,29 @@ jobs:
           fetch-depth: 60
           persist-credentials: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
         with:
-          node-version: "20"
+          go-version-file: go.mod
+          cache: true
 
       - name: Build the CLI from this commit
-        run: npm ci && npm run build
+        run: go build -o graft-ci ./cmd/graft
 
-      - name: Build the graph, the concept layer, and name every area
+      - name: Build the graph and name every area
         env:
           GRAFT_API_KEY: ${{ secrets.GRAFT_API_KEY }}
           GRAFT_BASE_URL: ${{ secrets.GRAFT_BASE_URL }}
           GRAFT_MODEL: ${{ secrets.GRAFT_MODEL }}
         run: |
           set -euo pipefail
-          node dist/cli.js build .
+          ./graft-ci build .
           # A wide window on purpose: the blast radius of the last fifty commits
           # covers most of what any PR will reach, and naming batches them. Falls
           # back to the root commit when the history is shorter than the window.
           base=$(git rev-parse HEAD~50 2>/dev/null || git rev-list --max-parents=0 HEAD | head -1)
           # `|| true`: this job's product is the cache, and a naming hiccup on a
           # single batch must not turn main red.
-          node dist/cli.js blast . --base "$base" --depth 2 --name --format text > /dev/null || true
+          ./graft-ci blast . --base "$base" --depth 2 --name --format text > /dev/null || true
 
       - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

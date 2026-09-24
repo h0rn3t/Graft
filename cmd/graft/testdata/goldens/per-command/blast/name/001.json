@@ -1,0 +1,21 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh",
+    "--name",
+    "--base",
+    "base",
+    "--format",
+    "markdown"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "### 🌱 graft blast radius\n\n**5 areas changed → 2 areas can be affected.** 2 dependent symbols, depth 2.\nTests: **no test reaches render, get, e, f, g**.\nTag: **Ann Author** — 7 of 7 areas · @bobby — render\n\n```mermaid\nflowchart TB\n  A0((\"d<br/>1 symbol\"))\n  A1((\"view<br/>1 symbol\"))\n  classDef reached fill:#D9EDF3,stroke:#3AA7C9,stroke-width:1.5px,color:#0E313C;\n  class A0,A1 reached;\n```\n\n| Can be affected | Symbols | Nearest hop | Reached from |\n| --- | --: | --- | --- |\n| d | 1 | `src/other/d.ts:L2-L2` d — calls, depth 2 | render |\n| view | 1 | `src/ui/view.ts:L2-L2` view — calls, depth 1 | get, render |\n\n<details>\n<summary><strong>Who knows this code</strong> — 2 people across 7 areas</summary>\n\n| Area | Who knows it |\n| --- | --- |\n| **render** · changed | Ann Author — 1 commit, last 9mo ago · @bobby — 1 commit, last 9mo ago |\n| **get** · changed | Ann Author — 1 commit, last 9mo ago |\n| **e** · changed | Ann Author — 1 commit, last 9mo ago |\n| **f** · changed | Ann Author — 1 commit, last 9mo ago |\n| **g** · changed | Ann Author — 1 commit, last 9mo ago |\n| **d** · affected | Ann Author — 1 commit, last 9mo ago |\n| **view** · affected | Ann Author — 1 commit, last 9mo ago |\n\n_Ownership is git history over each area's own files, weighted towards recent work (120-day half-life). Merge commits and bots are dropped, and you are dropped from your own PR. A name with no `@` has no GitHub handle in its commit email — tag them by hand, or add a `.mailmap` entry. A suggestion from history, not a CODEOWNERS rule._\n\n</details>\n\n<details>\n<summary><strong>All 2 dependent symbols</strong>, grouped by area</summary>\n\n**d** — 1 symbol in 1 file\n\n- `src/other/d.ts:L2-L2` — d (calls, depth 2)\n\n**view** — 1 symbol in 1 file\n\n- `src/ui/view.ts:L2-L2` — view (calls, depth 1)\n  ```2: export function view() { return render() + \"<b>&</b>\"; }```\n\n</details>\n<details>\n<summary><strong>Test signal</strong> per changed area — 5 ✗</summary>\n\n_Reached = a node under a test path has a resolved edge into the changed symbol. It undercounts anything called indirectly — through a CLI, a spawned process or a dynamic import — so read a low ratio as “look here”, never as a coverage gate._\n\n- ✗ **render** — 0 of 2 reached · no test file reaches it\n  - not reached: `render`, `c`\n- ✗ **get** — 0 of 1 reached · no test file reaches it\n  - not reached: `get`\n- ✗ **e** — 0 of 1 reached · no test file reaches it\n  - not reached: `e`\n- ✗ **f** — 0 of 1 reached · no test file reaches it\n  - not reached: `f`\n- ✗ **g** — 0 of 1 reached · no test file reaches it\n  - not reached: `g`\n\n</details>\n\n⚠️ 1 deleted file (src/core/old.ts) — their dependents cannot be computed from a graph built at this commit, since the files are gone from it.\n⚠️ 1 changed file not in the graph (README.md) — no parser claims the extension, or the index predates the file.\n\n<sub>`graft blast` · base...HEAD · depth 2 · 10 changed files</sub>\n",
+  "stderr": "• --name: no API key (GRAFT_API_KEY), so areas keep their symbol names\n",
+  "files": {},
+  "checkFiles": true
+}

@@ -1,0 +1,18 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh",
+    "--format",
+    "yaml"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ --format must be text, markdown, mermaid or json, got \"yaml\"\n",
+  "files": {},
+  "checkFiles": true
+}

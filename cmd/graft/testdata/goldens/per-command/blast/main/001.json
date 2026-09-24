@@ -1,0 +1,16 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ no graph found at <REPO>/graft — run `graft build` first\n",
+  "files": {},
+  "checkFiles": true
+}

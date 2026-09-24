@@ -61,7 +61,7 @@ var events = map[string][]string{
 	"session_summary":      {"graft_reads_bucket", "source_reads_bucket", "saved_tokens_bucket", "graft_turns_bucket", "reported_turns_bucket"},
 }
 
-var trackedCommands = []string{"ask", "grep", "callers", "skeleton", "map", "check", "blast", "viz"}
+var trackedCommands = []string{"ask", "grep", "callers", "skeleton", "map", "check", "blast"}
 
 // IsTrackedCommand reports whether a command's queries are counted.
 func IsTrackedCommand(name string) bool {
@@ -344,6 +344,7 @@ func Track(event string, properties []Property, ctx Context) {
 	props.Set("app_version", ctx.Version)
 	props.Set("os", platformName())
 	props.Set("arch", archName())
+	props.Set("node_major", strings.TrimPrefix(strings.Split(runtime.Version(), ".")[0], "go"))
 	props.Set("ci", "false")
 	props.Set("agent_host", detectHost(ctx.Host))
 	if ctx.Repo != "" {
@@ -376,6 +377,20 @@ func TrackFirstRunIfNew(ctx Context) {
 	PatchState(ctx.Home, Field{"firstRunAt", nowISO()})
 }
 
+// TrackInstallIfNew records install once per machine and package version.
+func TrackInstallIfNew(ctx Context, global bool) bool {
+	if !On(ctx.Home) || ctx.Version == "" {
+		return false
+	}
+	if state, ok := readState(ctx.Home); ok {
+		if version, present := state.Get("installedVersion"); present && jsonjs.String(version) == ctx.Version {
+			return false
+		}
+	}
+	Track("install", []Property{{Key: "global", Value: strconv.FormatBool(global)}}, ctx)
+	PatchState(ctx.Home, Field{"installedVersion", ctx.Version})
+	return true
+}
 func nowISO() string {
 	return time.Now().UTC().Truncate(time.Millisecond).Format("2006-01-02T15:04:05.000Z")
 }
@@ -590,6 +605,17 @@ func MaybeFlushInBackground(home string, now time.Time) bool {
 		}
 	}
 	PatchState(home, Field{"flushedAt", float64(now.UnixMilli())})
+	return FlushInBackground(home)
+}
+
+// FlushInBackground starts an immediate detached flush when the queue is non-empty.
+func FlushInBackground(home string) bool {
+	if !On(home) {
+		return false
+	}
+	if info, err := os.Stat(queuePath(home)); err != nil || info.Size() == 0 {
+		return false
+	}
 	executable, err := os.Executable()
 	if err != nil || strings.HasSuffix(strings.TrimSuffix(filepath.Base(executable), ".exe"), ".test") {
 		return false
@@ -704,6 +730,42 @@ func FilesBucket(files int) string {
 		return "1000-4999"
 	default:
 		return "5000+"
+	}
+}
+
+// CountBucket labels a small session counter.
+func CountBucket(count int) string {
+	switch {
+	case count <= 0:
+		return "0"
+	case count < 5:
+		return "1-4"
+	case count < 20:
+		return "5-19"
+	case count < 50:
+		return "20-49"
+	case count < 200:
+		return "50-199"
+	default:
+		return "200+"
+	}
+}
+
+// SavedTokensBucket labels estimated tokens saved in one session.
+func SavedTokensBucket(tokens int) string {
+	switch {
+	case tokens <= 0:
+		return "0"
+	case tokens < 1000:
+		return "<1k"
+	case tokens < 5000:
+		return "1-5k"
+	case tokens < 20000:
+		return "5-20k"
+	case tokens < 100000:
+		return "20-100k"
+	default:
+		return "100k+"
 	}
 }
 

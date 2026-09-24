@@ -3,10 +3,10 @@
  * `bin/graft-<platform>-<arch>`, the file `bin/graft.js` launches.
  *
  * The tree-sitter grammars are cgo, so each binary is built on its own
- * platform; a platform without one falls back to the TypeScript CLI.
+ * platform; a platform without one is unsupported.
  *
- * Like `stamp-telemetry-key.mjs`, the PostHog key is baked in only when
- * GRAFT_POSTHOG_KEY is set, so source builds never send telemetry.
+ * The PostHog key is baked in only when GRAFT_POSTHOG_KEY is set, so source
+ * builds never send telemetry.
  */
 import { spawnSync } from "node:child_process";
 import { dirname, join, resolve } from "node:path";

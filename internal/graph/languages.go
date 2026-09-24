@@ -2,27 +2,15 @@ package graph
 
 import "strings"
 
-// genericLanguages mirrors src/graph/generic.ts GENERIC_LANGS: the breadth tier
-// that indexes a language through its tags query rather than a hand-written walk.
+// genericLanguages indexes languages through their tags queries rather than a
+// hand-written extraction walk.
 var genericLanguages = []struct {
 	name       string
 	extensions []string
 }{
 	{"rust", []string{".rs"}},
-	{"java", []string{".java"}},
 	{"c", []string{".c", ".h"}},
 	{"cpp", []string{".cpp", ".cc", ".cxx", ".hpp", ".hh"}},
-	{"ruby", []string{".rb"}},
-	{"c_sharp", []string{".cs"}},
-	{"scala", []string{".scala", ".sc"}},
-	{"elixir", []string{".ex", ".exs"}},
-	{"solidity", []string{".sol"}},
-	{"ocaml", []string{".ml", ".mli"}},
-	{"zig", []string{".zig"}},
-	{"dart", []string{".dart"}},
-	{"clojure", []string{".clj", ".cljs", ".cljc", ".bb"}},
-	{"nix", []string{".nix"}},
-	{"lua", []string{".lua"}},
 }
 
 func genericLanguageOf(file string) (string, bool) {

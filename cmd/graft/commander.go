@@ -83,9 +83,6 @@ type commandSpec struct {
 	hidden   bool
 	// group commands have subcommands and no action of their own.
 	group bool
-	// suggestOnly are flags and commands the TypeScript CLI still owns: never
-	// accepted here, but offered as suggestions exactly as the TypeScript CLI does.
-	suggestOnly []string
 }
 
 func newCommand(usage string, options []string) *commandSpec {
@@ -129,15 +126,16 @@ func programSpec() *commandSpec {
 	add(program, "graft _brain-refresh [options] [dir]").hidden = true
 	add(program, "graft _update-check [options]").hidden = true
 	add(program, "graft _telemetry-flush [options]").hidden = true
+	add(program, "graft _hook [options] <sub>").hidden = true
+	add(program, "graft _statusline [options]").hidden = true
+	add(program, "graft _sync-run [options] <dir>").hidden = true
+	add(program, "graft _install [options]").hidden = true
 	add(program, "graft telemetry [options] [action]")
 	add(program, "graft version [options]")
 	add(program, "graft upgrade [options]")
-	// build --deep, viz, and blast --export-viz stay on the TypeScript CLI, so the
-	// Go grammar does not claim them.
-	program.suggestOnly = []string{"viz"}
-	add(program, "graft build [options] [dir]", "-e, --extensions <exts...>", "-j, --concurrency <n>", "--no-reuse", "--lsp",
-		"--allow-partial", "--follow-submodules", "--no-follow-submodules", "--follow-nested-repos", "--no-follow-nested-repos",
-		"--include-dir <name>", "--only-dir <path>", "--no-gitignore", "--no-ignore").suggestOnly = []string{"--deep"}
+	add(program, "graft build [options] [dir]", "-e, --extensions <exts...>", "--no-reuse", "--lsp",
+		"--follow-submodules", "--no-follow-submodules", "--follow-nested-repos", "--no-follow-nested-repos",
+		"--include-dir <name>", "--only-dir <path>", "--no-gitignore", "--no-ignore")
 	add(program, "graft ask [options] <query> [dir]", "-n, --limit <n>", "--source", "--full", "--in <path>", "--json", "--no-graph-rank", "--no-refresh")
 	add(program, "graft skeleton [options] <file> [dir]", "--json", "--no-refresh")
 	add(program, "graft check [options] [dir]", "-e, --extensions <exts...>", "--json")
@@ -145,7 +143,7 @@ func programSpec() *commandSpec {
 	add(program, "graft mcp [options] [dir]")
 	add(program, "graft callers [options] <symbol> [dir]", "--direction <in|out>", "-d, --depth <n>", "--in <path>", "--json", "--no-refresh")
 	add(program, "graft blast [options] [dir]", "--base <ref>", "-d, --depth <n>", "--format <fmt>", "--name",
-		"--title <text>", "--no-owners", "--pr-author <who...>", "--no-refresh").suggestOnly = []string{"--export-viz"}
+		"--no-owners", "--pr-author <who...>", "--no-refresh")
 	add(program, "graft grep [options] <pattern> [dir]", "-i, --ignore-case", "--fixed", "--in <path>", "--json", "--no-refresh")
 	add(program, "graft map [options] [dir]", "--max-dirs <n>", "--json", "--no-refresh")
 	add(program, "graft init [options] [dir]", "--no-build", "--agents <ids...>", "--all-agents", "--no-agents", "--list-agents", "--no-mcp",
@@ -457,7 +455,6 @@ func (command *commandSpec) unknownOption(flag string) error {
 					candidates = append(candidates, option.long)
 				}
 			}
-			candidates = append(candidates, current.suggestOnly...)
 			candidates = append(candidates, "--help")
 		}
 		suggestion = suggestSimilar(flag, candidates)
@@ -472,7 +469,6 @@ func (command *commandSpec) unknownCommand(name string) error {
 			candidates = append(candidates, sub.name)
 		}
 	}
-	candidates = append(candidates, command.suggestOnly...)
 	candidates = append(candidates, "help")
 	return &cliError{fmt.Sprintf("error: unknown command '%s'%s", name, suggestSimilar(name, candidates))}
 }

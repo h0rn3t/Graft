@@ -51,8 +51,8 @@ func SkillTemplate() string {
 	return template("skill.md")
 }
 
-// HooksShim is the hook shim that loads hooks.js from the installed package,
-// with bakedDir (the package's dist/claude) as its first candidate.
+// HooksShim is the hook shim that starts the installed native package,
+// with bakedDir (the package root) as its first candidate.
 func HooksShim(bakedDir string) string {
 	return strings.Replace(template("hooks-shim.cjs"), bakedPlaceholder, jsonjs.Quote(bakedDir), 1)
 }

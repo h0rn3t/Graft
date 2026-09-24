@@ -1,0 +1,19 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh",
+    "--format",
+    "json",
+    "--no-owners"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "{\n  \"basis\": \"working tree vs HEAD\",\n  \"depth\": 2,\n  \"changed\": [\n    {\n      \"path\": \"src/core/store.ts\",\n      \"status\": \"modified\",\n      \"ranges\": [\n        {\n          \"start\": 6,\n          \"end\": 6\n        }\n      ],\n      \"hunks\": [\n        {\n          \"start\": 6,\n          \"end\": 6,\n          \"lines\": [\n            {\n              \"n\": null,\n              \"sign\": \"-\",\n              \"text\": \"    console.log(key);\"\n            },\n            {\n              \"n\": 6,\n              \"sign\": \"+\",\n              \"text\": \"    console.error(key);\"\n            }\n          ],\n          \"dropped\": 0\n        }\n      ]\n    }\n  ],\n  \"unindexed\": [],\n  \"deleted\": [],\n  \"seeds\": [\n    {\n      \"id\": \"src/core/store.ts#Store.put\",\n      \"name\": \"put\",\n      \"kind\": \"method\",\n      \"path\": \"src/core/store.ts\",\n      \"span\": \"L5-L7\",\n      \"wholeFile\": false\n    }\n  ],\n  \"impacted\": [],\n  \"modules\": [],\n  \"testModules\": [],\n  \"areas\": [\n    {\n      \"label\": \"put\",\n      \"labelSource\": \"symbol\",\n      \"key\": \"src/core/\",\n      \"files\": [\n        \"src/core/store.ts\"\n      ],\n      \"seeds\": 1,\n      \"tests\": \"none\",\n      \"testFiles\": [],\n      \"changedTestFiles\": [],\n      \"reached\": 0,\n      \"behavioural\": 1,\n      \"unreached\": [\n        \"put\"\n      ],\n      \"seedNames\": [\n        \"put\"\n      ]\n    }\n  ]\n}\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": true
+}

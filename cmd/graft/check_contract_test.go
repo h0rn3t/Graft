@@ -9,10 +9,9 @@ import (
 	"testing"
 
 	"github.com/NanoNets/context-graph-engine/internal/graph"
-	"github.com/NanoNets/context-graph-engine/internal/sourcefiles"
 )
 
-func TestRunCheckWithoutEitherLayerReportsNoGraph(t *testing.T) {
+func TestRunCheckWithoutGraphReportsNoGraph(t *testing.T) {
 	t.Setenv("GRAFT_DIR", "")
 	root := t.TempDir()
 	var stdout, stderr bytes.Buffer
@@ -20,7 +19,7 @@ func TestRunCheckWithoutEitherLayerReportsNoGraph(t *testing.T) {
 	if status := run(args, &stdout, &stderr); status != 1 {
 		t.Fatalf("run(%v) status = %d, want 1; stdout = %q; stderr = %q", args, status, stdout.String(), stderr.String())
 	}
-	want := "graft check: NO GRAPH\n\nNo graft/ graph found. Run `graft build` first.\n"
+	want := "graph check: NO GRAPH\n\nNo graft/.graph/wiring.json found. Run `graft build` first.\n"
 	if got := stdout.String(); got != want {
 		t.Errorf("run(%v) stdout = %q, want %q", args, got, want)
 	}
@@ -51,7 +50,7 @@ func TestRunCheckWithoutDirUsesNearestIndexedAncestor(t *testing.T) {
 	}
 }
 
-func TestRunCheckKeylessBuildTreatsMissingContextLayerAsInformational(t *testing.T) {
+func TestRunCheckKeylessBuildReportsGraphOnly(t *testing.T) {
 	t.Setenv("GRAFT_DIR", "")
 	root := t.TempDir()
 	writeCheckSource(t, root, "math.ts", "export function add(a: number, b: number) { return a + b; }\n")
@@ -65,10 +64,9 @@ func TestRunCheckKeylessBuildTreatsMissingContextLayerAsInformational(t *testing
 	if status := run(args, &stdout, &stderr); status != 0 {
 		t.Fatalf("run(%v) status = %d, want 0; stdout = %q; stderr = %q", args, status, stdout.String(), stderr.String())
 	}
-	for _, want := range []string{"deep layer: not built", "wiring graph is the source of truth", "graph check: OK"} {
-		if !strings.Contains(stdout.String(), want) {
-			t.Errorf("run(%v) stdout = %q, want %q", args, stdout.String(), want)
-		}
+	want := "graph check: OK — the wiring graph is in sync with the code.\n"
+	if got := stdout.String(); got != want {
+		t.Errorf("run(%v) stdout = %q, want %q", args, got, want)
 	}
 }
 
@@ -135,39 +133,25 @@ func TestRunCheckExcludesCustomContextDirectoryWithoutWriting(t *testing.T) {
 	}
 }
 
-func TestRunCheckChecksContextManifestWhenGraphIsMissing(t *testing.T) {
-	for _, tt := range []struct {
-		name       string
-		manifest   string
-		wantStatus int
-		wantText   string
-	}{
-		{name: "clean", manifest: "current", wantText: "graft check: OK — the graph is in sync with the code."},
-		{name: "stale", manifest: "old", wantStatus: 1, wantText: "changed (1):"},
-	} {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("GRAFT_DIR", "")
-			root := t.TempDir()
-			writeCheckSource(t, root, "app.ts", "current\n")
-			hash := sourcefiles.Hash("current\n")
-			if tt.manifest == "old" {
-				hash = sourcefiles.Hash("old\n")
-			}
-			if err := graph.WriteManifest(filepath.Join(root, "graft"), graph.Manifest{
-				Version: 1,
-				Files:   []graph.SourceRef{{Path: "app.ts", Hash: hash}},
-			}); err != nil {
-				t.Fatal(err)
-			}
-			var stdout, stderr bytes.Buffer
-			args := []string{"check", root}
-			if status := run(args, &stdout, &stderr); status != tt.wantStatus {
-				t.Fatalf("run(%v) status = %d, want %d; stdout = %q; stderr = %q", args, status, tt.wantStatus, stdout.String(), stderr.String())
-			}
-			if !strings.Contains(stdout.String(), tt.wantText) {
-				t.Errorf("run(%v) stdout = %q, want %q", args, stdout.String(), tt.wantText)
-			}
-		})
+func TestRunCheckIgnoresLegacyContextManifest(t *testing.T) {
+	t.Setenv("GRAFT_DIR", "")
+	root := t.TempDir()
+	writeCheckSource(t, root, "app.ts", "current\n")
+	manifestPath := filepath.Join(root, "graft", "manifest.json")
+	if err := os.MkdirAll(filepath.Dir(manifestPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(manifestPath, []byte(`{"version":1,"files":[{"path":"app.ts","hash":"legacy"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	args := []string{"check", root}
+	if status := run(args, &stdout, &stderr); status != 1 {
+		t.Fatalf("run(%v) status = %d, want 1; stdout = %q; stderr = %q", args, status, stdout.String(), stderr.String())
+	}
+	want := "graph check: NO GRAPH\n\nNo graft/.graph/wiring.json found. Run `graft build` first.\n"
+	if got := stdout.String(); got != want {
+		t.Errorf("run(%v) stdout = %q, want legacy manifest ignored: %q", args, got, want)
 	}
 }
 
@@ -234,7 +218,7 @@ func TestRunCheckMalformedGraphIsMissing(t *testing.T) {
 	if status := run(args, &stdout, &stderr); status != 1 {
 		t.Fatalf("run(%v) status = %d, want 1; stdout = %q; stderr = %q", args, status, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "graft check: NO GRAPH") {
+	if !strings.Contains(stdout.String(), "graph check: NO GRAPH") {
 		t.Errorf("run(%v) stdout = %q, want malformed graph treated as missing", args, stdout.String())
 	}
 }
@@ -257,19 +241,19 @@ func TestRunCheckJSONUsesTypeScriptFieldNames(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &got); err != nil {
 		t.Fatalf("json.Unmarshal(run(%v)) error = %v; stdout = %q", args, err, stdout.String())
 	}
-	if _, ok := got["context"]; !ok {
-		t.Errorf("run(%v) JSON keys = %#v, want context", args, got)
+	if _, ok := got["context"]; ok {
+		t.Errorf("run(%v) JSON keys = %#v, want context omitted", args, got)
 	}
 	var graphResult map[string]json.RawMessage
 	if err := json.Unmarshal(got["graph"], &graphResult); err != nil {
 		t.Fatalf("json.Unmarshal(graph) error = %v", err)
 	}
-	for _, key := range []string{"ok", "missing", "added", "removed", "changed", "stale", "pending", "pendingIds", "nodes"} {
+	for _, key := range []string{"ok", "missing", "added", "removed", "changed"} {
 		if _, ok := graphResult[key]; !ok {
 			t.Errorf("run(%v) graph keys = %#v, want %q", args, graphResult, key)
 		}
 	}
-	for _, key := range []string{"unsupported", "errors", "partial"} {
+	for _, key := range []string{"stale", "pending", "pendingIds", "nodes", "unsupported", "errors", "partial"} {
 		if _, ok := graphResult[key]; ok {
 			t.Errorf("run(%v) graph keys = %#v, want %q omitted for a clean graph", args, graphResult, key)
 		}

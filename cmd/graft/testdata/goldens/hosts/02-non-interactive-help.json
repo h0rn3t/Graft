@@ -1,0 +1,44 @@
+{
+  "args": [
+    "init",
+    "<REPO>"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1",
+    "GRAFT_MCP_NPX": "1",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "gitDirs": [
+    "repo"
+  ],
+  "dirs": [
+    "home",
+    "home/.adal",
+    "home/.codeium/windsurf",
+    "home/.codex",
+    "home/.config/opencode",
+    "home/.cursor",
+    "home/.gemini/config",
+    "home/.grok",
+    "home/.hermes",
+    "home/.kiro",
+    "repo"
+  ],
+  "inputs": {},
+  "status": 0,
+  "stdout": "",
+  "stderr": "graft init: no TTY to prompt on, and no --agents/--yes given — nothing written.\ndetected: claude, agents, adal, cursor, gemini, grok, hermes, antigravity, copilot, kiro, windsurf\n\n  graft init --agents claude agents adal cursor gemini grok hermes antigravity copilot kiro windsurf   # wire these\n  graft init --yes                                                                                     # same, without spelling them out\n  graft init --agents claude                                                                           # Claude Code only\n  graft init --dry-run                                                                                 # list every file first\n",
+  "files": {
+    "home/.claude.json [644]": "{\n  \"numStartups\": 3,\n  \"mcpServers\": {\n    \"mine\": {\n      \"command\": \"mine\"\n    }\n  }\n}\n",
+    "home/.codex/config.toml [644]": "[mcp_servers.other]\ncommand = \"other\"\n",
+    "home/.codex/hooks.json [644]": "{\n  \"hooks\": {\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"echo mine\"\n          }\n        ]\n      }\n    ]\n  },\n  \"custom\": 1\n}\n",
+    "home/.graft/update-check.json [644]": "{\n  \"latest\": \"0.0.1\",\n  \"checkedAt\": 4102444800000\n}",
+    "repo/.claude/settings.json [644]": "{\n  \"2\": \"numeric key\",\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(npm test:*)\",\n      \"Bash(graft:*)\"\n    ],\n    \"deny\": [\n      \"Bash(rm:*)\"\n    ]\n  },\n  \"hooks\": {\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"echo done\"\n          }\n        ]\n      }\n    ]\n  },\n  \"statusLine\": {\n    \"type\": \"command\",\n    \"command\": \"my-statusline\"\n  }\n}\n",
+    "repo/.cursor/mcp.json [644]": "{\"mcpServers\":{\"other\":{\"command\":\"x\",\"args\":[\"1e3\",1000,0.1]}}}\n",
+    "repo/.github/workflows/ci.yml [644]": "on: push\n",
+    "repo/AGENTS.md [644]": "# Team notes\n\nKeep PRs small.\n",
+    "repo/src/main.ts [644]": "export function main() { return 1; }\n"
+  },
+  "checkFiles": true
+}

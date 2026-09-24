@@ -68,7 +68,10 @@ func actionStarted() {
 
 // upkeepSkipped are the commands that own the upgrade story, or must keep
 // stderr quiet at startup.
-var upkeepSkipped = []string{"version", "upgrade", "_update-check", "_brain-refresh", "mcp"}
+var upkeepSkipped = []string{
+	"version", "upgrade", "_update-check", "_brain-refresh", "_telemetry-flush",
+	"_hook", "_statusline", "_sync-run", "_install", "mcp",
+}
 
 func homeDir() string {
 	home, err := os.UserHomeDir()

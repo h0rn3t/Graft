@@ -24,7 +24,7 @@ func TestCheckGraphUsesDistinctCommittedIDs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckGraph(%q, %q) error = %v", root, outDir, err)
 	}
-	if got.Nodes != 1 || len(got.Removed) != 1 {
-		t.Errorf("CheckGraph(%q, %q) = %#v, want one distinct committed ID", root, outDir, got)
+	if len(got.Removed) != 1 {
+		t.Errorf("CheckGraph(%q, %q) = %#v, want one removed distinct committed ID", root, outDir, got)
 	}
 }

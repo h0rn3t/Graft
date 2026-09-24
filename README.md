@@ -4,7 +4,7 @@
 
 ### Turbocharge Claude Code, Cursor, Codex, Gemini & every coding agent: faster, cheaper, with contextual understanding specific to your codebase.
 
-<a href="https://trendshift.io/repositories/92209?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-92209" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/trendshift/repositories/92209/daily?language=TypeScript" alt="trailhq/Graft | Trendshift" width="250" height="55"/></a>
+<a href="https://trendshift.io/repositories/92209?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-92209" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/92209/daily?language=Go" alt="trailhq/Graft | Trendshift" width="250" height="55"/></a>
 
 <p>
   <a href="https://github.com/NanoNets/Graft"><img src="https://img.shields.io/github/stars/NanoNets/Graft?style=for-the-badge&logo=github&logoColor=white&label=Star%20on%20GitHub&color=FFC83D" /></a>
@@ -13,7 +13,7 @@
   <a href="https://www.npmjs.com/package/@nanonets/graft"><img src="https://img.shields.io/npm/v/%40nanonets%2Fgraft?style=for-the-badge&logo=npm&logoColor=white&label=npm" /></a>
   <a href="https://www.npmjs.com/package/@nanonets/graft"><img src="https://img.shields.io/npm/dm/%40nanonets%2Fgraft?style=for-the-badge&logo=npm&logoColor=white&label=downloads" /></a>
   <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/%40nanonets%2Fgraft?style=for-the-badge&logo=nodedotjs&logoColor=white" /></a>
-  <img src="https://img.shields.io/badge/TypeScript-strict-3178C6?style=for-the-badge&logo=typescript&logoColor=white" />
+  <img src="https://img.shields.io/badge/Go-1.27-00ADD8?style=for-the-badge&logo=go&logoColor=white" />
   <img src="https://img.shields.io/badge/License-MIT-20C997?style=for-the-badge" />
   <a href="TELEMETRY.md"><img src="https://img.shields.io/badge/telemetry-anonymous%2C%20opt--out-546FFF?style=for-the-badge" /></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/NanoNets/Graft"><img src="https://img.shields.io/ossf-scorecard/github.com/NanoNets/Graft?style=for-the-badge&label=openssf%20scorecard" /></a>
@@ -55,13 +55,12 @@
 - [SWE-bench Verified](#swe-bench-verified)
 - [How the graph gets built](#how-the-graph-gets-built)
 - [Supported languages](#supported-languages)
-- [What's in a node](#whats-in-a-node)
+- [What's in the graph](#whats-in-the-graph)
 - [What runs where](#what-runs-where)
-- [Agent integration](#agent-integration) — [MCP server](#mcp-server) · [Claude Code (deep integration)](#claude-code-deep-integration)
+- [Agent integration](#agent-integration) — [MCP server](#mcp-server) · [Claude Code](#claude-code)
 - [CLI](#cli)
 - [Search & orient](#search--orient-graft-grep--graft-map) (`graft grep` / `graft map`)
 - [Monorepos & multi-repo folders](#monorepos--multi-repo-folders)
-- [Visualize it](#visualize-it-graft-viz) (`graft viz`)
 - [Tested on your popular repos](#tested-on-your-popular-repos)
 - [Development](#development)
 - [Go migration](#go-migration)
@@ -76,7 +75,7 @@ npm install -g @nanonets/graft   # install the CLI, once
 graft init                       # build the graph + wire it into Claude Code
 ```
 
-That is the whole setup. `graft init` asks which of your coding agents to wire up, builds `graft/` from your code, and drops a statusline and hooks into `.claude/`, so from the next session on Graft rides along in Claude Code: it pulls the matching nodes into each prompt and rebuilds the graph in the background after every turn. No daemon, no re-indexing to remember, nothing to run or maintain by default — the graph is just files.
+That is the whole setup. `graft init` asks which of your coding agents to wire up, builds `graft/` from your code, and drops a statusline and hooks into `.claude/`, so from the next session on Graft rides along in Claude Code: it injects matching graph pointers into relevant prompts and rebuilds the graph in the background after every turn. No daemon, no re-indexing to remember, nothing to run or maintain by default — the graph is just files.
 
 Nothing is written until you pick. Run `graft init --dry-run` to see every file it would touch first, or `graft init --agents claude` to skip the prompt and wire Claude Code alone.
 
@@ -112,13 +111,12 @@ Humans onboard to a codebase once. Agents onboard every single time.
 
 ## What Graft does
 
-Graft builds that understanding **once** and writes it into your repo as a folder of linked markdown files, one node per system, API, or concept.
+Graft builds a deterministic structural map of your codebase once and writes it into your repo as a regenerable local cache.
 
-- **Real explanations, not a list of symbols.** Each node says, in plain English, what a part of the system does and how it connects to the rest, the way a senior engineer would explain it. That is the part an agent actually needs so it can skip the exploration. It is not a dump of function names.
-- **A real graph you can read.** No embeddings, no similarity search, no index to keep warm. The graph is a set of linked files your agent opens, greps, and follows, exactly the way it reads any other file in the repo.
-- **A local cache, not a committed artifact.** `graft build` writes `graft/` and adds it to `.gitignore` — it's a regenerable local cache, like `node_modules`. What you commit is the small wiring `graft init` drops in (`.claude/`, `AGENTS.md`, the MCP config); each teammate runs `graft build` to generate their own graph. No database, no server, no setup.
-- **Always fresh, automatically.** Every query rebuilds the graph against the working tree first — structural, `$0`, ~3ms when nothing moved — so `ask`/`grep`/`callers`/`skeleton`/`map` describe the code as it is right now, including uncommitted edits. `graft check` is a local freshness signal; there's no stale index to babysit.
-- **Your provider, your key, your model.** Summaries are written by any provider you choose — OpenAI, Anthropic (native), OpenRouter, Fireworks, Groq, OrcaRouter, a LiteLLM proxy, or a local model — under your own key. The structural code graph (`graft build`, `graft check`) is deterministic tree-sitter and never calls a model at all.
+- **Symbols and real wiring.** Tree-sitter extracts functions, classes, types, imports, calls, and inheritance; Graft resolves them into an exact file-and-edge graph.
+- **A local cache, not a committed artifact.** `graft build` writes `graft/` and adds it to `.gitignore` — it is regenerable like `node_modules`. What you commit is the small wiring `graft init` adds to your agent configuration.
+- **Always fresh, automatically.** Query commands refresh the structural graph against the working tree before answering, so uncommitted edits are included. `graft check` reports the remaining drift without changing files.
+- **No model required.** `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, and `blast` are local and deterministic. Only `graft blast --name` can make an optional one-call LLM request to label the affected areas.
 
 <p align="center">
   <picture>
@@ -174,85 +172,71 @@ Two harnesses, two claims: the controlled sweep says graft is cheaper and faster
 
 ## How the graph gets built
 
-Graft builds the graph in two passes, both powered by a language model:
+Graft builds a structural graph entirely on your machine:
 
-1. **Read each file.** Every source file is summarized once into a short description of what it does.
-2. **Group into nodes.** Those summaries are grouped into a curated set of nodes (subsystems, key files, and concepts) with typed links between them. Graft chooses the right level of detail for you instead of making one node per file, so a big repo becomes a few dozen readable nodes.
+1. **Parse supported source files** with tree-sitter and extract symbols, spans, signatures, imports, calls, and inheritance.
+2. **Resolve the graph** across files, scopes, monorepo workspaces, and supported import forms.
+3. **Write two views**: `graft/.graph/wiring.json` for machine queries and per-file markdown cards for agents to read and grep.
 
 ```mermaid
 flowchart LR
-    S[Source files] --> T["Tier 1 — tree-sitter<br/>no model, no key"]
-    S --> P1["Pass 1 — LLM summarizes<br/>each file (--deep)"]
-    T --> W["graft/.graph/wiring.json<br/>per-symbol code graph"]
-    P1 --> P2["Pass 2 — group into nodes<br/>+ typed links"]
-    P2 --> N["graft/*.md<br/>markdown node graph"]
+    S[Source files] --> T["tree-sitter extraction<br/>no model, no network"]
+    T --> R["Cross-file resolution"]
+    R --> W["graft/.graph/wiring.json"]
+    R --> C["graft/*.md cards"]
 ```
 
-Every pass is cached by content hash — the LLM ones and the tree-sitter parse alike. Re-running only touches the files that changed, so the second build is fast and cheap (on this repo, 124 files: 0.74s cold, 0.18s after one edited file, 0.18s with nothing changed). `graft build --no-reuse` forces a cold re-parse.
+Every parse is cached by content hash, so a second build only re-reads files that changed. `graft build --no-reuse` forces a cold parse.
 
-That cheapness is what lets **every query refresh the graph before it answers**. A retrieval call stats the tree against the last build's fingerprint (~3ms), and rebuilds only if something moved — so `ask`/`grep`/`callers`/`skeleton`/`map` describe the code as it is right now, including edits that are unsaved to git: uncommitted, unstaged, or staged all look the same to graft. Git determines the visible file set; freshness compares the working-tree bytes rather than commit or index state. The refresh is structural and `$0`; it never calls the LLM. Turn it off per-command with `--no-refresh`, or everywhere with `GRAFT_NO_REFRESH=1`.
-
-Alongside the markdown graph, `graft build` builds `graft/.graph/wiring.json` — a per-symbol code graph — plus a per-file wiring card mirroring your source tree. Tier 1 is pure tree-sitter (every function, class, and call edge; deterministic, no model, no network), which is why plain `graft build` needs no key. The `--deep` pass adds a one-line summary and a crux excerpt per symbol, cached by body hash.
+That cheapness is what lets **every query refresh the graph before it answers**. Graft compares the working-tree bytes with its fingerprint and rebuilds only when something moved, so `ask`/`grep`/`callers`/`skeleton`/`map`/`blast` describe uncommitted, unstaged, and staged edits alike. Turn refresh off per command with `--no-refresh`, or globally with `GRAFT_NO_REFRESH=1`.
 
 ---
 
 ## Supported languages
 
-Graft parses with tree-sitter at two levels of fidelity, plus an optional
-compiler-grade layer — all `$0` and deterministic (no model, no key):
+Graft's native extractor is deterministic and local. It supports:
 
-- **Full-fidelity** — hand-written extractors with scope-aware, cross-file call
-  and import resolution:
-  **TypeScript / JavaScript** (incl. JSX & TSX), **Python**, **Go**, **Java**,
-  **Kotlin**, **PHP**, **Swift** (classes, structs, enums, actors, protocols;
-  extension members attach to the extended type), **R** (`.R`/`.r` — plain
-  functions, S3/S4/R6 classes and methods, roxygen `@export`,
-  `library()`/`source()` imports).
+- **Go**: `.go`
+- **Python**: `.py`, `.pyi`
+- **TypeScript / JavaScript**: `.ts`, `.tsx`, `.mts`, `.cts`, `.js`, `.jsx`, `.mjs`, `.cjs`
+- **Java**: `.java`
+- **Rust**: `.rs`
+- **PostgreSQL**: `.sql`
+- **C**: `.c`, `.h`
+- **C++**: `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh`
 
-- **Broad** — symbols (functions, classes, methods, types, …) plus name-resolved
-  call edges via a generic tree-sitter extractor, one grammar per language:
-  **Rust, C, C++, C#, Ruby, Scala, Elixir, Solidity,
-  OCaml, Zig, Dart, Clojure, Nix, Lua**.
+`graft build --lsp` can add compiler-grade call edges when `rust-analyzer`, `clangd`, `gopls`, `pyright`, or `typescript-language-server` is installed. A file with an unsupported extension is skipped and reported rather than guessed.
 
+- **Generic extraction** — Rust, C, and C++ use tags queries for symbols and calls.
 - **Compiler-grade edges (opt-in)** — `graft build --lsp` adds precise
   `lsp_resolved` call edges (member calls the static pass can't type) when a
-  language server is on your `PATH`: **rust-analyzer** (Rust), **clangd** (C/C++),
-  **gopls** (Go), **pyright** (Python), **typescript-language-server** (TS/JS).
+  language server is on your `PATH`: `rust-analyzer` (Rust), `clangd` (C/C++),
+  `gopls` (Go), `pyright` (Python), `typescript-language-server` (TS/JS).
   It's best-effort — with no server installed the graph is unchanged.
-
-Twenty-three languages in total. A file whose language isn't listed is skipped, not
-indexed. Adding a broad-tier language is a small contribution — see
-[CREDITS.md](CREDITS.md) for the folks who added the current set.
 
 ---
 
-## What's in a node
+## What's in the graph
 
-A node is a single markdown file. Most code maps stop at an address: this thing lives in that file, on that line. That tells an agent where to look, not what it will find, so it still has to open the source and read. A Graft node holds the meaning inline, so the agent learns what it needs up front and opens the file only when it wants more.
+Each node records the symbol's identity and exact source location:
 
-Each node holds:
+- **ID and name** — stable, file-scoped identity such as `internal/graph/build.go#runBuild`
+- **Kind** — file, function, method, class, struct, interface, enum, type, or variable
+- **Path and span** — exact file and `Lstart-Lend` range
+- **Signature** — declaration text without the body where the grammar provides it
+- **Exported flag** — whether the declaration is public in its language
+- **Body hash and searchable body** — deterministic change detection and local retrieval
+- **Edges** — `contains`, `calls`, `references`, `imports`, `extends`, and `implements`
 
-| Part | What it holds |
-|---|---|
-| **Summary** | A plain-English explanation of what the code does, written by the model and cached. It is there whether or not the code was ever documented, and it is regenerated when the source changes. |
-| **Crux** | The handful of lines that actually carry the logic: the guard, the skip condition, the state change. Lifted straight from the source and stored inline, so the agent sees *how* it works, not just what. |
-| **Sources** | The exact files the node is built from, each tracked by a content hash, so Graft can tell precisely when a node has gone stale. |
-| **Links** | Typed connections to other nodes (`depends_on`, `part_of`, `uses`, `implements`, `produces`), written as `[[wikilinks]]` your agent can follow. |
-| **Notes** | Anything you write below the generated block. It is preserved across regenerations, so your own context is never overwritten. |
-
-That is three depths in one file: the summary says *what* the code does, the crux shows *how*, and the sources point to the rest if the agent needs it. A plain index makes it read a whole file to learn one thing. A Graft node hands it the answer inline, and the follow-up read often never happens.
-
-The crux is stored as the code itself, not as a line range, on purpose. Line numbers drift whenever unrelated code above them shifts, but the lines that matter do not. Keeping the text, not the numbers, means the crux stays correct even as the file around it moves.
-
-_Summary, sources, links, and notes ship today in markdown nodes. The crux ships per-symbol in the code graph (`graft build --deep`); inlining it into markdown nodes is next._
+The same graph is serialized to `graft/.graph/wiring.json` and rendered as per-file markdown cards under `graft/`. Both views are regenerated by `graft build`; neither contains generated prose.
 
 ---
 
 ## What runs where
 
-- **On your machine, no key, no network:** the structural code graph. `graft build` (wiring graph + per-file cards), `graft check`, and `graft ask` are deterministic tree-sitter — they never call a model.
-- **Through your provider key:** the LLM-written parts — `graft build --deep` adds the concept nodes (file summaries + node synthesis) and the per-symbol summaries and cruxes. graft is vendor-neutral: set `GRAFT_PROVIDER` (`openai` for any OpenAI-compatible endpoint, `anthropic` for the native API, or `litellm` / `orcarouter` for a gateway that speaks the OpenAI-compatible format), your `GRAFT_API_KEY`, `GRAFT_MODEL`, and — for the `openai` wire format — `GRAFT_BASE_URL` to point at OpenRouter, Fireworks, Groq, a LiteLLM proxy, a local server, or OpenAI itself. Or pass `--provider/--model/--api-key/--base-url` on the command line. (`OPENROUTER_API_KEY` still works as a deprecated fallback, and `ORCAROUTER_API_KEY` as a second one.)
-- **Anonymous usage stats** — the only network calls are the LLM requests you configured, a daily npm version check, and one batched usage ping. The ping carries buckets and fixed labels only: never your code, file paths, repo name, symbols, queries, or error messages. [`TELEMETRY.md`](TELEMETRY.md) is the complete list and `graft telemetry debug` prints exactly what your machine would send. Turn it off with `graft telemetry disable`, `DO_NOT_TRACK=1`, or by unchecking the box in `graft init`; it is off in CI and in any build from source.
+- **On your machine, no key, no network:** every structural command, including `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, and `blast`.
+- **Optional provider call:** `graft blast --name` may use `GRAFT_API_KEY` (or the supported provider fallbacks) to label affected areas with one cached request. Without a key, Graft names areas after their hub symbols.
+- **Anonymous usage stats** — a daily npm version check and one batched usage ping. The ping carries buckets and fixed labels only: never code, paths, repository names, symbols, queries, or error messages. [`TELEMETRY.md`](TELEMETRY.md) is the complete contract; `graft telemetry debug` prints exactly what would be sent. Turn it off with `graft telemetry disable`, `DO_NOT_TRACK=1`, or the `graft init` prompt.
 
 See [`.env.example`](.env.example) for the full list of settings (model, base URL, graph directory).
 
@@ -318,11 +302,11 @@ Register it by hand if your agent needs it explicit:
 
 Where a CLI agent supports user-level `hooks.json`, `init` also installs Graft's post-edit hook — blast-radius warnings and automatic `$0` graph re-sync after edits (skip with `--no-hooks`).
 
-### Claude Code (deep integration)
+### Claude Code
 
 `graft init` always wires up Claude Code, and Claude Code gets more than the skill file above. From then on, any Claude Code session opened in the repo gets:
 
-- **a live statusline** — graph size, % enriched, and a `⚠ N stale` warning when the code has moved ahead of the graph
+- **a live statusline** — graph size, freshness, context usage, and a stale warning when the code has moved ahead of the graph
 - **auto-sync** — every graft query brings the graph up to date first, so an answer always describes the code as it is right now, uncommitted edits included. A query refreshes only what it reads; the markdown under `graft/` is refreshed by the background rebuild at the end of a turn that touched code. Both are structural and `$0` — auto-sync never calls the LLM on its own
 - **context on tap** — each prompt pulls the matching nodes into the session; editing a file surfaces what depends on it ("blast radius"); new sessions start with the repo map
 
@@ -331,20 +315,14 @@ Where a CLI agent supports user-level `hooks.json`, `init` also installs Graft's
   <br/><sub>install → init → hooks keep the graph fresh every session</sub>
 </p>
 
-<p align="center">
-  <img src="assets/graft-hook-blast-radius-demo.gif" alt="graft's post-edit hook: editing node-file.ts prints its blast radius (who depends on it) inline, the statusline flips stale → syncing → synced on its own, and the same dependents light up in graft viz" width="820"/>
-  <br/><sub>edit a file → blast radius appears inline → graph auto-resyncs → confirmed in <code>graft viz</code></sub>
-</p>
-
-`graft init` is idempotent and never clobbers your existing `.claude/settings.json` — it merges its blocks and leaves the rest alone. A `statusLine` that is not Graft's (anything whose command does not name `graft-statusline.cjs`) is left untouched; re-running `init` will refresh Graft's own helper command if it is already installed. Pass `--no-statusline` (or `GRAFT_NO_STATUSLINE=1`) to skip installing one at all — a project-level `statusLine` would otherwise hide a custom one in `~/.claude/settings.json`. Want the LLM summaries too? Run `graft build --deep` (with a key) whenever you like; auto-sync will never do it for you.
+`graft init` is idempotent and never clobbers your existing `.claude/settings.json` — it merges its blocks and leaves the rest alone. A `statusLine` that is not Graft's (anything whose command does not name `graft-statusline.cjs`) is left untouched; re-running `init` refreshes Graft's own helper if it is already installed. Pass `--no-statusline` (or `GRAFT_NO_STATUSLINE=1`) to skip installing one — a project-level `statusLine` would otherwise hide a custom one in `~/.claude/settings.json`.
 
 ---
 
 ## CLI
 
 ```bash
-graft build [dir]                    # build graft/ from the code at [dir]: wiring graph + per-file cards (no LLM, no key)
-graft build --deep                   # add the LLM layer: concept nodes + per-symbol summary/crux (cached)
+graft build [dir]                    # build graft/ from the code at [dir]: wiring graph + per-file cards
 graft build --extensions .ts .py     # only include these code extensions
 graft build --no-reuse               # re-parse every file instead of replaying unchanged ones from cache
 graft build --follow-submodules      # include initialized submodules; persist the choice for builds + MCP refresh
@@ -372,8 +350,7 @@ graft map --max-dirs N               # raise/lower the number of directories sho
 graft blast [dir]                    # blast radius of a diff: what depends on the lines this change touched (no LLM, no key)
 graft blast --base origin/main       # diff against the merge base with HEAD — what a PR job runs
 graft blast --format markdown        # a PR comment: the areas a change can reach, per-symbol detail collapsed under it
-graft blast --base origin/main --name  # name those areas with one cached LLM call, instead of a full --deep build
-graft blast --export-viz site/       # also write the interactive page for this radius (what a PR comment links to)
+graft blast --base origin/main --name  # name those areas with one optional cached LLM call
 graft blast --no-owners              # skip "who to tag" — by default git history names the people behind each area
 graft blast --depth all --format json  # the full transitive closure, machine-readable
 
@@ -384,10 +361,6 @@ graft check --json                   # print the drift report as JSON
 #   --no-refresh                     # answer from the graph exactly as it is on disk
 #   GRAFT_NO_REFRESH=1               # same, for every command
 #   GRAFT_REFRESH=hash               # hash every file instead of trusting size+mtime
-
-graft viz [dir]                      # see the graph: serves an interactive viewer on localhost
-graft viz --port 5000 --no-open      # pick a port; don't auto-open the browser
-graft viz --export site/ --title "PR #12"  # one self-contained index.html — for CI, GitHub Pages, or a build artifact
 
 graft init [dir]                     # pick which agents to wire (prompts on a terminal; writes nothing until you choose)
 graft init --dry-run                 # list every file it would touch, then exit
@@ -441,14 +414,13 @@ with file/symbol counts, each dir's local hubs, and the global hotspots —
 all ranked by in-degree, no LLM, no key:
 
 ```
-repo map — 113 files · 687 symbols · 2186 edges · typescript
+repo map — 94 files · 621 symbols · 1948 edges · go
 
-src/                63 files · 527 symbols   hubs: contextDirFor (node-file.ts, 21←), wiringPath (write.ts, 14←), buildGraph (build.ts, 11←)
-test/               43 files · 102 symbols   hubs: edge (graph-traverse.test.ts, 4←), graphOf (graph-traverse.test.ts, 4←), fileNode (graph-map.test.ts, 3←)
-viewer/             5 files · 58 symbols   hubs: $ (main.ts, 9←), activeGraph (main.ts, 5←), cvar (data.ts, 5←)
-scripts/            2 files · 0 symbols
+cmd/graft/          32 files · 433 symbols   hubs: run (main.go, 31←), programSpec (commander.go, 18←), runWithInput (main.go, 13←)
+internal/graph/     42 files · 163 symbols   hubs: BuildGraph (build.go, 12←), queryLexical (ask_lexical.go, 9←), buildIndex (resolve.go, 7←)
+test/               3 files · 0 symbols
 
-hotspots: contextDirFor · function · src/context/node-file.ts:L100-L103 · 21←  wiringPath · function · src/graph/write.ts:L20-L22 · 14←  buildGraph · function · src/graph/build.ts:L104-L218 · 11←  ...
+hotspots: run · function · cmd/graft/main.go:L99-L103 · 31←  programSpec · function · cmd/graft/commander.go:L114-L160 · 18←  runWithInput · function · cmd/graft/main.go:L109-L141 · 13←  ...
 ```
 
 ## Monorepos, submodules & multi-repo folders
@@ -486,42 +458,8 @@ instruction files from there, so each child needs its own. A session started in
 the parent gets the federated view; one started in a child sees that repo alone.
 
 Commands also find the graph from a subdirectory: with no `[dir]` argument they
-walk up to the nearest `graft/`, so `graft ask` works from `src/deep/inside/`
-without a `cd` to the repo root.
-
-## Visualize it (`graft viz`)
-
-`graft viz` opens a local, interactive view of both graphs — no install, no dev
-server; the viewer ships prebuilt inside the package.
-
-<p align="center">
-  <img src="assets/graft-viz-demo.gif" alt="graft viz — searching a symbol and jumping to it lights up its dependency graph: amber edges are what it depends on, teal is what depends on it" width="820"/>
-  <br/><sub>search → jump to a node → dependency graph lights up</sub>
-</p>
-
-- **Context** tab — the architecture graph from `graft/*.md`. Nodes colored by
-  type, sized by connectedness.
-- **Code** tab — the per-symbol graph from `graft/.graph/wiring.json` (run `graft build` first).
-- **Outline** tab — the file → class → method hierarchy as a collapsible tree.
-
-Edges speak the code's language. Every link is one of a closed set of verbs, each
-answering a question someone building or reviewing code actually asks:
-
-| Verb | The question it answers |
-|---|---|
-| `part_of` / `contains` | where does this live? |
-| `uses` / `calls` / `imports` / `depends_on` | what breaks if I change this? |
-| `produces` | where does this output come from? |
-| `configures` | what changes its behavior without a code change? |
-| `validates` | what checks or judges this? (tests, drift checks, scoring) |
-| `extends` / `implements` | what contract must this honor? |
-
-Select a node and its edges take on direction: **amber = what it depends on,
-teal = what depends on it**, with the verb written on each highlighted edge.
-Chips above the canvas filter by verb; tree-sitter-extracted edges draw solid
-while LLM-inferred ones draw dashed. The viewer live-reloads when `graft/`
-changes on disk. Older graphs with vague verbs (`influences`, `supports`) are
-normalized on load — no regeneration needed.
+walk up to the nearest `graft/`, so `graft ask` works from a nested package
+without a `cd` to the repository root.
 
 ---
 
@@ -583,32 +521,27 @@ Two clones of PocketBase at the same commit: one wired with `graft init`, one un
 
 ## Development
 
+The published package is a thin npm launcher around the native Go binary. Go 1.27 is required to build from source.
+
 ```bash
 git clone https://github.com/NanoNets/context-graph-engine.git && cd context-graph-engine
 npm install
-npm run build
-npm test
+npm run build       # builds bin/graft-<platform>-<arch>
+npm test            # plain-JS launcher, shim, and postinstall tests
 
-npm run cli -- build --deep .      # run the CLI from source
+go build ./...
+go test ./...
 ```
+
+The Go gate is authoritative for product behavior: `go build ./...`, `go vet ./...`, `go test -race ./...`, `golangci-lint run ./...`, `gofmt -l .`, and `go fix -diff ./...`.
 
 ---
 
 ## Go migration
 
-The Go 1.27 port is incremental so the existing TypeScript CLI keeps its
-behavior while each migrated slice is checked against the current contracts.
-The browser viewer remains TypeScript; the current Go track contains the CLI
-metadata/upgrade, graph-quality, and query slices (`callers`, `skeleton`,
-`grep`, `map`, and `ask`) with differential coverage against TypeScript.
+The migration is complete. Go is the only implementation behind the CLI, MCP server, host hooks, statusline, graph extraction, upkeep, and telemetry. The former TypeScript behavior was frozen into Go-owned golden fixtures before removal; `docs/cli-contract.json` is now checked directly against `programSpec` and the Go environment inventory.
 
-```bash
-go test ./...
-go run ./cmd/graph-quality <repo-dir-or-wiring.json> [--json] [--strict]
-```
-
-The TypeScript build remains the source of truth for commands that have not yet
-been ported.
+The package contains only `bin/graft.js`, the platform-native binary, the postinstall script, and package metadata. There is no JavaScript library API, viewer, GitHub App, deep meaning layer, or TypeScript fallback.
 
 ---
 

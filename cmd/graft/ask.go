@@ -53,7 +53,6 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 		In:          opts.in,
 		NoGraphRank: opts.noGraphRank,
 		Index:       readAskIndex(filepath.Join(contextDir, ".cache", "ask-index.json")),
-		Concepts:    readAskConcepts(contextDir),
 	})
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
@@ -125,7 +124,6 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 			In:                     childIn,
 			NoGraphRank:            opts.noGraphRank,
 			Index:                  readAskIndex(filepath.Join(childContext, ".cache", "ask-index.json")),
-			Concepts:               readAskConcepts(childContext),
 			FileFirst:              &fileFirst,
 			FileComplement:         true,
 			IncludeRankingMetadata: true,
@@ -242,7 +240,7 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 		}
 	}
 
-	// File stream: one leader per child file (or concept) takes part in fusion.
+	// File stream: one leader per child file takes part in fusion.
 	fileDocs := make([]graph.ScopedDoc, 0)
 	fileByID := make(map[string]workspaceGroup)
 	for _, candidate := range survivors {
@@ -419,9 +417,6 @@ func prefixAskPointer(child, pointer string) string {
 }
 
 func workspaceHitGroup(hit graph.AskHit) string {
-	if hit.Kind != "symbol" {
-		return "concept:" + hit.Title + ":" + hit.Pointer
-	}
 	if marker := strings.Index(hit.Pointer, ":L"); marker >= 0 {
 		return hit.Pointer[:marker]
 	}
@@ -460,25 +455,6 @@ func missingAskChildren(root string, children []string) string {
 		}
 	}
 	return strings.Join(missing, ", ")
-}
-
-func readAskConcepts(dir string) []graph.AskConcept {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil
-	}
-	concepts := make([]graph.AskConcept, 0)
-	for _, entry := range entries {
-		if entry.IsDir() || filepath.Ext(entry.Name()) != ".md" || entry.Name() == "INDEX.md" {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(dir, entry.Name()))
-		if err != nil {
-			continue
-		}
-		concepts = append(concepts, parseAskConcept(entry.Name(), string(data)))
-	}
-	return concepts
 }
 
 func readAskBrainRules(root string) []graph.BrainRule {
@@ -520,62 +496,6 @@ func readAskBrainRules(root string) []graph.BrainRule {
 		return nil
 	}
 	return cache.Rules
-}
-
-func parseAskConcept(filename, content string) graph.AskConcept {
-	content = strings.ReplaceAll(content, "\r\n", "\n")
-	lines := strings.Split(content, "\n")
-	concept := graph.AskConcept{Slug: strings.TrimSuffix(filename, ".md")}
-	bodyStart := 0
-	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "---" {
-		for index := 1; index < len(lines); index++ {
-			if strings.TrimSpace(lines[index]) == "---" {
-				bodyStart = index + 1
-				break
-			}
-		}
-	}
-	section := ""
-	var frontmatter []string
-	if bodyStart > 0 {
-		frontmatter = lines[1 : bodyStart-1]
-	}
-	for _, raw := range frontmatter {
-		line := strings.TrimSpace(raw)
-		switch {
-		case strings.HasPrefix(line, "slug:"):
-			concept.Slug = askFrontmatterValue(strings.TrimPrefix(line, "slug:"))
-		case strings.HasPrefix(line, "name:"):
-			concept.Name = askFrontmatterValue(strings.TrimPrefix(line, "name:"))
-		case line == "sources:":
-			section = "sources"
-		case line == "links:":
-			section = "links"
-		case strings.HasPrefix(line, "- path:") && section == "sources":
-			concept.Sources = append(concept.Sources, askFrontmatterValue(strings.TrimPrefix(line, "- path:")))
-		case strings.HasPrefix(line, "- to:") && section == "links":
-			concept.Related = append(concept.Related, askFrontmatterValue(strings.TrimPrefix(line, "- to:")))
-		}
-	}
-	body := strings.Join(lines[bodyStart:], "\n")
-	concept.Snippet = askFirstProse(body)
-	concept.Text = concept.Name + " " + concept.Snippet + " " + strings.Join(concept.Sources, " ")
-	return concept
-}
-
-func askFrontmatterValue(raw string) string {
-	return strings.Trim(strings.TrimSpace(raw), "\"'")
-}
-
-func askFirstProse(body string) string {
-	for raw := range strings.SplitSeq(body, "\n") {
-		line := strings.TrimSpace(raw)
-		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "<!--") || strings.HasPrefix(line, "-") {
-			continue
-		}
-		return line
-	}
-	return ""
 }
 
 func readAskIndex(path string) *graph.AskIndex {
@@ -713,9 +633,6 @@ func formatAskText(result graph.AskResult) string {
 			lines = append(lines, "   "+hit.Pointer)
 			if hit.Snippet != "" {
 				lines = append(lines, "   "+hit.Snippet)
-			}
-			if len(hit.Related) > 0 {
-				lines = append(lines, "   related: "+strings.Join(hit.Related, ", "))
 			}
 			if hit.Code != "" {
 				lines = append(lines, "", "```", hit.Code, "```")

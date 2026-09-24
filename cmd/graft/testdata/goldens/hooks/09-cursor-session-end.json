@@ -1,0 +1,33 @@
+{
+  "args": [
+    "_hook",
+    "cursor-session-end"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "CLAUDE_CONFIG_DIR": "<HOME>/.claude",
+    "CLAUDE_PROJECT_DIR": "<REPO>",
+    "DO_NOT_TRACK": "",
+    "GRAFT_POSTHOG_KEY": "phc_test_key",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "inputs": {
+    "repo/graft/.cache/session/cursor.json": "{\"lastQuery\":null,\"perAgentQuery\":{},\"graftReads\":8,\"sourceReads\":2,\"savedTokens\":7400,\"injectedPointers\":[],\"nudges\":0,\"graftTurns\":4,\"reportedTurns\":1,\"host\":\"cursor\"}"
+  },
+  "stdin": {
+    "conversation_id": "cursor"
+  },
+  "status": 0,
+  "stdout": "",
+  "stderr": "",
+  "files": {
+    "repo/graft/.cache/session/cursor.json": "{\n  \"lastQuery\": null,\n  \"perAgentQuery\": {},\n  \"graftReads\": 8,\n  \"sourceReads\": 2,\n  \"savedTokens\": 7400,\n  \"injectedPointers\": [],\n  \"nudges\": 0,\n  \"graftTurns\": 4,\n  \"reportedTurns\": 1,\n  \"host\": \"cursor\",\n  \"summarized\": true\n}",
+    "repo/graft/.cache/telemetry-repo-id.json": "{\n  \"repoId\": \"<UUID>\"\n}"
+  },
+  "checkFiles": true
+}

@@ -27,6 +27,20 @@ type wiringStamp struct {
 	At      string          `json:"at"`
 }
 
+func hasLegacyHookShim(repo string) bool {
+	for _, path := range []string{
+		filepath.Join(repo, ".claude", "helpers", "graft-hooks.cjs"),
+		filepath.Join(repo, ".claude", "helpers", "graft-statusline.cjs"),
+		filepath.Join(repo, ".cursor", "hooks", "graft-hooks.cjs"),
+	} {
+		data, err := os.ReadFile(path)
+		if err == nil && strings.Contains(string(data), "pathToFileURL") {
+			return true
+		}
+	}
+	return false
+}
+
 // ReconcileWiring refreshes stale host wiring and records the choices it used.
 // It merges stamped host intent with hosts found on disk, then calls rewrite
 // with the saved options. Missing option values default to true. The returned
@@ -42,7 +56,7 @@ func ReconcileWiring(
 	}
 	cacheDir := contextCacheDir(repo, contextDir)
 	stamp := readWiringStamp(cacheDir)
-	if stamp != nil && stamp.Version != nil && *stamp.Version == current {
+	if stamp != nil && stamp.Version != nil && *stamp.Version == current && !hasLegacyHookShim(repo) {
 		return ""
 	}
 	diskHosts, err := wired(repo)

@@ -1,0 +1,18 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh",
+    "--format",
+    "markdown"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "### 🌱 graft blast radius\n\n**Nothing outside this diff depends on it.** 1 area changed; no indexed dependents at depth 2.\nTests: **no test reaches put**.\nTag: **Cara Coder** — put\n\n<details>\n<summary><strong>Who knows this code</strong> — 1 person across 1 area</summary>\n\n| Area | Who knows it |\n| --- | --- |\n| **put** · changed | Cara Coder — 1 commit, last 9mo ago |\n\n_Ownership is git history over each area's own files, weighted towards recent work (120-day half-life). Merge commits and bots are dropped, and you are dropped from your own PR. A name with no `@` has no GitHub handle in its commit email — tag them by hand, or add a `.mailmap` entry. A suggestion from history, not a CODEOWNERS rule._\n\n</details>\n\n<details>\n<summary><strong>Test signal</strong> per changed area — 1 ✗</summary>\n\n_Reached = a node under a test path has a resolved edge into the changed symbol. It undercounts anything called indirectly — through a CLI, a spawned process or a dynamic import — so read a low ratio as “look here”, never as a coverage gate._\n\n- ✗ **put** — 0 of 1 reached · no test file reaches it\n  - not reached: `put`\n\n</details>\n\n<sub>`graft blast` · working tree vs HEAD · depth 2 · 1 changed file</sub>\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": true
+}

@@ -35,8 +35,6 @@ func (b *fileBindings) resolveRecvType(receiver string, ctx walkCtx) string {
 		return ""
 	case receiver == "self" || receiver == "cls" || receiver == "this":
 		return ctx.enclosingClass
-	case receiver == "super":
-		return ctx.rSuperClass
 	case strings.HasPrefix(receiver, "self.") || strings.HasPrefix(receiver, "this."):
 		if hit := b.lookup(ctx.scope, receiver); hit != "" {
 			return hit
@@ -45,17 +43,12 @@ func (b *fileBindings) resolveRecvType(receiver string, ctx walkCtx) string {
 			return b.lookup(ctx.scope, "self."+rest)
 		}
 		return ""
-	case ctx.lang == langPHP && !strings.HasPrefix(receiver, "$"):
-		return receiver
 	}
 	if ctx.lang == langGo && receiver == ctx.goReceiverVar && ctx.enclosingClass != "" {
 		return ctx.enclosingClass
 	}
 	if hit := b.lookup(ctx.scope, receiver); hit != "" {
 		return hit
-	}
-	if ctx.lang == langSwift && receiver[0] >= 'A' && receiver[0] <= 'Z' {
-		return receiver
 	}
 	return ""
 }
@@ -108,13 +101,8 @@ func (w *bindingWalk) visit(node *sitter.Node, scope []string, classScope string
 		w.handlePython(node, scope, classScope)
 	case langGo:
 		w.handleGo(node, scope)
-	case langR:
 	case langJava:
 		w.handleJava(node, scope, classScope)
-	case langSwift:
-		w.handleSwift(node, scope, classScope)
-	case langPHP:
-		w.handlePHP(node, scope)
 	default:
 		w.handleTS(node, scope, classScope)
 	}
@@ -140,12 +128,6 @@ func (w *bindingWalk) defName(node *sitter.Node) (string, bool) {
 		return "", false
 	case langGo:
 		return w.goDefName(node)
-	case langR:
-		return w.rDefName(node)
-	case langSwift:
-		return w.swiftDefName(node)
-	case langPHP:
-		return w.phpDefName(node)
 	case langPython:
 		if node.Kind() == "class_definition" || node.Kind() == "function_definition" {
 			name := node.ChildByFieldName("name")
@@ -172,8 +154,6 @@ func (w *bindingWalk) isClassNode(node *sitter.Node) bool {
 		return node.Kind() == "class_definition"
 	case langJava:
 		return slices.Contains(javaTypeDeclarations, node.Kind())
-	case langSwift:
-		return node.Kind() == "class_declaration" || node.Kind() == "protocol_declaration"
 	case langTypeScript, langTSX:
 	default:
 		return false

@@ -277,11 +277,6 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 
 	edges := resolveEdges(nodes, rawEdges, modules)
 	scopes := applyMinSubstanceGuard(discoverScopes(absRoot, relFiles), nodes)
-	if outDir != "" {
-		if priorGraph, err := Read(WiringPath(outDir)); err == nil {
-			carryMeaning(nodes, priorGraph.Nodes)
-		}
-	}
 	result.Graph = GraphV1{
 		Meta:  GraphMeta{Version: 1, NodeCount: len(nodes), EdgeCount: len(edges), Languages: slices.Sorted(maps.Keys(languageSet)), Scopes: &scopes},
 		Nodes: nodes,
@@ -308,24 +303,4 @@ func nativeSupported(file string) bool {
 	lang, _, ok := languageOf(file)
 	_, native := grammars[lang]
 	return ok && native
-}
-
-// carryMeaning folds the prior graph's summaries into nodes without an LLM
-// (enrich.ts enrichGraph with no summarizer): an unchanged ready body keeps its
-// summary; a changed one keeps it as a stale hint.
-func carryMeaning(nodes, prior []NodeV1) {
-	byID := make(map[string]NodeV1, len(prior))
-	for _, node := range prior {
-		byID[node.ID] = node
-	}
-	for index := range nodes {
-		was, ok := byID[nodes[index].ID]
-		switch {
-		case !ok:
-		case was.SummaryState == "ready" && was.BodyHash == nodes[index].BodyHash:
-			nodes[index].Summary, nodes[index].Crux, nodes[index].SummaryState = was.Summary, was.Crux, "ready"
-		case was.Summary != nil && *was.Summary != "":
-			nodes[index].Summary, nodes[index].Crux, nodes[index].SummaryState = was.Summary, was.Crux, "stale"
-		}
-	}
 }

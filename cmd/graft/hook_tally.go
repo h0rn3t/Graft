@@ -1,0 +1,263 @@
+package main
+
+import (
+	"encoding/json/v2"
+	"math"
+	"os"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+)
+
+const hookTranscriptTailBytes = 1 << 20
+
+var hookSavingsTallyPattern = regexp.MustCompile(`(?i)graft\s+saved\s*[~≈]?\s*[\d,.]+\s*[km]?\s*(tok|tokens)`)
+
+type hookTranscriptEntry struct {
+	Type        string                `json:"type"`
+	UUID        *string               `json:"uuid"`
+	IsSidechain bool                  `json:"isSidechain"`
+	IsMeta      bool                  `json:"isMeta"`
+	Message     hookTranscriptMessage `json:"message"`
+}
+
+type hookTranscriptMessage struct {
+	ID      *string        `json:"id"`
+	Model   string         `json:"model"`
+	Content any            `json:"content"`
+	Usage   *hookTurnUsage `json:"usage"`
+}
+
+type hookTurnUsage struct {
+	Input       any `json:"input_tokens"`
+	CacheCreate any `json:"cache_creation_input_tokens"`
+	CacheRead   any `json:"cache_read_input_tokens"`
+}
+
+type hookAssistantTurn struct {
+	UUID string
+	Text string
+}
+
+type hookTurnBilling struct {
+	UUID       string
+	CostMicros int
+	Tokens     int
+}
+
+type hookUsage struct {
+	Model       string
+	Input       float64
+	CacheCreate float64
+	CacheRead   float64
+}
+
+func hasSavingsTally(text string) bool {
+	return hookSavingsTallyPattern.MatchString(text)
+}
+
+func inputUSDPerMtok(model string) (float64, bool) {
+	switch {
+	case strings.HasPrefix(model, "claude-fable-5"), strings.HasPrefix(model, "claude-mythos-5"):
+		return 10, true
+	case strings.HasPrefix(model, "claude-opus-5"), strings.HasPrefix(model, "claude-opus-4-6"), strings.HasPrefix(model, "claude-opus-4-7"), strings.HasPrefix(model, "claude-opus-4-8"):
+		return 5, true
+	case strings.HasPrefix(model, "claude-sonnet-5"):
+		return 2, true
+	case strings.HasPrefix(model, "claude-sonnet-4-6"):
+		return 3, true
+	case strings.HasPrefix(model, "claude-haiku-4-5"):
+		return 1, true
+	default:
+		return 0, false
+	}
+}
+
+func turnInputCostMicros(usage hookUsage) (int, bool) {
+	price, ok := inputUSDPerMtok(usage.Model)
+	if !ok {
+		return 0, false
+	}
+	weighted := usage.Input + usage.CacheCreate*1.25 + usage.CacheRead*0.1
+	cost := math.Round(weighted * price)
+	if math.IsNaN(cost) || math.IsInf(cost, 0) || cost > float64(int(^uint(0)>>1)) || cost < float64(-int(^uint(0)>>1)-1) {
+		return 0, false
+	}
+	return int(cost), true
+}
+
+func turnInputTokens(usage hookUsage) int {
+	return int(usage.Input + usage.CacheCreate + usage.CacheRead)
+}
+
+func readHookTranscriptTail(path string) string {
+	file, err := os.Open(path)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = file.Close() }()
+	info, err := file.Stat()
+	if err != nil {
+		return ""
+	}
+	length := min(info.Size(), int64(hookTranscriptTailBytes))
+	data := make([]byte, length)
+	if length > 0 {
+		if _, err := file.ReadAt(data, info.Size()-length); err != nil {
+			return ""
+		}
+	}
+	if length == info.Size() {
+		return string(data)
+	}
+	tail := string(data)
+	if _, after, ok := strings.Cut(tail, "\n"); ok {
+		return after
+	}
+	return tail
+}
+
+func hookTranscriptEntries(path string) []hookTranscriptEntry {
+	tail := readHookTranscriptTail(path)
+	if tail == "" {
+		return nil
+	}
+	var entries []hookTranscriptEntry
+	for line := range strings.SplitSeq(tail, "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		var entry hookTranscriptEntry
+		if json.Unmarshal([]byte(line), &entry) == nil {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
+}
+
+func isHookUserPrompt(entry hookTranscriptEntry) bool {
+	if entry.Type != "user" || entry.IsMeta {
+		return false
+	}
+	switch content := entry.Message.Content.(type) {
+	case string:
+		return true
+	case []any:
+		return !slices.ContainsFunc(content, func(part any) bool {
+			value, ok := part.(map[string]any)
+			return ok && value["type"] == "tool_result"
+		})
+	default:
+		return false
+	}
+}
+
+func hookAssistantText(content any) string {
+	switch value := content.(type) {
+	case string:
+		return value
+	case []any:
+		parts := make([]string, 0, len(value))
+		for _, item := range value {
+			part, ok := item.(map[string]any)
+			if !ok || part["type"] != "text" {
+				continue
+			}
+			if text, ok := part["text"].(string); ok {
+				parts = append(parts, text)
+			}
+		}
+		return strings.Join(parts, "\n")
+	default:
+		return ""
+	}
+}
+
+func lastHookAssistantTurn(path string) *hookAssistantTurn {
+	entries := hookTranscriptEntries(path)
+	var parts []string
+	var uuid *string
+	for _, entry := range slices.Backward(entries) {
+		if entry.IsSidechain {
+			continue
+		}
+		if isHookUserPrompt(entry) {
+			break
+		}
+		if entry.Type != "assistant" {
+			continue
+		}
+		text := hookAssistantText(entry.Message.Content)
+		if strings.TrimSpace(text) == "" {
+			continue
+		}
+		if uuid == nil {
+			uuid = entry.UUID
+		}
+		parts = append(parts, text)
+	}
+	if uuid == nil || len(parts) == 0 {
+		return nil
+	}
+	slices.Reverse(parts)
+	return &hookAssistantTurn{UUID: *uuid, Text: strings.Join(parts, "\n")}
+}
+
+func hookNumber(value any) float64 {
+	switch number := value.(type) {
+	case float64:
+		return number
+	case string:
+		parsed, err := strconv.ParseFloat(number, 64)
+		if err == nil {
+			return parsed
+		}
+	}
+	return 0
+}
+
+func lastHookTurnBilling(path string) *hookTurnBilling {
+	entries := hookTranscriptEntries(path)
+	seen := make(map[string]struct{})
+	var uuid *string
+	costMicros := 0
+	tokens := 0
+	for _, entry := range slices.Backward(entries) {
+		if entry.IsSidechain {
+			continue
+		}
+		if isHookUserPrompt(entry) {
+			break
+		}
+		if entry.Type != "assistant" {
+			continue
+		}
+		if uuid == nil {
+			uuid = entry.UUID
+		}
+		if entry.Message.ID == nil || entry.Message.Usage == nil {
+			continue
+		}
+		if _, ok := seen[*entry.Message.ID]; ok {
+			continue
+		}
+		seen[*entry.Message.ID] = struct{}{}
+		usage := hookUsage{
+			Model:       entry.Message.Model,
+			Input:       hookNumber(entry.Message.Usage.Input),
+			CacheCreate: hookNumber(entry.Message.Usage.CacheCreate),
+			CacheRead:   hookNumber(entry.Message.Usage.CacheRead),
+		}
+		cost, ok := turnInputCostMicros(usage)
+		if !ok {
+			continue
+		}
+		costMicros += cost
+		tokens += turnInputTokens(usage)
+	}
+	if uuid == nil || tokens == 0 {
+		return nil
+	}
+	return &hookTurnBilling{UUID: *uuid, CostMicros: costMicros, Tokens: tokens}
+}

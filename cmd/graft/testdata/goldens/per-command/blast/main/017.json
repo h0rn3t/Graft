@@ -1,0 +1,18 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh",
+    "--base",
+    "does-not-exist"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 1,
+  "stdout": "",
+  "stderr": "✗ base ref \"does-not-exist\" is not in this checkout.\n  In CI, fetch enough history for the merge base: actions/checkout with `fetch-depth: 0`.\n",
+  "files": {},
+  "checkFiles": true
+}

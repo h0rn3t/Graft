@@ -34,9 +34,8 @@ type LabelSource string
 
 // Label sources, best first.
 const (
-	LabelConcept LabelSource = "concept"
-	LabelNamed   LabelSource = "named"
-	LabelSymbol  LabelSource = "symbol"
+	LabelNamed  LabelSource = "named"
+	LabelSymbol LabelSource = "symbol"
 )
 
 // TestSignal says whether a diff brought the tests of an area along.
@@ -190,7 +189,7 @@ type mergedHit struct {
 }
 
 // Radius computes the blast radius of changed against wiring.
-func Radius(wiring graph.GraphV1, changed []*ChangedFile, basis string, depth int, index ModuleIndex) *Report {
+func Radius(wiring graph.GraphV1, changed []*ChangedFile, basis string, depth int) *Report {
 	fileNodes := make(map[string]graph.NodeV1)
 	for _, node := range wiring.Nodes {
 		if node.Kind == "file" {
@@ -261,8 +260,8 @@ func Radius(wiring graph.GraphV1, changed []*ChangedFile, basis string, depth in
 		report.Impacted = append(report.Impacted, merged[id].hit)
 		origins[id] = merged[id].from
 	}
-	report.Modules, report.TestModules = groupByModule(report.Impacted, changed, origins, index)
-	report.Areas = changedAreas(wiring, changed, seedPaths, seedNodes, index, report.Modules)
+	report.Modules, report.TestModules = groupByModule(report.Impacted, changed, origins)
+	report.Areas = changedAreas(wiring, changed, seedPaths, seedNodes, report.Modules)
 	return report
 }
 
@@ -277,7 +276,7 @@ type hubCandidate struct {
 	degree      int
 }
 
-func changedAreas(wiring graph.GraphV1, changed []*ChangedFile, seedPaths []string, seedNodes map[string][]graph.NodeV1, index ModuleIndex, modules []*ImpactedModule) []*ChangedArea {
+func changedAreas(wiring graph.GraphV1, changed []*ChangedFile, seedPaths []string, seedNodes map[string][]graph.NodeV1, modules []*ImpactedModule) []*ChangedArea {
 	compare := localeCompare()
 	changedTests := make(map[string]bool)
 	for _, file := range changed {
@@ -359,11 +358,7 @@ func changedAreas(wiring graph.GraphV1, changed []*ChangedFile, seedPaths []stri
 		for _, candidate := range candidates {
 			area.SeedNames = append(area.SeedNames, candidate.name)
 		}
-		if concept, ok := sharedConcept(area.Files, index); ok {
-			area.Label, area.LabelSource = concept, LabelConcept
-		} else {
-			area.Label = HubLabel(area.SeedNames, area.Key)
-		}
+		area.Label = HubLabel(area.SeedNames, area.Key)
 		sortCodeUnits(area.Files)
 		sortCodeUnits(area.TestFiles)
 		sortCodeUnits(area.ChangedTestFiles)
@@ -411,26 +406,6 @@ func boolRank(value bool) int {
 	return 0
 }
 
-// sharedConcept returns the concept claiming every path, or false when they disagree.
-func sharedConcept(paths []string, index ModuleIndex) (string, bool) {
-	var only string
-	claimed := false
-	for i, path := range paths {
-		concept, ok := index.ConceptOf(path)
-		if i == 0 {
-			only, claimed = concept, ok
-			continue
-		}
-		if ok != claimed || concept != only {
-			return "", false
-		}
-	}
-	if !claimed || only == "" {
-		return "", false
-	}
-	return ShortLabel(only), true
-}
-
 // HubLabel is the deterministic backstop label: the first non-empty name, or fallback.
 func HubLabel(names []string, fallback string) string {
 	for _, name := range names {
@@ -441,7 +416,7 @@ func HubLabel(names []string, fallback string) string {
 	return fallback
 }
 
-func groupByModule(impacted []Impacted, changed []*ChangedFile, origins map[string][]string, index ModuleIndex) ([]*ImpactedModule, []*ImpactedModule) {
+func groupByModule(impacted []Impacted, changed []*ChangedFile, origins map[string][]string) ([]*ImpactedModule, []*ImpactedModule) {
 	compare := localeCompare()
 	changedPaths := make(map[string]bool, len(changed))
 	for _, file := range changed {
@@ -453,10 +428,7 @@ func groupByModule(impacted []Impacted, changed []*ChangedFile, origins map[stri
 		if changedPaths[hit.Path] {
 			continue
 		}
-		key, ok := index.ConceptOf(hit.Path)
-		if !ok {
-			key = DirLabel(hit.Path)
-		}
+		key := DirLabel(hit.Path)
 		module := byKey[key]
 		if module == nil {
 			module = &ImpactedModule{Label: key, LabelSource: LabelSymbol, Key: key, Files: []string{}, Symbols: []Impacted{}, From: []string{}}
@@ -483,16 +455,12 @@ func groupByModule(impacted []Impacted, changed []*ChangedFile, origins map[stri
 		slices.SortStableFunc(module.Symbols, func(a, b Impacted) int {
 			return cmp.Or(a.Depth-b.Depth, compare(a.Path, b.Path))
 		})
-		if concept, ok := sharedConcept(module.Files, index); ok {
-			module.Label, module.LabelSource = concept, LabelConcept
-		} else {
-			names := make([]string, len(module.Symbols))
-			for i, symbol := range module.Symbols {
-				names[i] = symbol.Name
-			}
-			module.Label = HubLabel(names, module.Key)
-			module.LabelSource = LabelSymbol
+		names := make([]string, len(module.Symbols))
+		for i, symbol := range module.Symbols {
+			names[i] = symbol.Name
 		}
+		module.Label = HubLabel(names, module.Key)
+		module.LabelSource = LabelSymbol
 	}
 	bySize := func(a, b *ImpactedModule) int {
 		return cmp.Or(len(b.Symbols)-len(a.Symbols), compare(a.Label, b.Label))

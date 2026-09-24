@@ -251,7 +251,7 @@ func FormatInitEpilogue(graphBuilt bool, nodes, edges int, tty bool) string {
 	steps = append(steps,
 		step{label: "restart your agent", command: "a new session picks up graft automatically"},
 		step{label: "code as usual", command: "ask your agent to fix a bug or explain a flow —", extra: []string{"it now answers from the graph"}},
-		step{label: "explore by hand", command: `graft ask "where is auth handled?" · graft callers <fn> · graft viz`},
+		step{label: "explore by hand", command: `graft ask "where is auth handled?" · graft callers <fn>`},
 	)
 	labelWidth := 0
 	for i, item := range steps {

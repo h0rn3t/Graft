@@ -1,0 +1,34 @@
+{
+  "args": [
+    "_statusline"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "CLAUDE_CONFIG_DIR": "<HOME>/.claude",
+    "CLAUDE_PROJECT_DIR": "<REPO>",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "inputs": {
+    "repo/graft/.cache/session/status.json": "{\"lastQuery\":null,\"perAgentQuery\":{},\"graftReads\":0,\"sourceReads\":0,\"savedTokens\":100000,\"injectedPointers\":[],\"nudges\":0,\"inputCostMicros\":600000,\"inputTokensBilled\":1000000}",
+    "repo/graft/.cache/stats.json": "{\"nodeCount\":12,\"edgeCount\":34,\"languages\":[\"typescript\"],\"totalCount\":12,\"readyCount\":0,\"staleCount\":2,\"dirty\":true,\"syncing\":false,\"syncedAt\":null,\"lastFile\":\"auth.ts\"}"
+  },
+  "stdin": {
+    "session_id": "status",
+    "context_window": {
+      "used_percentage": 34.4
+    }
+  },
+  "status": 0,
+  "stdout": "\u001b[38;5;244m◤ \u001b[0m\u001b[38;2;84;111;255mgraft\u001b[0m\u001b[38;5;244m · \u001b[0m\u001b[38;5;251m12 nodes / 34 edges\u001b[0m\u001b[38;5;244m · \u001b[0m\u001b[38;2;224;165;68m⚠ 2 stale\u001b[0m\u001b[38;5;244m · \u001b[0m\u001b[38;2;84;111;255m~100,000 tok saved · ~$0.06\u001b[0m\n\u001b[38;5;244m▸ \u001b[0m\u001b[38;5;251mctx 34%\u001b[0m\u001b[38;5;244m · \u001b[0m\u001b[38;5;244mlast: \u001b[0m\u001b[38;5;251mauth.ts\u001b[0m",
+  "stderr": "",
+  "files": {
+    "repo/graft/.cache/session/status.json": "{\"lastQuery\":null,\"perAgentQuery\":{},\"graftReads\":0,\"sourceReads\":0,\"savedTokens\":100000,\"injectedPointers\":[],\"nudges\":0,\"inputCostMicros\":600000,\"inputTokensBilled\":1000000}",
+    "repo/graft/.cache/stats.json": "{\"nodeCount\":12,\"edgeCount\":34,\"languages\":[\"typescript\"],\"totalCount\":12,\"readyCount\":0,\"staleCount\":2,\"dirty\":true,\"syncing\":false,\"syncedAt\":null,\"lastFile\":\"auth.ts\"}"
+  },
+  "checkFiles": true
+}

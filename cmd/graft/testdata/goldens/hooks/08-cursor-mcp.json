@@ -1,0 +1,30 @@
+{
+  "args": [
+    "_hook",
+    "cursor-mcp"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "CLAUDE_CONFIG_DIR": "<HOME>/.claude",
+    "CLAUDE_PROJECT_DIR": "<REPO>",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "inputs": {},
+  "stdin": {
+    "conversation_id": "cursor-2",
+    "tool_name": "mcp__graft__graft_find_code",
+    "result_json": "{\"text\":\"[graft] tokens saved ≈ 1,200 — …\"}"
+  },
+  "status": 0,
+  "stdout": "",
+  "stderr": "",
+  "files": {
+    "repo/graft/.cache/session/cursor-2.json": "{\n  \"lastQuery\": null,\n  \"perAgentQuery\": {},\n  \"graftReads\": 1,\n  \"sourceReads\": 0,\n  \"savedTokens\": 1200,\n  \"injectedPointers\": [],\n  \"nudges\": 0,\n  \"turnUsedGraft\": true,\n  \"host\": \"cursor\"\n}"
+  },
+  "checkFiles": true
+}

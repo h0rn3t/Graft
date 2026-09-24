@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Breaking
+
+- **Go is the only implementation.** The CLI, MCP server, graph extraction, host hooks, statusline, upkeep, and telemetry now run entirely through the native Go binary. The TypeScript backend, JavaScript library exports, GitHub App, browser viewer, and TypeScript launcher fallback were removed.
+- **Deep meaning and visualization are gone.** `graft build --deep`, `-j/--concurrency`, `--allow-partial`, `graft viz`, and `graft blast --export-viz`/`--title` are rejected as unknown input. Structural `graft build` and `graft blast --name` remain.
+- **Language support is narrower.** Kotlin, Swift, PHP, R, Ruby, and the former breadth-tier languages were removed. The native extractor supports Go, Python, TypeScript, JavaScript, Java, Rust, PostgreSQL, C, and C++.
+
+### Changed
+
+- The npm package is launcher-only and has no runtime or development dependencies. Its scripts build the host-native Go binary and run plain-JS launcher, shim, and postinstall tests.
+- Claude Code, Codex, and Cursor hooks plus the Claude statusline now execute the native binary through plain-JS shims.
+- `docs/cli-contract.json` is Go-owned and checked against the full command tree and production environment inventory.
+
 ## 0.19.0
 
 ### Added

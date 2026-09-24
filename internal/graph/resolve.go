@@ -18,14 +18,12 @@ var (
 	importExtensions = []string{".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".py"}
 	cExtension       = regexp.MustCompile(`(?i)\.(c|h|cc|cpp|cxx|hpp|hh|hxx|inl|ipp|c\+\+|h\+\+)$`)
 	pyExtension      = regexp.MustCompile(`(?i)\.pyi?$`)
-	swiftExtension   = regexp.MustCompile(`(?i)\.swift$`)
 	importStripExt   = regexp.MustCompile(`\.(js|jsx|mjs|cjs|ts|tsx|py)$`)
 	// languageFamily groups languages whose symbols can reach each other; a
 	// cross-file name match may not cross a family boundary.
 	languageFamily = map[string]string{
 		"typescript": "typescript", "tsx": "typescript",
-		"java": "java", "kotlin": "java", "scala": "java", "clojure": "java",
-		"c": "c", "cpp": "c",
+		"java": "java", "c": "c", "cpp": "c",
 	}
 )
 
@@ -70,10 +68,8 @@ type resolveIndex struct {
 	goFilesByDir      map[string][]string
 	javaFilesBySuffix map[string][]string
 	cFilesBySuffix    map[string][]string
-	phpFilesBySuffix  map[string][]string
 	rustCrateRoots    []string
 	classParents      map[string][]string
-	classTraits       map[string][]string
 	goModules         []goModule
 }
 
@@ -83,8 +79,7 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) []Ed
 		byID: make(map[string]NodeV1, len(nodes)), globalName: make(map[string][]NodeV1),
 		perFileName: make(map[string]map[string][]NodeV1), ownerMethod: make(map[string][]NodeV1),
 		goFilesByDir: make(map[string][]string), javaFilesBySuffix: make(map[string][]string),
-		cFilesBySuffix: make(map[string][]string), phpFilesBySuffix: make(map[string][]string),
-		classParents: make(map[string][]string), classTraits: make(map[string][]string),
+		cFilesBySuffix: make(map[string][]string), classParents: make(map[string][]string),
 		goModules: goModules,
 	}
 	pushSuffixes := func(index map[string][]string, node NodeV1) {
@@ -106,9 +101,6 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) []Ed
 			}
 			if cExtension.MatchString(node.Path) {
 				pushSuffixes(ix.cFilesBySuffix, node)
-			}
-			if strings.HasSuffix(node.Path, ".php") {
-				pushSuffixes(ix.phpFilesBySuffix, node)
 			}
 			switch {
 			case node.Path == "lib.rs" || node.Path == "main.rs":
@@ -144,11 +136,8 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) []Ed
 		if !ok || source.Name == "" {
 			continue
 		}
-		switch {
-		case edge.relation == "extends":
+		if edge.relation == "extends" {
 			ix.classParents[source.Name] = append(ix.classParents[source.Name], edge.name)
-		case edge.relation == "implements" && strings.HasSuffix(edge.file, ".php"):
-			ix.classTraits[source.Name] = append(ix.classTraits[source.Name], edge.name)
 		}
 	}
 
@@ -197,8 +186,6 @@ func (ix *resolveIndex) resolveImportTarget(edge rawEdge) string {
 		return ix.resolveCInclude(edge.specifier, edge.file)
 	case strings.HasSuffix(edge.file, ".rs"):
 		return ix.resolveRustUse(edge.specifier, edge.file)
-	case strings.HasSuffix(edge.file, ".php"):
-		return resolvePHPUse(edge.specifier, ix.phpFilesBySuffix)
 	}
 	return ix.resolveImport(edge.specifier, edge.file)
 }
@@ -208,18 +195,11 @@ func (ix *resolveIndex) resolveReference(edge rawEdge, add func(string, string, 
 	switch {
 	case edge.specifier != "":
 		target := ix.resolveImport(edge.specifier, edge.file)
-		if strings.HasSuffix(edge.file, ".php") {
-			target = resolvePHPUse(edge.specifier, ix.phpFilesBySuffix)
-		}
 		if _, ok := ix.byID[target]; !ok {
 			return
 		}
 		if candidates := ix.perFileName[target][edge.name]; len(candidates) == 1 {
 			add(edge.source, candidates[0].ID, "references", "extracted")
-		}
-	case strings.HasSuffix(edge.file, ".php") && source.Origin == "ast":
-		if hit, ok := ix.resolveName(edge.name, edge.file, []Kind{"class", "interface", "trait", "enum"}); ok && hit.id != edge.source {
-			add(edge.source, hit.id, "references", hit.confidence)
 		}
 	case strings.HasSuffix(edge.file, ".java") && source.Origin == "ast":
 		hit, ok := ix.resolveName(edge.name, edge.file, []Kind{"interface"})
@@ -293,15 +273,12 @@ func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relat
 	if !ok && pyExtension.MatchString(edge.file) {
 		hit, ok = ix.resolveName(edge.name, edge.file, []Kind{"class"})
 	}
-	if !ok && swiftExtension.MatchString(edge.file) {
-		hit, ok = ix.resolveName(edge.name, edge.file, []Kind{"class", "struct", "enum"})
-	}
 	if ok {
 		add(edge.source, hit.id, "calls", hit.confidence)
 	}
 }
 
-// ownerFromMethodID derives an owner from a dotted id: `app.php#Loggable.log` → `Loggable`.
+// ownerFromMethodID derives an owner from a dotted id: `pkg/File#Type.method` → `Type`.
 func ownerFromMethodID(id string) string {
 	post := id
 	if parts := strings.Split(id, "#"); len(parts) > 1 {
@@ -382,16 +359,10 @@ func (ix *resolveIndex) resolveTypedMember(recvType, name, file string, argCount
 				if len(candidates) == 1 {
 					return memberHit(candidates[0], file)
 				}
-				if swiftExtension.MatchString(file) {
-					return resolved{ambiguous: true}
-				}
 				if index := slices.IndexFunc(candidates, func(c NodeV1) bool { return c.Path == file }); index >= 0 {
 					return resolved{id: candidates[index].ID, confidence: "extracted"}
 				}
 				return resolved{ambiguous: true}
-			}
-			if hit := ix.resolveTraitMember(owner, name, file, argCount); hit.ambiguous || hit.id != "" {
-				return hit
 			}
 		}
 		var next []string
@@ -414,22 +385,6 @@ func memberHit(candidate NodeV1, file string) resolved {
 		return resolved{id: candidate.ID, confidence: "extracted"}
 	}
 	return resolved{id: candidate.ID, confidence: "inferred"}
-}
-
-func (ix *resolveIndex) resolveTraitMember(owner, name, file string, argCount *int) resolved {
-	var matches []NodeV1
-	for _, trait := range ix.classTraits[owner] {
-		if all := ix.reachableMethods(trait+"."+name, file); len(all) > 0 {
-			matches = append(matches, narrowByArity(all, argCount)...)
-		}
-	}
-	switch len(matches) {
-	case 0:
-		return resolved{}
-	case 1:
-		return memberHit(matches[0], file)
-	}
-	return resolved{ambiguous: true}
 }
 
 // resolveImport maps a relative module specifier to an in-repo file id, or
@@ -506,25 +461,6 @@ func (ix *resolveIndex) resolveCInclude(specifier, file string) string {
 		return hits[0]
 	}
 	return specifier
-}
-
-func resolvePHPUse(fqn string, bySuffix map[string][]string) string {
-	var parts []string
-	for part := range strings.SplitSeq(fqn, "\\") {
-		if part != "" {
-			parts = append(parts, part)
-		}
-	}
-	for start := range parts {
-		hits := bySuffix[strings.Join(parts[start:], "/")+".php"]
-		if len(hits) == 1 {
-			return hits[0]
-		}
-		if len(hits) > 1 {
-			break
-		}
-	}
-	return fqn
 }
 
 func (ix *resolveIndex) resolveRustUse(specifier, file string) string {

@@ -1,0 +1,32 @@
+{
+  "args": [
+    "_statusline"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "CLAUDE_CONFIG_DIR": "<HOME>/.claude",
+    "CLAUDE_PROJECT_DIR": "<REPO>",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "inputs": {
+    "repo/graft/.cache/session/subagent.json": "{\"lastQuery\":null,\"perAgentQuery\":{\"Explore\":\"auth verification\"},\"graftReads\":0,\"sourceReads\":0,\"savedTokens\":0,\"injectedPointers\":[],\"nudges\":0}"
+  },
+  "stdin": {
+    "session_id": "subagent",
+    "agent": {
+      "name": "Explore"
+    }
+  },
+  "status": 0,
+  "stdout": "\u001b[38;5;244m◤ \u001b[0m\u001b[38;2;84;111;255mExplore\u001b[0m\u001b[38;5;244m · \u001b[0m\u001b[38;5;244mgraft: \u001b[0m\u001b[38;5;251mauth verification\u001b[0m",
+  "stderr": "",
+  "files": {
+    "repo/graft/.cache/session/subagent.json": "{\"lastQuery\":null,\"perAgentQuery\":{\"Explore\":\"auth verification\"},\"graftReads\":0,\"sourceReads\":0,\"savedTokens\":0,\"injectedPointers\":[],\"nudges\":0}"
+  },
+  "checkFiles": true
+}

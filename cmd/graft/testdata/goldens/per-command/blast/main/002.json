@@ -1,0 +1,16 @@
+{
+  "args": [
+    "blast",
+    "<REPO>",
+    "--no-refresh"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1"
+  },
+  "inputs": {},
+  "status": 0,
+  "stdout": "blast radius — working tree vs HEAD (depth 2)\n  changed: 1 file in 1 area, 1 seed symbol\n  impacted: 0 symbols in 0 areas\n\n✗ put — 1 changed file, 0/1 reached by a test\n\nno indexed dependents outside the changed files themselves\n\nwho to tag\n  Cara Coder — put · 1 commit, last 9mo ago\n",
+  "stderr": "",
+  "files": {},
+  "checkFiles": true
+}

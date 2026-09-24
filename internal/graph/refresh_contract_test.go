@@ -570,16 +570,14 @@ func TestAcquireGraphLockReclaimsStaleContract(t *testing.T) {
 	if err := os.Chtimes(lockPath, stale, stale); err != nil {
 		t.Fatalf("Chtimes(%q, %v) error = %v", lockPath, stale, err)
 	}
-	got, err := acquireGraphLock(cache)
+	got, err := AcquireLock(cache)
 	if err != nil {
-		t.Fatalf("acquireGraphLock(%q) error = %v, want nil", cache, err)
+		t.Fatalf("AcquireLock(%q) error = %v, want nil", cache, err)
 	}
 	if !got {
-		t.Fatalf("acquireGraphLock(%q) = false, want stale lock reclaimed", cache)
+		t.Fatalf("AcquireLock(%q) = false, want stale lock reclaimed", cache)
 	}
-	if err := os.Remove(lockPath); err != nil {
-		t.Fatalf("Remove(%q) after lock acquisition error = %v", lockPath, err)
-	}
+	ReleaseLock(cache)
 }
 
 func TestRefreshNoteContract(t *testing.T) {

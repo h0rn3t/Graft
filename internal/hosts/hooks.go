@@ -10,7 +10,7 @@ import (
 type Env struct {
 	// Home is the user's home directory.
 	Home string
-	// BakedDir is the installed package's dist/claude, the shims' first candidate.
+	// BakedDir is the installed package root, the shims' first candidate.
 	BakedDir string
 	// Launch is the MCP launch command decided for this run.
 	Launch Launch

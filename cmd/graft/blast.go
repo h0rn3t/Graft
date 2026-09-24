@@ -55,7 +55,7 @@ func runBlast(opts callersOptions, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	report := blast.Radius(*loaded, diff.Files, diff.Basis, depth, blast.LoadModuleIndex(contextDir))
+	report := blast.Radius(*loaded, diff.Files, diff.Basis, depth)
 	if opts.name {
 		note, err := blast.NameReport(context.Background(), *loaded, report, contextDir)
 		if err != nil {

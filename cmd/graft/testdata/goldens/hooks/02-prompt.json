@@ -1,0 +1,33 @@
+{
+  "args": [
+    "_hook",
+    "prompt"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "CLAUDE_CONFIG_DIR": "<HOME>/.claude",
+    "CLAUDE_PROJECT_DIR": "<REPO>",
+    "GRAFT_TEST_CLI": "<REPO>/ask-stub.cjs",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "inputs": {
+    "repo/ask-stub.cjs": "process.stdout.write(\"{\\\"query\\\":\\\"auth verification\\\",\\\"mode\\\":\\\"lexical\\\",\\\"coverage\\\":1,\\\"coverageStrong\\\":1,\\\"hits\\\":[{\\\"kind\\\":\\\"symbol\\\",\\\"title\\\":\\\"verify\\\",\\\"pointer\\\":\\\"src/auth.ts:L1-L4\\\",\\\"snippet\\\":\\\"function verify() {}\\\",\\\"score\\\":1}]}\");\n"
+  },
+  "stdin": {
+    "session_id": "prompt",
+    "prompt": "how does auth verification work"
+  },
+  "status": 0,
+  "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"UserPromptSubmit\",\"additionalContext\":\"[graft] starting points for this task: pull the code inline with `graft ask \\\"<what you need>\\\" --source`, trace impact with `graft callers <symbol>`, or search with `graft grep \\\"<literal>\\\"`:\\n 1. verify: src/auth.ts:L1-L4\\n    function verify() {}\"}}",
+  "stderr": "",
+  "files": {
+    "repo/ask-stub.cjs": "process.stdout.write(\"{\\\"query\\\":\\\"auth verification\\\",\\\"mode\\\":\\\"lexical\\\",\\\"coverage\\\":1,\\\"coverageStrong\\\":1,\\\"hits\\\":[{\\\"kind\\\":\\\"symbol\\\",\\\"title\\\":\\\"verify\\\",\\\"pointer\\\":\\\"src/auth.ts:L1-L4\\\",\\\"snippet\\\":\\\"function verify() {}\\\",\\\"score\\\":1}]}\");\n",
+    "repo/graft/.cache/session/prompt.json": "{\n  \"lastQuery\": \"how does auth verification work\",\n  \"perAgentQuery\": {},\n  \"graftReads\": 0,\n  \"sourceReads\": 0,\n  \"savedTokens\": 0,\n  \"injectedPointers\": [\n    \"src/auth.ts:L1-L4\"\n  ],\n  \"nudges\": 0\n}"
+  },
+  "checkFiles": true
+}

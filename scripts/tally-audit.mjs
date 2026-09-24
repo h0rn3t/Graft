@@ -3,9 +3,9 @@
  *
  *   node scripts/tally-audit.mjs [transcript-dir] [--json]
  *
- * `savedTokens` (src/claude/state.ts) counts what graft *computed* — every
- * `[graft] tokens saved ≈ N` footer the PostToolUse accumulator swept up. This
- * script measures the other half, offline and in full detail: of the turns that
+ * `savedTokens` counts what graft *computed* — every `[graft] tokens saved ≈ N`
+ * footer the PostToolUse accumulator swept up. This script measures the other
+ * half, offline and in full detail: of the turns that
  * used graft, how many closed with the one-line tally SKILL.md asks for, was the
  * number right, and did it name the call count.
  *

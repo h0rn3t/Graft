@@ -10,6 +10,37 @@ import (
 	"time"
 )
 
+func TestReconcileWiringRewritesLegacyShimAtCurrentVersion(t *testing.T) {
+	root := t.TempDir()
+	shim := filepath.Join(root, ".claude", "helpers", "graft-hooks.cjs")
+	if err := os.MkdirAll(filepath.Dir(shim), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(%q) error = %v, want nil", filepath.Dir(shim), err)
+	}
+	if err := os.WriteFile(shim, []byte("const { pathToFileURL } = require('url');\n"), 0o755); err != nil {
+		t.Fatalf("os.WriteFile(%q) error = %v, want nil", shim, err)
+	}
+	stamp := filepath.Join(root, "graft", ".cache", "wiring-stamp.json")
+	if err := os.MkdirAll(filepath.Dir(stamp), 0o755); err != nil {
+		t.Fatalf("os.MkdirAll(%q) error = %v, want nil", filepath.Dir(stamp), err)
+	}
+	if err := os.WriteFile(stamp, []byte(`{"version":"2.0.0","hosts":["claude"],"opts":{"global":false},"at":"old"}`), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(%q) error = %v, want nil", stamp, err)
+	}
+	writes := 0
+	got := ReconcileWiring(root, "", "2.0.0", time.Now(),
+		func(string) ([]string, error) { return []string{"claude"}, nil },
+		func(_ string, ids []string, options WiringOptions) error {
+			writes++
+			if !reflect.DeepEqual(ids, []string{"claude"}) || options.Global {
+				t.Errorf("rewrite args = (%v, %+v), want claude/no-global", ids, options)
+			}
+			return nil
+		})
+	if writes != 1 || got == "" {
+		t.Errorf("ReconcileWiring(legacy shim) = (%q, %d writes), want one refresh", got, writes)
+	}
+}
+
 func TestReconcileWiringContract(t *testing.T) {
 	now := time.Date(2026, 9, 22, 10, 20, 30, 456_000_000, time.FixedZone("UTC+3", 3*60*60))
 	defaultOptions := WiringOptions{Global: true, MCP: true, Hooks: true, Statusline: true}

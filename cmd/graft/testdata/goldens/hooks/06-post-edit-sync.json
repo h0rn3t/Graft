@@ -1,0 +1,40 @@
+{
+  "args": [
+    "_hook",
+    "post-edit-sync"
+  ],
+  "root": "<REPO>",
+  "env": {
+    "CLAUDE_CONFIG_DIR": "<HOME>/.claude",
+    "CLAUDE_PROJECT_DIR": "<REPO>",
+    "GRAFT_TEST_CLI": "<REPO>/check-stub.cjs",
+    "GRAFT_TEST_SYNC_RUN": "<REPO>/sync-stub.cjs",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "dirs": [
+    "home",
+    "repo"
+  ],
+  "inputs": {
+    "repo/check-stub.cjs": "process.stdout.write(\"{\\\"graph\\\":{\\\"changed\\\":[\\\"src/auth.ts\\\"],\\\"added\\\":[],\\\"removed\\\":[]}}\");\n",
+    "repo/graft/.graph/wiring.json": "{\"meta\":{\"nodeCount\":2,\"edgeCount\":0,\"languages\":[\"typescript\"]},\"nodes\":[{\"id\":\"src/auth.ts\",\"name\":\"auth.ts\",\"kind\":\"file\",\"path\":\"src/auth.ts\",\"span\":\"L1-L4\"},{\"id\":\"src/client.ts#call\",\"name\":\"call\",\"kind\":\"function\",\"path\":\"src/client.ts\",\"span\":\"L1-L1\"}],\"edges\":[]}",
+    "repo/sync-stub.cjs": "process.exit(0);\n"
+  },
+  "stdin": {
+    "tool_input": {
+      "file_path": "<REPO>/src/auth.ts"
+    }
+  },
+  "status": 0,
+  "stdout": "",
+  "stderr": "",
+  "files": {
+    "repo/check-stub.cjs": "process.stdout.write(\"{\\\"graph\\\":{\\\"changed\\\":[\\\"src/auth.ts\\\"],\\\"added\\\":[],\\\"removed\\\":[]}}\");\n",
+    "repo/graft/.cache/.sync.lock": "{\"pid\":<PID>,\"at\":\"<ISO>\"}",
+    "repo/graft/.cache/stats.json": "{\n  \"nodeCount\": 0,\n  \"edgeCount\": 0,\n  \"languages\": [],\n  \"totalCount\": 0,\n  \"readyCount\": 0,\n  \"staleCount\": 1,\n  \"dirty\": true,\n  \"syncing\": true,\n  \"syncedAt\": null,\n  \"lastFile\": \"auth.ts\"\n}",
+    "repo/graft/.graph/wiring.json": "{\"meta\":{\"nodeCount\":2,\"edgeCount\":0,\"languages\":[\"typescript\"]},\"nodes\":[{\"id\":\"src/auth.ts\",\"name\":\"auth.ts\",\"kind\":\"file\",\"path\":\"src/auth.ts\",\"span\":\"L1-L4\"},{\"id\":\"src/client.ts#call\",\"name\":\"call\",\"kind\":\"function\",\"path\":\"src/client.ts\",\"span\":\"L1-L1\"}],\"edges\":[]}",
+    "repo/sync-stub.cjs": "process.exit(0);\n"
+  },
+  "checkFiles": true
+}
