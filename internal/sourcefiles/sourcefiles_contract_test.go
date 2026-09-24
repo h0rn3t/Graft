@@ -20,6 +20,7 @@ func TestReadContract(t *testing.T) {
 	}{
 		{name: "empty input", data: nil, wantOK: true},
 		{name: "utf8", data: []byte("café"), want: "café", wantOK: true},
+		{name: "utf8 bom is kept", data: []byte("\xef\xbb\xbfcafé"), want: "\ufeffcafé", wantOK: true},
 		{name: "invalid utf8", data: []byte{0xff, 'a'}, want: "�a", wantOK: true},
 		{name: "utf8 invalid continuation subparts", data: []byte{0xe2, 0x82, 0xff}, want: "��", wantOK: true},
 		{name: "utf8 overlong sequence", data: []byte{0xe0, 0x80, 0x80}, want: "���", wantOK: true},

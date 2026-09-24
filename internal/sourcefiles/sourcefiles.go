@@ -2,10 +2,12 @@
 package sourcefiles
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -16,6 +18,8 @@ import (
 	"time"
 	"unicode/utf16"
 	"unicode/utf8"
+
+	"github.com/h0rn3t/Graft/internal/gitx"
 )
 
 const defaultMaxFileBytes int64 = 1_000_000
@@ -78,25 +82,25 @@ func Walk(root string, opts Options) ([]File, error) {
 		return nil, err
 	}
 	state := &walkState{topRoot: canonical, activeRoot: make(map[string]struct{})}
-	paths, ok, err := gitVisibleFiles(canonical, opts, state)
+	found, ok, err := gitVisibleFiles(canonical, opts, state)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
-		paths, err = walkFilesystem(canonical, opts.IncludeDirs, opts.MaxFileBytes)
+		found, err = walkFilesystem(canonical, opts.IncludeDirs, opts.MaxFileBytes)
 		if err != nil {
 			return nil, fmt.Errorf("walk source tree: %w", err)
 		}
 	}
 	if requested != canonical {
-		remapped := make([]string, 0, len(paths))
-		for _, path := range paths {
-			rel, err := filepath.Rel(canonical, path)
+		remapped := make([]sourceFile, 0, len(found))
+		for _, file := range found {
+			rel, err := filepath.Rel(canonical, file.path)
 			if err == nil && rel != "." && filepath.IsLocal(rel) {
-				remapped = append(remapped, filepath.Join(requested, rel))
+				remapped = append(remapped, sourceFile{path: filepath.Join(requested, rel), info: file.info})
 			}
 		}
-		paths = remapped
+		found = remapped
 	}
 
 	outDir := opts.OutDir
@@ -124,13 +128,9 @@ func Walk(root string, opts Options) ([]File, error) {
 	for index, dir := range opts.OnlyDirs {
 		onlyDirs[index] = strings.ReplaceAll(dir, "\\", "/")
 	}
-	maxFileBytes := opts.MaxFileBytes
-	if maxFileBytes <= 0 {
-		maxFileBytes = defaultMaxFileBytes
-	}
-
-	files := make([]File, 0, len(paths))
-	for _, path := range paths {
+	files := make([]File, 0, len(found))
+	for _, file := range found {
+		path := file.path
 		if outDir != "" {
 			outRel, err := filepath.Rel(outDir, path)
 			if err == nil && filepath.IsLocal(outRel) {
@@ -155,15 +155,11 @@ func Walk(root string, opts Options) ([]File, error) {
 				continue
 			}
 		}
-		info, err := os.Lstat(path)
-		if err != nil || !info.Mode().IsRegular() || info.Size() > maxFileBytes {
-			continue
-		}
-		modified := info.ModTime()
+		modified := file.info.ModTime()
 		files = append(files, File{
 			Abs:  path,
 			Rel:  rel,
-			Size: info.Size(),
+			Size: file.info.Size(),
 			// sec*1e3 + nsec/1e6 rounded per operation, as Node computes mtimeMs;
 			// the explicit conversion keeps the product from fusing into an FMA.
 			MTimeMS: float64(float64(modified.Unix())*float64(time.Second/time.Millisecond)) +
@@ -192,6 +188,9 @@ func Read(path string) (text string, ok bool, err error) {
 			units[index] = binary.LittleEndian.Uint16(data[index*2:])
 		}
 		return string(utf16.Decode(units)), true, nil
+	}
+	if utf8.Valid(data) {
+		return string(data), true, nil
 	}
 	decoded := make([]byte, 0, len(data))
 	for len(data) > 0 {
@@ -256,10 +255,42 @@ func canonicalWalkRoot(dir string) (string, error) {
 	return canonical, nil
 }
 
-func gitVisibleFiles(root string, opts Options, state *walkState) ([]string, bool, error) {
+// sourceFile is a listed file with the Lstat taken when it was listed.
+type sourceFile struct {
+	path string
+	info fs.FileInfo
+}
+
+// gitTimeout bounds one git listing, so a wedged git cannot hang a build.
+const gitTimeout = 2 * time.Minute
+
+// gitListFiles runs git ls-files in root. ok is false when git is not
+// installed or root is in no git work tree, and the caller walks the
+// filesystem instead; any other git failure (dubious ownership, a corrupt
+// index, a git too old for the flags) is returned, since a walk would
+// silently ignore .gitignore.
+func gitListFiles(root string, args ...string) (string, bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+	defer cancel()
+	output, err := gitx.Run(ctx, root, append([]string{"ls-files"}, args...)...)
+	if err == nil {
+		return output, true, nil
+	}
+	if errors.Is(err, exec.ErrNotFound) {
+		return "", false, nil
+	}
+	// safe.directory given on the command line is trusted, so a work tree
+	// that only ownership keeps git out of still answers true here.
+	inside, probeErr := gitx.Run(ctx, root, "-c", "safe.directory=*", "rev-parse", "--is-inside-work-tree")
+	if probeErr != nil || strings.TrimSpace(inside) != "true" {
+		return "", false, nil
+	}
+	return "", false, fmt.Errorf("list files in %s: %w", root, err)
+}
+
+func gitVisibleFiles(root string, opts Options, state *walkState) ([]sourceFile, bool, error) {
 	if !opts.FollowSubmodules && !opts.FollowNestedRepos {
-		files, ok := gitVisibleFilesShallow(root, opts.IncludeDirs, opts.MaxFileBytes)
-		return files, ok, nil
+		return gitVisibleFilesShallow(root, opts.IncludeDirs, opts.MaxFileBytes)
 	}
 	rootKey := root
 	if filepath.VolumeName(rootKey) != "" {
@@ -271,10 +302,9 @@ func gitVisibleFiles(root string, opts Options, state *walkState) ([]string, boo
 	state.activeRoot[rootKey] = struct{}{}
 	defer delete(state.activeRoot, rootKey)
 
-	command := exec.Command("git", "-C", root, "ls-files", "-t", "--stage", "--cached", "--others", "--exclude-standard", "-z", "--")
-	output, err := command.Output()
-	if err != nil {
-		return nil, false, nil
+	output, ok, err := gitListFiles(root, "-t", "--stage", "--cached", "--others", "--exclude-standard", "-z", "--")
+	if !ok {
+		return nil, false, err
 	}
 	type gitEntry struct {
 		gitlink bool
@@ -284,7 +314,7 @@ func gitVisibleFiles(root string, opts Options, state *walkState) ([]string, boo
 	order := make([]string, 0)
 	entries := make(map[string]gitEntry)
 	includes := stringSet(opts.IncludeDirs)
-	for record := range strings.SplitSeq(string(output), "\x00") {
+	for record := range strings.SplitSeq(output, "\x00") {
 		if len(record) < 2 || record[1] != ' ' {
 			continue
 		}
@@ -314,12 +344,12 @@ func gitVisibleFiles(root string, opts Options, state *walkState) ([]string, boo
 		entries[rel] = gitEntry{gitlink: entry.gitlink || prior.gitlink, nested: entry.nested || prior.nested}
 	}
 
-	files := make([]string, 0, len(entries))
+	files := make([]sourceFile, 0, len(entries))
 	added := make(map[string]struct{}, len(entries))
-	add := func(path string) {
-		if _, dup := added[path]; !dup {
-			added[path] = struct{}{}
-			files = append(files, path)
+	add := func(file sourceFile) {
+		if _, dup := added[file.path]; !dup {
+			added[file.path] = struct{}{}
+			files = append(files, file)
 		}
 	}
 	for _, rel := range order {
@@ -347,22 +377,21 @@ func gitVisibleFiles(root string, opts Options, state *walkState) ([]string, boo
 			}
 			continue
 		}
-		if isSourceFile(abs, opts.MaxFileBytes) {
-			add(abs)
+		if info, ok := sourceInfo(abs, opts.MaxFileBytes); ok {
+			add(sourceFile{path: abs, info: info})
 		}
 	}
 	return files, true, nil
 }
 
-func gitVisibleFilesShallow(root string, includeDirs []string, maxFileBytes int64) ([]string, bool) {
-	command := exec.Command("git", "-C", root, "ls-files", "--cached", "--others", "--exclude-standard", "-z", "--")
-	output, err := command.Output()
-	if err != nil {
-		return nil, false
+func gitVisibleFilesShallow(root string, includeDirs []string, maxFileBytes int64) ([]sourceFile, bool, error) {
+	output, ok, err := gitListFiles(root, "--cached", "--others", "--exclude-standard", "-z", "--")
+	if !ok {
+		return nil, false, err
 	}
 	includes := stringSet(includeDirs)
-	files := make([]string, 0)
-	for rel := range strings.SplitSeq(string(output), "\x00") {
+	files := make([]sourceFile, 0)
+	for rel := range strings.SplitSeq(output, "\x00") {
 		if rel == "" || !filepath.IsLocal(filepath.FromSlash(rel)) {
 			continue
 		}
@@ -370,14 +399,16 @@ func gitVisibleFilesShallow(root string, includeDirs []string, maxFileBytes int6
 			continue
 		}
 		path := filepath.Join(root, filepath.FromSlash(rel))
-		if isSourceFile(path, maxFileBytes) {
-			files = append(files, path)
+		if info, ok := sourceInfo(path, maxFileBytes); ok {
+			files = append(files, sourceFile{path: path, info: info})
 		}
 	}
-	return files, true
+	return files, true, nil
 }
 
-func walkFilesystem(root string, includeDirs []string, maxFileBytes int64) ([]string, error) {
+// walkFilesystem lists source files under root in sorted order. A directory
+// below root that cannot be read is skipped rather than failing the walk.
+func walkFilesystem(root string, includeDirs []string, maxFileBytes int64) ([]sourceFile, error) {
 	includes := stringSet(includeDirs)
 	if maxFileBytes <= 0 {
 		maxFileBytes = defaultMaxFileBytes
@@ -389,10 +420,16 @@ func walkFilesystem(root string, includeDirs []string, maxFileBytes int64) ([]st
 	if !info.IsDir() {
 		return nil, fmt.Errorf("%q is not a directory", root)
 	}
-	files := make([]string, 0)
+	files := make([]sourceFile, 0)
 	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
-			return walkErr
+			if path == root {
+				return walkErr
+			}
+			if entry != nil && entry.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
 		}
 		if path != root && entry.IsDir() {
 			if shouldSkipDir(entry.Name(), includes) {
@@ -400,20 +437,25 @@ func walkFilesystem(root string, includeDirs []string, maxFileBytes int64) ([]st
 			}
 			return nil
 		}
-		if path != root && !entry.IsDir() && !shouldSkipDir(entry.Name(), includes) && isSourceFile(path, maxFileBytes) {
-			files = append(files, path)
+		if path == root || entry.IsDir() || shouldSkipDir(entry.Name(), includes) {
+			return nil
+		}
+		if info, ok := sourceInfo(path, maxFileBytes); ok {
+			files = append(files, sourceFile{path: path, info: info})
 		}
 		return nil
 	})
 	return files, err
 }
 
-func isSourceFile(path string, maxFileBytes int64) bool {
+// sourceInfo is the one Lstat a listed file gets: ok when it is a regular
+// file within the size limit.
+func sourceInfo(path string, maxFileBytes int64) (fs.FileInfo, bool) {
 	if maxFileBytes <= 0 {
 		maxFileBytes = defaultMaxFileBytes
 	}
 	info, err := os.Lstat(path)
-	return err == nil && info.Mode().IsRegular() && info.Size() <= maxFileBytes
+	return info, err == nil && info.Mode().IsRegular() && info.Size() <= maxFileBytes
 }
 
 func skippedPath(path, root string, includes map[string]struct{}) bool {
