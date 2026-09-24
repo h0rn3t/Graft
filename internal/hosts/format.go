@@ -208,14 +208,23 @@ func FormatRetractions(retractions []Retraction, apply bool) string {
 	return strings.TrimPrefix(strings.Join(lines, "\n"), "\n")
 }
 
+// wordmark is the gopher with the graft lettering beside it.
 var wordmark = []string{
-	"     .---.         __ _",
-	"  .-( O O )-. __ _ _ __ __ _ / _| |_",
-	" (    ^    ) / _` | '__/ _` | |_| __|",
-	"  \\  |_|_|  / | (_| | | | (_| |  _| |_",
-	"  /|     |\\  \\__, |_|  \\__,_|_|  \\__|",
-	" (_|_____|_) |___/",
+	"         ,_---~~~~~----._",
+	"  _,,_,*^____      _____``*g*\\\"*,",
+	" / __/ /'     ^.  /      \\ ^@q   f",
+	"[  @f | @))    |  | @))   l  0 _/                      __ _",
+	" \\`/   \\~____ / __ \\_____/    \\        __ _ _ __ __ _ / _| |_",
+	"  |           _l__l_           I      / _` | '__/ _` | |_| __|",
+	"  }          [______]           I    | (_| | | | (_| |  _| |_",
+	"  ]            | | |            |     \\__, |_|  \\__,_|_|  \\__|",
+	"  ]             ~ ~             |     |___/",
+	"  |                            |",
+	"   |                           |",
 }
+
+// wordmarkStatsLine is the wordmark line that carries the graph stats.
+const wordmarkStatsLine = 7
 
 // Grouped renders an integer with en-US thousands separators.
 func Grouped(value int) string {
@@ -244,7 +253,7 @@ func FormatInitEpilogue(graphBuilt bool, nodes, edges int, tty bool) string {
 		if tty {
 			stats = muted(stats)
 		}
-		mark[4] += stats
+		mark[wordmarkStatsLine] += stats
 	}
 	type step struct {
 		label, command string
