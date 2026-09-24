@@ -2,224 +2,211 @@
 
 <img src="./a328474a-ba6a-42b1-9746-a1358d0a449d.png" alt="Graft" width="320" />
 
-### Native Go context for Claude Code, Cursor, Codex, Gemini, and every coding agent
+[English](README.en.md) · **Українська**
 
-<p><strong>Build a deterministic map of your codebase locally. Find the right code with less searching, reading, and token spend.</strong></p>
+### Нативний Go-контекст для Claude Code, Cursor, Codex, Gemini та будь-якого агента для програмування
+
+<p><strong>Будуйте детерміновану карту кодової бази локально. Знаходьте потрібний код з меншою кількістю пошуків, читання файлів і витрачених токенів.</strong></p>
 
 <p>
   <img src="https://img.shields.io/badge/Go-1.27-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.27" />
 </p>
 
-### Up to **4× cheaper** and **3× faster**, with better or no loss of correctness
+### До **4× дешевше** і **3× швидше** — з кращою або такою ж точністю
 
-| Metric | Cold Claude Code | Claude Code with graft |
+| Метрика | Claude Code без graft | Claude Code з graft |
 |---|---|---|
-| Tool-call reduction | Baseline | **+46%** |
-| Token savings | Baseline | **+42%** |
-| Time savings | Baseline | **+60%** |
-| Correctness | 54% | **66% (+12 pts)** |
+| Менше викликів інструментів | Базовий рівень | **+46%** |
+| Економія токенів | Базовий рівень | **+42%** |
+| Економія часу | Базовий рівень | **+60%** |
+| Точність | 54% | **66% (+12 п.п.)** |
 
 </div>
 
 <p align="center">
-  <b>This works beyond code too.</b><br/>
-  A living skill file that learns from every task and gets sharper the more your team works.
+  <b>Це працює не лише з кодом.</b><br/>
+  Живий файл навичок, який вчиться на кожній задачі й стає точнішим, що більше працює ваша команда.
 </p>
 
 <p align="center">
-  <img src="assets/graft-comparison-demo.gif" alt="Side-by-side comparison of a coding agent working with and without graft" width="820"/>
+  <img src="assets/graft-comparison-demo.gif" alt="Порівняння роботи агента з graft і без нього" width="820"/>
 </p>
 
 ---
 
-## Contents
+## Зміст
 
-- [Installation and quick start](#installation-and-quick-start)
-- [The problem](#the-problem)
-- [What Graft does](#what-graft-does)
-- [Benchmark](#benchmark)
+- [Встановлення і швидкий старт](#встановлення-і-швидкий-старт)
+- [Проблема](#проблема)
+- [Що робить Graft](#що-робить-graft)
+- [Бенчмарк](#бенчмарк)
 - [SWE-bench Verified](#swe-bench-verified)
-- [How the graph gets built](#how-the-graph-gets-built)
-- [Supported languages](#supported-languages)
-- [What's in the graph](#whats-in-the-graph)
-- [What runs where](#what-runs-where)
-- [Agent integration](#agent-integration) — [MCP server](#mcp-server) · [Claude Code](#claude-code)
+- [Як будується граф](#як-будується-граф)
+- [Підтримувані мови](#підтримувані-мови)
+- [Що міститься в графі](#що-міститься-в-графі)
+- [Що де виконується](#що-де-виконується)
+- [Інтеграція з агентами](#інтеграція-з-агентами) — [MCP-сервер](#mcp-сервер) · [Claude Code](#claude-code)
 - [CLI](#cli)
-- [Search & orient](#search--orient-graft-grep--graft-map) (`graft grep` / `graft map`)
-- [Monorepos, submodules & multi-repo folders](#monorepos-submodules--multi-repo-folders)
-- [Tested on your popular repos](#tested-on-your-popular-repos)
-- [Development](#development)
-- [Native Go architecture](#native-go-architecture)
-- [License](#license)
+- [Пошук і орієнтування](#пошук-і-орієнтування-graft-grep--graft-map) (`graft grep` / `graft map`)
+- [Монорепозиторії, сабмодулі та папки з кількома репозиторіями](#монорепозиторії-сабмодулі-та-папки-з-кількома-репозиторіями)
+- [Перевірено на популярних репозиторіях](#перевірено-на-популярних-репозиторіях)
+- [Розробка](#розробка)
+- [Архітектура на Go](#архітектура-на-go)
+- [Ліцензія](#ліцензія)
 
 ---
 
-## Installation and quick start
+## Встановлення і швидкий старт
 
-Graft is a native Go application. The recommended installation does not require Node.js.
+Graft — це один нативний Go-бінарник. Node.js потрібен лише для запуску невеликих шимів хуків і statusline, які `graft init` записує для Claude Code, Codex і Cursor.
 
-### Install with Go
+### Встановлення через Go
 
-Requirements: **Go 1.27 or newer** and a working C toolchain, because the Tree-sitter bindings use cgo. Make sure `$(go env GOPATH)/bin` is on your `PATH`.
+Вимоги: **Go 1.27 або новіший** і робочий C-тулчейн, бо прив'язки Tree-sitter використовують cgo. Переконайтеся, що `$(go env GOPATH)/bin` є у вашому `PATH`.
 
 ```bash
 go install github.com/h0rn3t/Graft/cmd/graft@latest
 graft init
 ```
 
-`graft init` asks which coding agents to wire, builds the local graph, and adds the selected agent instructions, MCP entry, hooks, and statusline where supported. It requires no API key: the full structural workflow is local and deterministic.
+`graft init` питає, яких агентів підключити, будує локальний граф і додає інструкції для вибраних агентів, запис MCP, хуки та statusline там, де це підтримується. API-ключ не потрібен: увесь структурний робочий процес локальний і детермінований.
 
-Nothing is written until you choose an agent. Preview the plan with:
+Поки ви не виберете агента, нічого не записується. Переглянути план можна так:
 
 ```bash
 graft init --dry-run
 ```
 
-You can also wire a specific host without a prompt:
+Також можна підключити конкретного агента без запитання:
 
 ```bash
 graft init --agents claude
 ```
 
-`graft build` adds `graft/` to `.gitignore` automatically. The graph is a regenerable local cache, while the small agent wiring created by `init` is what belongs in version control. For Claude Code, for example:
+`graft build` автоматично додає `graft/` у `.gitignore`. Граф — це локальний кеш, який можна перегенерувати, а у систему контролю версій варто класти лише невеликі файли підключення, створені `init`. Наприклад, для Claude Code:
 
 ```bash
 git add .claude .mcp.json .gitignore
 git commit -m "wire in graft"
 ```
 
-Each teammate generates their own local graph with `graft build` or `graft init`.
+Кожен учасник команди генерує власний локальний граф через `graft build` або `graft init`.
 
-To update a Go installation, run the same `go install ...@latest` command.
+Щоб оновити встановлення, запустіть ту саму команду `go install ...@latest`.
 
-### Install the latest `main` with Go
+### Встановлення останньої версії `main` через Go
 
-`@latest` installs the newest tagged release. To run the tip of `main` instead, fetch it straight from GitHub; `GOPROXY=direct` bypasses the module proxy cache, so you get the commit that was just pushed:
+`@latest` встановлює найновіший тегований реліз. Щоб запустити останній коміт `main`, завантажте його напряму з GitHub; `GOPROXY=direct` оминає кеш проксі модулів, тож ви отримаєте щойно запушений коміт:
 
 ```bash
 GOPROXY=direct go install github.com/h0rn3t/Graft/cmd/graft@main
 graft init
 ```
 
-### npm distribution (alternative)
-
-If you prefer the prebuilt npm package, it still runs the same native Go binary:
-
-```bash
-npm install -g @nanonets/graft
-graft init
-```
-
-Node.js 20 or newer is required only by this npm launcher. A one-off run is also available:
-
-```bash
-npx -y @nanonets/graft@latest init
-```
-
 ---
 
-## The problem
+## Проблема
 
-Every task, your coding agent starts blind. Before it changes anything, it re-explores the repo: grep a term, open a file, follow an import, back out, try again. It is rebuilding a picture of a codebase it mapped an hour ago and threw away. That rediscovery burns most of a run's tool calls, tokens, and latency, and it is pure overhead:
+На кожній задачі агент починає наосліп. Перш ніж щось змінити, він заново досліджує репозиторій: шукає термін через grep, відкриває файл, іде за імпортом, повертається назад і пробує знову. Він відбудовує картину кодової бази, яку вже складав годину тому й викинув. Це повторне дослідження з'їдає більшість викликів інструментів, токенів і часу запуску, і все це чисті накладні витрати:
 
-- **Repeated.** Every task pays the exploration cost again, from zero.
-- **Discarded.** Whatever the agent figured out dies with the session.
-- **Unshared.** The next teammate, and their agent, start from scratch too.
+- **Повторюється.** Кожна задача знову платить за дослідження з нуля.
+- **Губиться.** Усе, що агент з'ясував, зникає разом із сесією.
+- **Не передається.** Наступний колега та його агент теж починають з нуля.
 
-Humans onboard to a codebase once. Agents onboard every single time.
+Люди знайомляться з кодовою базою один раз. Агенти — щоразу.
 
 <p align="center">
-  <img src="assets/graft-site-act-demo.gif" alt="A no-map agent's exploration trail wandering file to file before it finds what it needs" width="820"/>
+  <img src="assets/graft-site-act-demo.gif" alt="Агент без карти блукає від файлу до файлу, перш ніж знайти потрібне" width="820"/>
 </p>
 
 ---
 
-## What Graft does
+## Що робить Graft
 
-Graft builds a deterministic structural map of your codebase once and writes it into your repo as a regenerable local cache.
+Graft один раз будує детерміновану структурну карту кодової бази і записує її у репозиторій як локальний кеш, який можна перегенерувати.
 
-- **Symbols and real wiring.** Tree-sitter extracts functions, classes, types, imports, calls, and inheritance; Graft resolves them into an exact file-and-edge graph.
-- **A local cache, not a committed artifact.** `graft build` writes `graft/` and adds it to `.gitignore` — it can be deleted and regenerated at any time. What you commit is the small wiring `graft init` adds to your agent configuration.
-- **Always fresh, automatically.** Query commands refresh the structural graph against the working tree before answering, so uncommitted edits are included. `graft check` reports the remaining drift without changing files.
-- **No model required.** `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, and `blast` are local and deterministic.
+- **Символи та реальні зв'язки.** Tree-sitter витягує функції, класи, типи, імпорти, виклики й наслідування; Graft зводить їх у точний граф файлів і ребер.
+- **Локальний кеш, а не закомічений артефакт.** `graft build` записує `graft/` і додає його в `.gitignore` — його можна будь-коли видалити й перегенерувати. Комітите ви лише невеликі файли підключення, які `graft init` додає до конфігурації агента.
+- **Завжди актуальний, автоматично.** Команди-запити перед відповіддю оновлюють структурний граф відносно робочого дерева, тож незакомічені правки теж враховуються. `graft check` показує розбіжність, що залишилася, не змінюючи файлів.
+- **Модель не потрібна.** `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map` і `blast` працюють локально й детерміновано.
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="assets/graft-cold-vs-graft-dark.png">
-    <img src="assets/graft-cold-vs-graft.png" alt="The same task, 'fix the auth bug', run two ways. A cold Claude Code session re-reads the repo and wanders file to file; Claude Code + graft loads its map once and rides the hooks to one clean pass. With Graft: 46% fewer tool calls, 42% fewer tokens, 60% less time, +22% more SWE-bench instances resolved." width="880"/>
+    <img src="assets/graft-cold-vs-graft.png" alt="Та сама задача, «виправ баг в авторизації», виконана двома способами. Сесія Claude Code без graft перечитує репозиторій і блукає між файлами; Claude Code з graft один раз завантажує карту і завдяки хукам проходить задачу чисто. З Graft: на 46% менше викликів інструментів, на 42% менше токенів, на 60% менше часу, на 22% більше розв'язаних задач SWE-bench." width="880"/>
   </picture>
 </p>
 
 ---
 
-## Benchmark
+## Бенчмарк
 
-An agent that reads the graph should be cheaper and faster without getting more answers wrong. That's the whole claim, so we measured it instead of asserting it.
+Агент, який читає граф, має бути дешевшим і швидшим, не помиляючись частіше. У цьому вся суть, тож ми це виміряли, а не просто стверджуємо.
 
-The harness ran three variants of the same Claude Sonnet 5 agent with the same file tools: **cold** (explores from zero), **Graft** (a `graft ask --source` bundle pushed up front), and **pull** (graft_find_code/graft_file_api tools, nothing injected — context paid for only when asked). An Opus 4.8 judge scored correctness with a required-keyword floor, so a fast-but-wrong answer couldn't win by being fast. Cost is cache-aware: reads ≈0.1×, writes 1.25×, the billing model agents actually run under.
+Тестовий стенд запускав три варіанти того самого агента Claude Sonnet 5 з однаковими файловими інструментами: **cold** (досліджує з нуля), **Graft** (пакет `graft ask --source`, переданий наперед) і **pull** (інструменти graft_find_code/graft_file_api, нічого не вставляється заздалегідь — за контекст платимо лише тоді, коли його запитують). Суддя Opus 4.8 оцінював точність з обов'язковим мінімумом ключових слів, щоб швидка, але хибна відповідь не могла виграти лише завдяки швидкості. Вартість рахується з урахуванням кешу: читання ≈0.1×, запис 1.25× — саме за такою моделлю тарифікації реально працюють агенти.
 
-162 runs, two repos (graft itself and a real Node/Express auth service), 3 trials each, tasks split between single-file and multi-file questions.
+162 запуски, два репозиторії (сам graft і реальний сервіс авторизації на Node/Express), по 3 спроби, задачі розділені на однофайлові й багатофайлові питання.
 
-| Metric (mean/task) | Cold Claude Code | Claude Code with graft |
+| Метрика (середнє на задачу) | Claude Code без graft | Claude Code з graft |
 |---|---|---|
-| Cost savings ($) | 0.0429 | **0.0292 (+32%)** |
-| Token savings | 8,070 | **4,650 (+42%)** |
-| Tool-call savings | 4.2 | **2.3 (+46%)** |
-| Latency savings (s) | 39.8 | **15.8 (+60%)** |
-| Correctness | 93% | 93% (equal) |
+| Економія коштів ($) | 0.0429 | **0.0292 (+32%)** |
+| Економія токенів | 8,070 | **4,650 (+42%)** |
+| Економія викликів інструментів | 4.2 | **2.3 (+46%)** |
+| Економія затримки (с) | 39.8 | **15.8 (+60%)** |
+| Точність | 93% | 93% (однаково) |
 
-Graft never answered worse than cold, on any corpus. The pull variant gave up most of that speed for something bigger: correctness jumped to 98%, +5 points over cold, the strongest single result in the sweep. Push when speed is what you need; pull when being right matters more.
+Graft жодного разу не відповів гірше, ніж cold, на жодному корпусі. Варіант pull віддав більшу частину цієї швидкості заради важливішого: точність зросла до 98%, на 5 пунктів вище за cold — найсильніший окремий результат у серії. Використовуйте push, коли потрібна швидкість; pull — коли важливіше бути правим.
 
 ---
 
 ## SWE-bench Verified
 
-The sweep above is our harness measuring our mechanism. So we ran the industry-standard one too — **SWE-bench Verified**, real GitHub issues from real repos, graded by the official `swebench` harness. No judge model, no similarity score: your patch is applied, the maintainers' own tests are run, and you either flip the failing test without breaking the passing ones or you don't.
+Серія вище — це наш стенд, що вимірює наш механізм. Тож ми запустили й галузевий стандарт — **SWE-bench Verified**: реальні GitHub-issue з реальних репозиторіїв, оцінені офіційним харнесом `swebench`. Жодної моделі-судді, жодної оцінки схожості: ваш патч застосовується, запускаються тести самих мейнтейнерів, і ви або виправляєте тест, що падав, не зламавши тих, що проходили, або ні.
 
-**50 instances**, same model on both arms — **Claude Sonnet 5** — same Docker images, same turn limits. The only difference is whether graft is wired in.
+**50 задач**, та сама модель в обох гілках — **Claude Sonnet 5** — ті самі Docker-образи, ті самі ліміти ходів. Єдина різниця — чи підключено graft.
 
-| Correctness & efficiency | Cold Claude Code | Claude Code with graft | Improvement |
+| Точність і ефективність | Claude Code без graft | Claude Code з graft | Покращення |
 |---|---|---|---|
-| Correctness | 27 / 50 (54%) | **33 / 50 (66%)** | **+12 pts** |
-| Token savings | 142.0M | **109.4M** | **+23%** |
-| Cost savings | $52.34 | **$42.43** | **+19%** |
-| Tool-call savings | 1,370 | **1,031** | **+25%** |
-| API-request savings | 2,455 | **1,875** | **+24%** |
-| Wall-clock savings | 13,094s | **8,922s** | **+32%** |
+| Точність | 27 / 50 (54%) | **33 / 50 (66%)** | **+12 п.п.** |
+| Економія токенів | 142.0M | **109.4M** | **+23%** |
+| Економія коштів | $52.34 | **$42.43** | **+19%** |
+| Економія викликів інструментів | 1,370 | **1,031** | **+25%** |
+| Економія API-запитів | 2,455 | **1,875** | **+24%** |
+| Економія реального часу | 13,094s | **8,922s** | **+32%** |
 
-graft resolved **33 of 50 instances** against Cold Claude Code's 27 — and got there with 25% fewer tool calls, 23% fewer tokens, and 32% less wall-clock time. Every correctness win has the same shape: the baseline patches one file and misses its siblings. On `django-11532` it patched 1 of the 5 files the fix requires and broke 18 previously-passing tests, twice over. On `django-16263` it patched 1 of 4 and scored 102 / 103. graft found the rest — and on `django-16263` did it in half the tokens and half the time.
+graft розв'язав **33 з 50 задач** проти 27 у Claude Code без graft — і зробив це з на 25% меншою кількістю викликів інструментів, на 23% меншою кількістю токенів і на 32% меншим реальним часом. Кожен виграш у точності має однакову форму: базовий варіант патчить один файл і пропускає суміжні. На `django-11532` він виправив 1 з 5 файлів, яких потребує фікс, і зламав 18 тестів, що раніше проходили, — двічі. На `django-16263` він виправив 1 з 4 і отримав 102 / 103. graft знайшов решту — а на `django-16263` зробив це вдвічі швидше й за половину токенів.
 
-Two harnesses, two claims: the controlled sweep says graft is cheaper and faster, SWE-bench says it's also more correct.
+Два стенди, два твердження: контрольована серія показує, що graft дешевший і швидший, а SWE-bench — що він ще й точніший.
 
-<sub>Correctness over all instances; tokens, cost and calls over the instances both arms resolved, for a like-for-like comparison. Official SWE-bench Verified images and official `swebench` 4.1.0 grader, native x86_64.</sub>
+<sub>Точність — по всіх задачах; токени, вартість і виклики — по задачах, які розв'язали обидві гілки, для рівного порівняння. Офіційні образи SWE-bench Verified і офіційний грейдер `swebench` 4.1.0, нативний x86_64.</sub>
 
 ---
 
-## How the graph gets built
+## Як будується граф
 
-Graft builds a structural graph entirely on your machine:
+Graft будує структурний граф повністю на вашій машині:
 
-1. **Parse supported source files** with tree-sitter and extract symbols, spans, signatures, imports, calls, and inheritance.
-2. **Resolve the graph** across files, scopes, monorepo workspaces, and supported import forms.
-3. **Write two views**: `graft/.graph/wiring.json` for machine queries and per-file markdown cards for agents to read and grep.
+1. **Парсить підтримувані вихідні файли** через tree-sitter і витягує символи, діапазони, сигнатури, імпорти, виклики й наслідування.
+2. **Зводить граф** між файлами, областями видимості, воркспейсами монорепозиторію та підтримуваними формами імпорту.
+3. **Записує два подання**: `graft/.graph/wiring.json` для машинних запитів і markdown-картки для кожного файлу, які агенти читають і грепають.
 
 ```mermaid
 flowchart LR
-    S[Source files] --> T["tree-sitter extraction<br/>no model, no network"]
-    T --> R["Cross-file resolution"]
+    S[Вихідні файли] --> T["Витягування через tree-sitter<br/>без моделі, без мережі"]
+    T --> R["Міжфайлове зведення"]
     R --> W["graft/.graph/wiring.json"]
-    R --> C["graft/*.md cards"]
+    R --> C["graft/*.md картки"]
 ```
 
-Every parse is cached by content hash, so a second build only re-reads files that changed. `graft build --no-reuse` forces a cold parse.
+Кожен розбір кешується за хешем вмісту, тож повторна збірка перечитує лише змінені файли. `graft build --no-reuse` примусово виконує холодний розбір.
 
-That cheapness is what lets **every query refresh the graph before it answers**. Graft compares the working-tree bytes with its fingerprint and rebuilds only when something moved, so `ask`/`grep`/`callers`/`skeleton`/`map`/`blast` describe uncommitted, unstaged, and staged edits alike. Turn refresh off per command with `--no-refresh`, or globally with `GRAFT_NO_REFRESH=1`.
+Саме ця дешевизна дозволяє **кожному запиту оновлювати граф перед відповіддю**. Graft порівнює байти робочого дерева зі своїм відбитком і перебудовує граф лише тоді, коли щось змінилося, тож `ask`/`grep`/`callers`/`skeleton`/`map`/`blast` однаково описують незакомічені, непроіндексовані й проіндексовані правки. Вимкнути оновлення можна для окремої команди через `--no-refresh` або глобально через `GRAFT_NO_REFRESH=1`.
 
 ---
 
-## Supported languages
+## Підтримувані мови
 
-Graft's native extractor is deterministic and local. It supports:
+Нативний екстрактор Graft детермінований і локальний. Він підтримує:
 
 - **Go**: `.go`
 - **Python**: `.py`, `.pyi`
@@ -230,221 +217,218 @@ Graft's native extractor is deterministic and local. It supports:
 - **C**: `.c`, `.h`
 - **C++**: `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh`
 
-`graft build --lsp` can add compiler-grade call edges when `rust-analyzer`, `clangd`, `gopls`, `pyright`, or `typescript-language-server` is installed. A file with an unsupported extension is skipped and reported rather than guessed.
+`graft build --lsp` може додати ребра викликів компіляторної точності, якщо встановлено `rust-analyzer`, `clangd`, `gopls`, `pyright` або `typescript-language-server`. Файл із непідтримуваним розширенням пропускається й потрапляє у звіт, а не обробляється навмання.
 
-- **Generic extraction** — Rust, C, and C++ use tags queries for symbols and calls.
-- **Compiler-grade edges (opt-in)** — `graft build --lsp` adds precise
-  `lsp_resolved` call edges (member calls the static pass can't type) when a
-  language server is on your `PATH`: `rust-analyzer` (Rust), `clangd` (C/C++),
-  `gopls` (Go), `pyright` (Python), `typescript-language-server` (TS/JS).
-  It's best-effort — with no server installed the graph is unchanged.
-
----
-
-## What's in the graph
-
-Each node records the symbol's identity and exact source location:
-
-- **ID and name** — stable, file-scoped identity such as `internal/graph/build.go#runBuild`
-- **Kind** — file, function, method, class, struct, interface, enum, type, or variable
-- **Path and span** — exact file and `Lstart-Lend` range
-- **Signature** — declaration text without the body where the grammar provides it
-- **Exported flag** — whether the declaration is public in its language
-- **Body hash and searchable body** — deterministic change detection and local retrieval
-- **Edges** — `contains`, `calls`, `references`, `imports`, `extends`, and `implements`
-
-The same graph is serialized to `graft/.graph/wiring.json` and rendered as per-file markdown cards under `graft/`. Both views are regenerated by `graft build`; neither contains generated prose.
+- **Загальне витягування** — Rust, C і C++ використовують tags-запити для символів і викликів.
+- **Ребра компіляторної точності (за бажанням)** — `graft build --lsp` додає точні
+  ребра викликів `lsp_resolved` (виклики методів, тип яких статичний прохід не
+  може визначити), якщо мовний сервер є у вашому `PATH`: `rust-analyzer` (Rust),
+  `clangd` (C/C++), `gopls` (Go), `pyright` (Python), `typescript-language-server` (TS/JS).
+  Це працює за принципом best-effort — без встановленого сервера граф не змінюється.
 
 ---
 
-## What runs where
+## Що міститься в графі
 
-- **Everything runs on your machine, with no key and no network:** every command, including `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, `blast`, and the MCP server. Graft itself makes no network calls: no LLM provider, no usage telemetry, no update check.
+Кожен вузол зберігає ідентичність символу і його точне розташування у вихідному коді:
 
-See [`.env.example`](.env.example) for local graph, refresh, and host-wiring settings.
+- **ID та ім'я** — стабільна ідентичність у межах файлу, наприклад `internal/graph/build.go#runBuild`
+- **Вид** — file, function, method, class, struct, interface, enum, type або variable
+- **Шлях і діапазон** — точний файл і діапазон `Lstart-Lend`
+- **Сигнатура** — текст оголошення без тіла, якщо граматика це дозволяє
+- **Прапорець експорту** — чи є оголошення публічним у своїй мові
+- **Хеш тіла і тіло для пошуку** — детерміноване виявлення змін і локальний пошук
+- **Ребра** — `contains`, `calls`, `references`, `imports`, `extends` і `implements`
+
+Той самий граф серіалізується в `graft/.graph/wiring.json` і рендериться як markdown-картки для кожного файлу в `graft/`. Обидва подання перегенеровуються командою `graft build`; жодне з них не містить згенерованого тексту.
 
 ---
 
-## Agent integration
+## Що де виконується
 
-One native Go command wires Graft into the coding agents you use:
+- **Усе виконується на вашій машині, без ключа й без мережі:** кожна команда, зокрема `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, `blast` і MCP-сервер. Graft сам не робить жодних мережевих запитів: жодного LLM-провайдера, жодної телеметрії використання, жодної перевірки оновлень.
+
+Налаштування локального графа, оновлення та підключення агентів дивіться в [`.env.example`](.env.example).
+
+---
+
+## Інтеграція з агентами
+
+Одна нативна Go-команда підключає Graft до агентів, якими ви користуєтеся:
 
 ```bash
 graft init
-# detects your agents and writes each one's native instruction file;
-# Claude Code additionally gets the live statusline + hooks below
+# знаходить ваших агентів і записує кожному його рідний файл інструкцій;
+# Claude Code додатково отримує живий statusline і хуки, описані нижче
 ```
 
-If Graft is available only through npm, use `npx -y @nanonets/graft@latest init` instead.
+У терміналі `init` показує всіх відомих йому агентів — позначає знайдені (за їхніми каталогами конфігурації) і перелічує точні файли, які запише для кожного, — і підключає лише вибраних. Claude Code вибрано заздалегідь, решту — ні. Вибрані агенти отримують обмежену маркерами секцію Graft у спільному файлі інструкцій — `AGENTS.md` (загальні агенти, Codex, Hermes, Antigravity та інші CLI, що його читають), `GEMINI.md`, `.github/copilot-instructions.md` — або окремий файл правил чи навички, яким повністю володіє Graft, для агентів, що їх використовують: `.claude/skills/graft/SKILL.md`, `.cursor/rules/graft.mdc`, `.kiro/steering/graft.md`, `.windsurf/rules/graft.md`, `.grok/skills/graft/SKILL.md` для Grok (xAI), `.adal/skills/graft/SKILL.md` для [AdaL](https://adal.sylph.ai). Claude Code належить до другої групи: `init` записує для нього окремий файл навички й ніколи не чіпає ваш `CLAUDE.md`. Повторний запуск оновлює лише власну секцію Graft (або замінює його власний файл) і ніколи не зачіпає решту вашого вмісту.
 
-On a terminal, `init` shows you every agent it knows about — flagging the ones it detected (via their config directories) and listing the exact files each would write — and wires only the ones you select. Claude Code is pre-selected; nothing else is. Selected agents get a marker-fenced Graft section in their shared instruction file — `AGENTS.md` (generic agents, Codex, Hermes, Antigravity, and other CLIs that read it), `GEMINI.md`, `.github/copilot-instructions.md` — or a wholly-owned rule/skill file for the agents that use one: `.claude/skills/graft/SKILL.md`, `.cursor/rules/graft.mdc`, `.kiro/steering/graft.md`, `.windsurf/rules/graft.md`, `.grok/skills/graft/SKILL.md` for Grok (xAI), `.adal/skills/graft/SKILL.md` for [AdaL](https://adal.sylph.ai). Claude Code is in the second group: `init` writes its own skill file and never touches your `CLAUDE.md`. Re-running only updates Graft's own section (or replaces the owned file) and never touches the rest of your content.
+Якщо немає TTY для запитання — CI, Dockerfile, конвеєр у shell — `init` **нічого не записує** і натомість друкує команду для запуску. Передайте `--agents <ids>` або `--yes`, щоб явно задати скриптовий запуск.
 
-With no TTY to prompt on — CI, a Dockerfile, a piped shell — `init` writes **nothing** and prints the command to run instead. Pass `--agents <ids>` or `--yes` to make a scripted run explicit.
-
-| Flag | Effect |
+| Прапорець | Дія |
 |---|---|
-| `--agents <ids...>` | wire only these, no prompt — ids: `agents`, `adal`, `cursor`, `gemini`, `grok`, `hermes`, `antigravity`, `copilot`, `kiro`, `windsurf`, `claude` |
-| `--yes`, `-y` | skip the prompt and wire every **detected** agent |
-| `--dry-run` | print every file `init` would touch, then exit without writing |
-| `--all-agents` | write instruction files for every known agent, detected or not |
-| `--no-agents` | Claude Code wiring only; skip other agents |
-| `--list-agents` | print the known agent ids and exit |
-| `--no-mcp` | skip MCP server registration |
-| `--no-hooks` | skip hook installation |
-| `--no-statusline` | skip writing Claude Code `statusLine` (same as `GRAFT_NO_STATUSLINE=1`) |
-| `--no-global` | skip writes outside this repo (the `~/.codex/` entries below) |
+| `--agents <ids...>` | підключити лише цих агентів, без запитання — ids: `agents`, `adal`, `cursor`, `gemini`, `grok`, `hermes`, `antigravity`, `copilot`, `kiro`, `windsurf`, `claude` |
+| `--yes`, `-y` | пропустити запитання й підключити всіх **знайдених** агентів |
+| `--dry-run` | надрукувати всі файли, яких торкнеться `init`, і вийти без запису |
+| `--all-agents` | записати файли інструкцій для всіх відомих агентів, знайдених чи ні |
+| `--no-agents` | лише підключення Claude Code; інших агентів пропустити |
+| `--list-agents` | надрукувати відомі ids агентів і вийти |
+| `--no-mcp` | пропустити реєстрацію MCP-сервера |
+| `--no-hooks` | пропустити встановлення хуків |
+| `--no-statusline` | не записувати `statusLine` для Claude Code (те саме, що `GRAFT_NO_STATUSLINE=1`) |
+| `--no-global` | пропустити записи поза цим репозиторієм (записи в `~/.codex/` нижче) |
 
-#### Writes outside the repo
+#### Записи поза репозиторієм
 
-Selecting the `agents` host also touches your **user-level** Codex config, when `~/.codex/` exists:
+Вибір агента `agents` також зачіпає вашу **користувацьку** конфігурацію Codex, якщо існує `~/.codex/`:
 
-| Path | What changes |
+| Шлях | Що змінюється |
 |---|---|
-| `~/.codex/config.toml` | registers the Graft MCP server (`[mcp_servers.graft]`) |
-| `~/.codex/hooks/graft/graft-hooks.cjs` | the post-edit hook shim |
-| `~/.codex/hooks.json` | a `PostToolUse` entry matching `Write\|Edit\|MultiEdit` |
+| `~/.codex/config.toml` | реєструє MCP-сервер Graft (`[mcp_servers.graft]`) |
+| `~/.codex/hooks/graft/graft-hooks.cjs` | шим хука після редагування |
+| `~/.codex/hooks.json` | запис `PostToolUse` з матчером `Write\|Edit\|MultiEdit` |
 
-Both configs are user-level, so they apply to **every** repo you open with Codex, not just this one. The picker labels these `machine-wide`, `--dry-run` lists them in their own section, and `--no-global` skips them while still wiring `AGENTS.md`.
+Обидві конфігурації користувацькі, тож діють для **кожного** репозиторію, який ви відкриваєте в Codex, а не лише для цього. У меню вибору вони позначені як `machine-wide`, `--dry-run` виводить їх в окремому розділі, а `--no-global` пропускає їх, але все одно підключає `AGENTS.md`.
 
-### MCP server
+### MCP-сервер
 
-`graft init` also registers Graft's MCP server with agents that support it, so these six tools appear natively, no shell required. Claude Code gets this too: `graft init` writes the server into the project's `.mcp.json` (restart Claude Code to load it). Skip with `--no-mcp`; run it manually with `graft mcp [dir]`.
+`graft init` також реєструє MCP-сервер Graft в агентах, які це підтримують, тож ці шість інструментів з'являються нативно, без shell. Claude Code теж його отримує: `graft init` записує сервер у `.mcp.json` проєкту (перезапустіть Claude Code, щоб він завантажився). Пропустити можна через `--no-mcp`; запустити вручну — `graft mcp [dir]`.
 
-| Tool | Takes | What it's for |
+| Інструмент | Приймає | Для чого |
 |---|---|---|
-| `graft_find_code` | a question | Ranked nodes with file:line, source inlined — usually the full answer, no follow-up read needed. |
-| `graft_file_api` | a file path | Every signature in that file, no bodies — the API surface for a tenth of the tokens. |
-| `graft_trace_calls` | a symbol | Who depends on it, or what it depends on with `direction: out`, N levels deep for blast radius. |
-| `graft_find_all` | a regex | Every hit, grouped by enclosing symbol, ranked by how coupled that symbol is. |
-| `graft_repo_map` | nothing | A first look at an unfamiliar repo: directory clusters, hubs, hotspots. |
-| `graft_check_freshness` | nothing | Whether the local graph has drifted from the code. |
+| `graft_find_code` | питання | Ранжовані вузли з file:line і вбудованим кодом — зазвичай це повна відповідь, без додаткового читання. |
+| `graft_file_api` | шлях до файлу | Усі сигнатури у файлі без тіл — поверхня API за десяту частину токенів. |
+| `graft_trace_calls` | символ | Хто від нього залежить або від чого залежить він (з `direction: out`), на N рівнів углиб для оцінки радіуса впливу. |
+| `graft_find_all` | regex | Усі збіги, згруповані за охопним символом і ранжовані за зв'язаністю цього символу. |
+| `graft_repo_map` | нічого | Перший погляд на незнайомий репозиторій: кластери каталогів, хаби, гарячі точки. |
+| `graft_check_freshness` | нічого | Чи розійшовся локальний граф з кодом. |
 
-Register it by hand if your agent needs it explicit and `graft` is on `PATH`:
+Якщо вашому агенту потрібна явна реєстрація і `graft` є в `PATH`, додайте вручну:
 
 ```json
 { "mcpServers": { "graft": { "command": "graft", "args": ["mcp"] } } }
 ```
 
-When `graft` is not on PATH, `init` writes the absolute path of the running binary instead; set `GRAFT_MCP_COMMAND` to choose the command explicitly. Graft never writes a launch command that downloads a package.
+Якщо `graft` немає в PATH, `init` записує абсолютний шлях до запущеного бінарника; щоб явно задати команду, встановіть `GRAFT_MCP_COMMAND`. Graft ніколи не записує команду запуску, яка завантажує пакет.
 
-Where a CLI agent supports user-level `hooks.json`, `init` also installs Graft's post-edit hook — blast-radius warnings and automatic `$0` graph re-sync after edits (skip with `--no-hooks`).
+Якщо CLI-агент підтримує користувацький `hooks.json`, `init` також встановлює хук Graft після редагування — попередження про радіус впливу і автоматична `$0`-синхронізація графа після правок (пропустити через `--no-hooks`).
 
 ### Claude Code
 
-`graft init` always wires up Claude Code, and Claude Code gets more than the skill file above. From then on, any Claude Code session opened in the repo gets:
+`graft init` завжди підключає Claude Code, і Claude Code отримує більше, ніж файл навички вище. Відтоді кожна сесія Claude Code, відкрита в репозиторії, отримує:
 
-- **a live statusline** — graph size, freshness, context usage, and a stale warning when the code has moved ahead of the graph
-- **auto-sync** — every graft query brings the graph up to date first, so an answer always describes the code as it is right now, uncommitted edits included. A query refreshes only what it reads; the markdown under `graft/` is refreshed by the background rebuild at the end of a turn that touched code. Both are structural and `$0` — auto-sync never calls the LLM on its own
-- **context on tap** — each prompt pulls the matching nodes into the session; editing a file surfaces what depends on it ("blast radius"); new sessions start with the repo map
+- **живий statusline** — розмір графа, актуальність, використання контексту та попередження, коли код випередив граф
+- **автосинхронізацію** — кожен запит до graft спершу оновлює граф, тож відповідь завжди описує код таким, яким він є зараз, разом із незакоміченими правками. Запит оновлює лише те, що читає; markdown у `graft/` оновлюється фоновою перебудовою в кінці ходу, який змінював код. Обидва процеси структурні й коштують `$0` — автосинхронізація ніколи сама не викликає LLM
+- **контекст під рукою** — кожен промпт підтягує відповідні вузли в сесію; редагування файлу показує, що від нього залежить («радіус впливу»); нові сесії починаються з карти репозиторію
 
 <p align="center">
-  <img src="assets/graft-hooks-demo.gif" alt="How Claude Code hooks wire graft in: install, graft init, then the hooks loop (session start, user prompt, post tool use, stop) keeps the graph built, read, and committed automatically" width="820"/>
-  <br/><sub>install → init → hooks keep the graph fresh every session</sub>
+  <img src="assets/graft-hooks-demo.gif" alt="Як хуки Claude Code підключають graft: встановлення, graft init, далі цикл хуків (початок сесії, промпт користувача, після виклику інструмента, зупинка) автоматично підтримує граф побудованим, прочитаним і закоміченим" width="820"/>
+  <br/><sub>встановлення → init → хуки підтримують граф актуальним у кожній сесії</sub>
 </p>
 
-`graft init` is idempotent and never clobbers your existing `.claude/settings.json` — it merges its blocks and leaves the rest alone. A `statusLine` that is not Graft's (anything whose command does not name `graft-statusline.cjs`) is left untouched; re-running `init` refreshes Graft's own helper if it is already installed. Pass `--no-statusline` (or `GRAFT_NO_STATUSLINE=1`) to skip installing one — a project-level `statusLine` would otherwise hide a custom one in `~/.claude/settings.json`.
+`graft init` ідемпотентний і ніколи не перезаписує ваш наявний `.claude/settings.json` — він додає свої блоки й не чіпає решту. `statusLine`, що не належить Graft (будь-який, чия команда не містить `graft-statusline.cjs`), залишається без змін; повторний запуск `init` оновлює власний хелпер Graft, якщо його вже встановлено. Передайте `--no-statusline` (або `GRAFT_NO_STATUSLINE=1`), щоб не встановлювати його — інакше `statusLine` на рівні проєкту приховає ваш власний у `~/.claude/settings.json`.
 
 ---
 
 ## CLI
 
 ```bash
-graft build [dir]                    # build the graph and per-file cards
-graft build --extensions .ts .py     # restrict source extensions
-graft build --include-dir <name>     # re-include a normally excluded dot-directory
-graft build --only-dir <path>        # build one repository-relative subtree
-graft build --lsp                    # add best-effort compiler-resolved call edges
-graft build --no-reuse               # re-parse every file instead of replaying the extraction cache
-graft build --follow-submodules      # include initialized submodules and persist the choice
-graft build --no-follow-submodules   # restore the default submodule boundary
-graft build --follow-nested-repos    # include nested git clones not tracked by the superproject
-graft build --no-follow-nested-repos # restore the default nested-repository boundary
-graft build --no-gitignore           # do not add graft/ to .gitignore
-graft build --no-ignore              # do not add graft's re-include entries to .ignore
+graft build [dir]                    # побудувати граф і картки для кожного файлу
+graft build --extensions .ts .py     # обмежити розширення вихідних файлів
+graft build --include-dir <name>     # повернути зазвичай виключений dot-каталог
+graft build --only-dir <path>        # зібрати одне піддерево відносно репозиторію
+graft build --lsp                    # додати ребра викликів від компілятора (best-effort)
+graft build --no-reuse               # перерозібрати всі файли замість повторного використання кешу
+graft build --follow-submodules      # включити ініціалізовані сабмодулі й запам'ятати вибір
+graft build --no-follow-submodules   # повернути межу сабмодулів за замовчуванням
+graft build --follow-nested-repos    # включити вкладені git-клони, які не відстежує суперпроєкт
+graft build --no-follow-nested-repos # повернути межу вкладених репозиторіїв за замовчуванням
+graft build --no-gitignore           # не додавати graft/ у .gitignore
+graft build --no-ignore              # не додавати записи graft у .ignore
 
-graft ask "<task>" [dir]             # ranked nodes with exact file:line (no LLM, no key)
-graft ask "<task>" --source          # inline source excerpts; add --full for complete definitions
-graft ask "<task>" --source --budget 2000  # cap the whole response in estimated tokens
-graft ask "<task>" --intent edit     # primary code plus direct callers, dependencies and tests
-graft ask "<task>" -n 10 --json      # limit hits and return machine-readable JSON
-graft ask "<task>" --in <scope>      # narrow to one scope in a monorepo or multi-repo folder
+graft ask "<task>" [dir]             # ранжовані вузли з точним file:line (без LLM, без ключа)
+graft ask "<task>" --source          # вбудовані фрагменти коду; --full дає повні визначення
+graft ask "<task>" --source --budget 2000  # обмежити всю відповідь в оцінених токенах
+graft ask "<task>" --intent edit     # основний код плюс прямі виклики, залежності й тести
+graft ask "<task>" -n 10 --json      # обмежити кількість результатів і повернути JSON
+graft ask "<task>" --in <scope>      # звузити до однієї області в монорепозиторії чи папці репозиторіїв
 
-graft skeleton <file> [dir]          # signatures only: the cheapest view of a file's API
-graft skeleton <file> --json         # machine-readable signatures
-graft callers <symbol> [dir]         # who calls or references a symbol
-graft callers <symbol> --direction out  # what that symbol calls or references
-graft callers <symbol> -d all        # transitive dependencies; -d N sets an exact depth
-graft grep "<regex>" [dir]           # exhaustive search grouped by enclosing symbol
-graft grep "<regex>" --in <path>     # restrict the search to a path prefix
-graft grep "<regex>" -i --fixed      # case-insensitive literal search
-graft map [dir]                      # directory clusters, local hubs, and global hotspots
-graft map --max-dirs N --json        # choose the detail level and return JSON
-graft blast [dir]                    # structural blast radius of the working-tree diff
-graft blast --base origin/main       # compare the merge base with HEAD, as a PR check would
-graft blast --format markdown        # text, markdown, mermaid, or json
-graft blast --no-owners              # skip reviewer suggestions derived from git history
-graft check [dir]                    # exit 1 when the graph is missing or stale; never writes
-graft check --json                   # machine-readable drift report
-graft stats [dir]                    # session usage mix and estimated tokens saved
+graft skeleton <file> [dir]          # лише сигнатури: найдешевший погляд на API файлу
+graft skeleton <file> --json         # сигнатури у форматі JSON
+graft callers <symbol> [dir]         # хто викликає символ або посилається на нього
+graft callers <symbol> --direction out  # що викликає цей символ або на що посилається
+graft callers <symbol> -d all        # транзитивні залежності; -d N задає точну глибину
+graft grep "<regex>" [dir]           # вичерпний пошук, згрупований за охопним символом
+graft grep "<regex>" --in <path>     # обмежити пошук префіксом шляху
+graft grep "<regex>" -i --fixed      # літеральний пошук без урахування регістру
+graft map [dir]                      # кластери каталогів, локальні хаби й глобальні гарячі точки
+graft map --max-dirs N --json        # вибрати рівень деталізації й повернути JSON
+graft blast [dir]                    # структурний радіус впливу diff робочого дерева
+graft blast --base origin/main       # порівняти merge base з HEAD, як це робить перевірка PR
+graft blast --format markdown        # text, markdown, mermaid або json
+graft blast --no-owners              # не пропонувати рев'юерів на основі історії git
+graft check [dir]                    # exit 1, якщо графа немає або він застарів; нічого не пише
+graft check --json                   # звіт про розбіжність у форматі JSON
+graft stats [dir]                    # статистика сесії та оцінка збережених токенів
 graft stats --json
-graft mcp [dir]                      # serve the six graph tools over MCP stdio
+graft mcp [dir]                      # запустити шість інструментів графа через MCP stdio
 
-graft init [dir]                     # pick which agents to wire; nothing is written before confirmation
-graft init --dry-run                 # list every file that would be touched
-graft init --agents claude cursor    # wire only these hosts without prompting
-graft init --yes                     # wire every detected host
-graft init --all-agents              # wire every known host
-graft init --list-agents             # print the host ids
-graft init --no-mcp                  # skip MCP registration
-graft init --no-hooks                # skip host hook installation
-graft init --no-statusline           # skip the Claude Code statusline
-graft init --no-global               # skip user-level host configuration
-graft init --no-build                # wire files without building the graph
+graft init [dir]                     # вибрати агентів для підключення; до підтвердження нічого не пишеться
+graft init --dry-run                 # показати всі файли, яких буде торкнуто
+graft init --agents claude cursor    # підключити лише цих агентів без запитання
+graft init --yes                     # підключити всіх знайдених агентів
+graft init --all-agents              # підключити всіх відомих агентів
+graft init --list-agents             # надрукувати ids агентів
+graft init --no-mcp                  # пропустити реєстрацію MCP
+graft init --no-hooks                # пропустити встановлення хуків
+graft init --no-statusline           # пропустити statusline для Claude Code
+graft init --no-global               # пропустити користувацьку конфігурацію агентів
+graft init --no-build                # записати файли без побудови графа
 
-graft uninstall [dir]                # preview removal; add -y to apply
-graft uninstall -y --keep-cache      # remove wiring but retain graft/ and ignore entries
-graft uninstall -y --no-global       # retain user-level host configuration
+graft uninstall [dir]                # переглянути, що буде видалено; -y застосовує
+graft uninstall -y --keep-cache      # видалити підключення, але залишити graft/ і записи ignore
+graft uninstall -y --no-global       # залишити користувацьку конфігурацію агентів
 
-graft version                        # print the installed version
+graft version                        # надрукувати встановлену версію
 
-# global options
-graft --dir <path> <command>         # use a context directory other than <repo>/graft
-graft --version, -v                  # print the installed version
+# глобальні опції
+graft --dir <path> <command>         # використати каталог контексту, відмінний від <repo>/graft
+graft --version, -v                  # надрукувати встановлену версію
 ```
 
-`ask` prefers production code over fixture, generated, and vendored copies;
-explicit category queries or `--in` paths still retrieve those copies.
-Source excerpts keep up to eight lines, including query matches with exact
-line numbers. `--full` expands definitions within the shared `--budget`
-(default 2000, range 128–64000 estimated tokens, measured as UTF-16 length / 4).
-The result limit applies to ranked matches; edit intent can add up to six
-directly related symbols. JSON metadata counts toward this budget too.
-Truncation is reported; increase
-the budget or narrow the scope to inspect omitted logic before editing.
+`ask` віддає перевагу продакшн-коду над фікстурами, згенерованими та вендореними
+копіями; явні запити за категорією або шляхи в `--in` все одно знаходять ці копії.
+Фрагменти коду містять до восьми рядків, зокрема збіги із запитом з точними
+номерами рядків. `--full` розгортає визначення в межах спільного `--budget`
+(за замовчуванням 2000, діапазон 128–64000 оцінених токенів, рахується як довжина UTF-16 / 4).
+Ліміт результатів застосовується до ранжованих збігів; намір edit може додати до шести
+безпосередньо пов'язаних символів. JSON-метадані теж враховуються в цей бюджет.
+Про обрізання повідомляється; збільште бюджет або звузьте область, щоб переглянути
+пропущену логіку перед редагуванням.
 
-MCP `graft_find_code` exposes the same `budget` and `intent` options. Optional
-`seen: []` returns content references; passing previous references suppresses
-unchanged source for that agent. Omit `seen` after context compaction to receive
-source again. The MCP server caches decoded graph/index snapshots while still
-checking source freshness before queries. Retrieval does not print recurring
-savings banners; `graft stats` retains recorded estimates, not billing claims.
+MCP-інструмент `graft_find_code` має ті самі опції `budget` та `intent`. Необов'язковий
+`seen: []` повертає посилання на вміст; якщо передати попередні посилання, незмінений
+код для цього агента не повторюватиметься. Після стиснення контексту не передавайте `seen`,
+щоб отримати код знову. MCP-сервер кешує декодовані знімки графа й індексу, але все одно
+перевіряє актуальність коду перед запитами. Пошук не друкує повторюваних банерів
+про економію; `graft stats` зберігає записані оцінки, а не дані для рахунків.
 
+`ask`, `skeleton`, `callers`, `grep`, `map` і `blast` оновлюють змінений код перед відповіддю. Використайте `--no-refresh` або `GRAFT_NO_REFRESH=1`, щоб запитувати граф точно в збереженому стані; встановіть `GRAFT_REFRESH=hash`, щоб перевіряти файли за вмістом, а не за розміром і mtime.
 
-`ask`, `skeleton`, `callers`, `grep`, `map`, and `blast` refresh changed source before answering. Use `--no-refresh` or `GRAFT_NO_REFRESH=1` to query the graph exactly as stored; set `GRAFT_REFRESH=hash` to verify files by content instead of size and mtime.
+Щоб оновитися, повторіть команду встановлення: `go install github.com/h0rn3t/Graft/cmd/graft@latest`.
 
-To update, re-run the installation command: `go install github.com/h0rn3t/Graft/cmd/graft@latest`, or `npm i -g @nanonets/graft@latest` for the npm distribution.
+Виклики методів зводяться через тип отримувача — присвоєння з конструктора
+(`self.router = APIRouter()`) і анотації типів, а не лише ім'я в місці виклику, —
+тож `callers`/`grep --in` повертають виклики, прив'язані до правильного
+типу в коді з великою кількістю методів, а не кожен метод із таким ім'ям.
 
-Method calls resolve through the receiver's type — constructor assignments
-(`self.router = APIRouter()`) and type annotations, not just the call-site
-name — so `callers`/`grep --in` return calls bound to the right
-type on method-heavy code, not every method anywhere with that name.
+## Пошук і орієнтування (`graft grep` / `graft map`)
 
-## Search & orient (`graft grep` / `graft map`)
-
-`graft grep "<regex>"` is exhaustive over every indexed file and groups hits
-by enclosing symbol, ranked by the same in-edge coupling `graft map` uses —
-built for "every occurrence of this pattern" tasks where `graft ask`'s
-ranked top-N isn't enough:
+`graft grep "<regex>"` вичерпно шукає по всіх проіндексованих файлах і групує збіги
+за охопним символом, ранжуючи їх за тією ж зв'язаністю за вхідними ребрами, що й `graft map`, —
+для задач типу «кожне входження цього патерну», де ранжованого топ-N від `graft ask`
+недостатньо:
 
 ```
 "NEEDLE" — 2 hits in 2 symbols across 1 files (searched 1 indexed files)
@@ -456,9 +440,9 @@ rarelyCalled · function · src/a.ts:L4-L6 · 0 in-edges
   L5: console.log("NEEDLE hit in rarelyCalled");
 ```
 
-`graft map` is a token-budgeted first look at a repo — directory clusters
-with file/symbol counts, each dir's local hubs, and the global hotspots —
-all ranked by in-degree, no LLM, no key:
+`graft map` — це перший погляд на репозиторій у межах бюджету токенів: кластери каталогів
+з кількістю файлів і символів, локальні хаби кожного каталогу та глобальні гарячі точки —
+усе ранжоване за вхідним ступенем, без LLM, без ключа:
 
 ```
 repo map — 94 files · 621 symbols · 1948 edges · go
@@ -470,105 +454,105 @@ test/               3 files · 0 symbols
 hotspots: run · function · cmd/graft/main.go:L99-L103 · 31←  programSpec · function · cmd/graft/commander.go:L114-L160 · 18←  runWithInput · function · cmd/graft/main.go:L109-L141 · 13←  ...
 ```
 
-## Monorepos, submodules & multi-repo folders
+## Монорепозиторії, сабмодулі та папки з кількома репозиторіями
 
-Graft supports these layouts:
+Graft підтримує такі структури:
 
-- **A monorepo with one `.git`** (a `pnpm-workspace.yaml`/`package.json`
-  `workspaces`, or per-package `go.mod`/`pyproject.toml`/`Cargo.toml`) —
-  `graft build` discovers each sub-project as a ranking scope. `ask`/`map`
-  rank every scope on its own terms and fuse the results, so the biggest
-  sub-project can't drown a small one; hits carry `[scope/]` labels, and
-  `graft map` groups its directory clusters by scope first.
-- **A Git superproject with initialized submodules** — submodules stay excluded
-  by default. Run `graft build --follow-submodules` to fold initialized gitlinks
-  into one graph, prefixing child paths (for example,
-  `deps/parser/src/index.ts`) while honoring each submodule's own Git ignore
-  rules. Visible untracked files are included too; uninitialized submodules
-  remain absent until `git submodule update --init` checks them out. The choice
-  is saved in `.graft/config.json`, so later no-flag builds and MCP automatic
-  refreshes behave the same way. Run `graft build --no-follow-submodules` to
-  restore and persist the default boundary.
-- **A git repo with other repos cloned inside it** (no gitlink, no index entry) — the shape multi-repo manifest tools like `west`, `repo`, `gclient` and `tsrc` check dependencies out into, and the shape you get by cloning an upstream into the tree to patch it locally. `--follow-submodules` cannot reach these: they have no `160000` index entry to follow. Run `graft build --follow-nested-repos` to fold them into one graph, prefixing child paths (for example, `external/parser/src/index.ts`) while honoring each clone's own Git ignore rules. A clone at a git-ignored path stays absent, since Git never reports it. The choice is saved in `.graft/config.json` and is independent of `--follow-submodules` — neither flag implies the other. Run `graft build --no-follow-nested-repos` to restore and persist the default boundary. Prefer this over the multi-repo split below when the nested repos import from each other and you want those edges in one graph; prefer the split when you want each repo scored and refreshed on its own.
-- **A folder of separate git repos** (no `.git` at the top) — `graft build`
-  auto-splits: each child gets its own (git-ignored) `graft/`, and the parent
-  gets a `graft/workspace.json` index. Queries from the parent federate across
-  every child, always labeled `<child>/`. Run `graft build` inside a child to
-  work on just that repo.
+- **Монорепозиторій з одним `.git`** (`pnpm-workspace.yaml`/`workspaces` у `package.json`
+  або `go.mod`/`pyproject.toml`/`Cargo.toml` для кожного пакета) —
+  `graft build` визначає кожен підпроєкт як окрему область ранжування. `ask`/`map`
+  ранжують кожну область за її власними мірками й об'єднують результати, тож найбільший
+  підпроєкт не може заглушити малий; результати мають мітки `[scope/]`, а
+  `graft map` спершу групує кластери каталогів за областями.
+- **Git-суперпроєкт з ініціалізованими сабмодулями** — за замовчуванням сабмодулі
+  виключені. Запустіть `graft build --follow-submodules`, щоб влити ініціалізовані gitlink'и
+  в один граф із префіксами шляхів (наприклад,
+  `deps/parser/src/index.ts`), враховуючи власні правила Git ignore кожного сабмодуля.
+  Видимі невідстежувані файли теж включаються; неініціалізовані сабмодулі
+  відсутні, доки `git submodule update --init` їх не завантажить. Вибір
+  зберігається в `.graft/config.json`, тож наступні збірки без прапорця й автоматичні
+  оновлення MCP поводяться так само. Запустіть `graft build --no-follow-submodules`, щоб
+  повернути й зберегти межу за замовчуванням.
+- **Git-репозиторій з іншими репозиторіями, склонованими всередину** (без gitlink, без запису в індексі) — таку структуру створюють інструменти маніфестів для кількох репозиторіїв, як-от `west`, `repo`, `gclient` і `tsrc`, а також клонування upstream у дерево для локальних патчів. `--follow-submodules` їх не бачить: у них немає запису `160000` в індексі. Запустіть `graft build --follow-nested-repos`, щоб влити їх в один граф із префіксами шляхів (наприклад, `external/parser/src/index.ts`), враховуючи власні правила Git ignore кожного клону. Клон у шляху, ігнорованому git, залишається відсутнім, бо Git ніколи про нього не повідомляє. Вибір зберігається в `.graft/config.json` і не залежить від `--follow-submodules` — жоден прапорець не вмикає інший. Запустіть `graft build --no-follow-nested-repos`, щоб повернути й зберегти межу за замовчуванням. Обирайте цей варіант замість розділення на кілька репозиторіїв (нижче), коли вкладені репозиторії імпортують один одного і ви хочете бачити ці ребра в одному графі; обирайте розділення, коли хочете, щоб кожен репозиторій ранжувався й оновлювався окремо.
+- **Папка з окремими git-репозиторіями** (без `.git` на верхньому рівні) — `graft build`
+  автоматично розділяє їх: кожен дочірній репозиторій отримує власний (ігнорований git) `graft/`, а батьківська
+  папка — індекс `graft/workspace.json`. Запити з батьківської папки об'єднуються по
+  всіх дочірніх репозиторіях і завжди мають мітку `<child>/`. Запустіть `graft build` у дочірньому
+  репозиторії, щоб працювати лише з ним.
 
-In every layout, narrow to one sub-project with `graft ask "<task>" --in <scope>/`
-once you know where you're working.
+У будь-якій структурі звузьте пошук до одного підпроєкту через `graft ask "<task>" --in <scope>/`,
+коли знаєте, де працюєте.
 
-`graft init` at the parent of a multi-repo folder wires **every child repo too**,
-not just the parent — an agent session opens at a repo root and reads its
-instruction files from there, so each child needs its own. A session started in
-the parent gets the federated view; one started in a child sees that repo alone.
+`graft init` у батьківській папці з кількома репозиторіями підключає **також кожен дочірній репозиторій**,
+а не лише батьківську папку — сесія агента відкривається в корені репозиторію і читає
+файли інструкцій звідти, тож кожен дочірній репозиторій потребує власних. Сесія, запущена
+в батьківській папці, бачить об'єднане подання; запущена в дочірньому — лише цей репозиторій.
 
-Commands also find the graph from a subdirectory: with no `[dir]` argument they
-walk up to the nearest `graft/`, so `graft ask` works from a nested package
-without a `cd` to the repository root.
+Команди також знаходять граф з підкаталогу: без аргументу `[dir]` вони
+піднімаються до найближчого `graft/`, тож `graft ask` працює з вкладеного пакета
+без `cd` у корінь репозиторію.
 
 ---
 
-## Tested on your popular repos
+## Перевірено на популярних репозиторіях
 
-The [benchmarks](#benchmark) measure the mechanism. The real test is whether graft helps an agent **ship real changes** on code people actually run, not just answer questions. So we benchmark it on popular open-source repos: **15 tasks each**, 10 real developer questions plus **5 actual implementation tasks** (real merged pull requests, each re-implemented from its base commit and scored against the files the maintainers actually changed). Same agent (Claude Opus), same file tools; the only difference is whether graft is wired in.
+[Бенчмарки](#бенчмарк) вимірюють механізм. Справжня перевірка — чи допомагає graft агенту **випускати реальні зміни** в коді, який люди справді використовують, а не лише відповідати на питання. Тож ми тестуємо його на популярних open-source репозиторіях: **по 15 задач**, 10 реальних питань розробників плюс **5 реальних задач на реалізацію** (справжні змерджені pull request'и, кожен реалізований заново від базового коміту й оцінений за файлами, які насправді змінили мейнтейнери). Той самий агент (Claude Opus), ті самі файлові інструменти; єдина різниця — чи підключено graft.
 
-Across these repos graft runs **up to 4× cheaper and 3× faster**, with better or no loss of correctness: it reproduces the real merged PRs by touching the same files the maintainers did. Per-repo detail below.
+На цих репозиторіях graft працює **до 4× дешевше і 3× швидше**, з кращою або такою ж точністю: він відтворює реальні змерджені PR, змінюючи ті самі файли, що й мейнтейнери. Деталі по репозиторіях нижче.
 
-### PocketBase (Go, ~350 files)
+### PocketBase (Go, ~350 файлів)
 
-| Aggregate over 15 tasks | Standard Claude Code | With graft |
+| Сумарно за 15 задач | Стандартний Claude Code | З graft |
 |---|---|---|
-| Cost | $13.91 | **$11.02 (−21%)** |
-| Wall-clock | 2,044s | **1,762s (−14%)** |
-| PRs reproduced | 5 / 5 | **5 / 5 (same files as the maintainers)** |
+| Вартість | $13.91 | **$11.02 (−21%)** |
+| Реальний час | 2,044s | **1,762s (−14%)** |
+| Відтворено PR | 5 / 5 | **5 / 5 (ті самі файли, що й у мейнтейнерів)** |
 
-Cheaper and faster with no loss of correctness: graft reproduced all five merged PRs, touching the same files the maintainers did. The gap is widest on cross-file understanding — "how does auth work across OAuth2 providers" dropped from $2.19 to $0.84.
+Дешевше і швидше без втрати точності: graft відтворив усі п'ять змерджених PR, змінивши ті самі файли, що й мейнтейнери. Найбільший розрив — на розумінні між файлами: питання «як працює авторизація через OAuth2-провайдерів» подешевшало з $2.19 до $0.84.
 
 <details>
-<summary><b>The 10 questions we asked</b></summary>
+<summary><b>10 питань, які ми ставили</b></summary>
 
-1. **Orientation** — Give me a map of PocketBase's architecture: the main subsystems and how an HTTP request flows through to the database.
-2. **Entry-point trace** — Trace end-to-end what happens when a client creates a record via the REST API, from route handler to database write.
-3. **Feature location** — I want to add a brand-new collection field type. Where do I hook it in, and which pieces must change?
-4. **Bug localization** — Realtime subscriptions silently stop delivering events after a while. Where would you start looking, and why?
-5. **Blast radius** — If I change the signature of the record-validation logic, what depends on it and what could break?
-6. **Cross-file synthesis** — How does auth work across OAuth2 providers: where are tokens issued, validated, stored, and refreshed?
-7. **Extensibility** — How do I use PocketBase as a Go framework to register a custom route plus an on-record-create hook?
-8. **Security discovery** — Where is user input validated, and where are collection API access rules enforced before a query runs?
-9. **Public API** — As an external app, how do I authenticate and then list and filter records over the REST API?
-10. **Test verification** — Where are the tests for the record CRUD API, and what do they assert about access rules?
+1. **Орієнтування** — Дай мені карту архітектури PocketBase: основні підсистеми і як HTTP-запит проходить до бази даних.
+2. **Трасування від точки входу** — Простеж від початку до кінця, що відбувається, коли клієнт створює запис через REST API, від обробника маршруту до запису в базу.
+3. **Пошук місця для фічі** — Я хочу додати зовсім новий тип поля колекції. Де його підключити і які частини треба змінити?
+4. **Локалізація бага** — Підписки realtime з часом мовчки перестають доставляти події. З чого б ти почав пошук і чому?
+5. **Радіус впливу** — Якщо я зміню сигнатуру логіки валідації запису, що від неї залежить і що може зламатися?
+6. **Синтез між файлами** — Як працює авторизація через OAuth2-провайдерів: де токени видаються, перевіряються, зберігаються й оновлюються?
+7. **Розширюваність** — Як використати PocketBase як Go-фреймворк, щоб зареєструвати власний маршрут і хук on-record-create?
+8. **Пошук проблем безпеки** — Де валідується введення користувача і де застосовуються правила доступу до API колекцій перед виконанням запиту?
+9. **Публічний API** — Як зовнішній застосунок може автентифікуватися, а потім отримувати й фільтрувати записи через REST API?
+10. **Перевірка тестами** — Де тести для CRUD API записів і що вони перевіряють щодо правил доступу?
 
 </details>
 
 <details>
-<summary><b>The 5 merged PRs we re-implemented</b></summary>
+<summary><b>5 змерджених PR, які ми реалізували заново</b></summary>
 
-Each PR was reset to its base commit; graft's diff was scored against the files the merged PR changed.
+Кожен PR скидався до базового коміту; diff від graft оцінювався за файлами, які змінив змерджений PR.
 
-| PR | Type | What it does | Files the maintainers touched |
+| PR | Тип | Що робить | Файли, які змінили мейнтейнери |
 |---|---|---|---|
-| [#6744](https://github.com/pocketbase/pocketbase/pull/6744) | feat | Generate & serve WebP thumbnails | `apis/file.go`, `tools/filesystem/filesystem.go` |
-| [#6947](https://github.com/pocketbase/pocketbase/pull/6947) | fix | Uniform char distribution in regex random strings | `tools/security/random_by_regex.go` |
-| [#6690](https://github.com/pocketbase/pocketbase/pull/6690) | refactor | Patreon OAuth2 to use `x/oauth2/endpoints` | `tools/auth/patreon.go` |
-| [#2726](https://github.com/pocketbase/pocketbase/pull/2726) | perf | Drop a redundant admin-count query on a hot middleware path | `apis/middlewares.go` |
-| [#3192](https://github.com/pocketbase/pocketbase/pull/3192) | fix | Restore prior API rules on automigration rollback | `plugins/migratecmd/templates.go` |
+| [#6744](https://github.com/pocketbase/pocketbase/pull/6744) | feat | Генерація та віддача WebP-мініатюр | `apis/file.go`, `tools/filesystem/filesystem.go` |
+| [#6947](https://github.com/pocketbase/pocketbase/pull/6947) | fix | Рівномірний розподіл символів у випадкових рядках за regex | `tools/security/random_by_regex.go` |
+| [#6690](https://github.com/pocketbase/pocketbase/pull/6690) | refactor | Patreon OAuth2 переведено на `x/oauth2/endpoints` | `tools/auth/patreon.go` |
+| [#2726](https://github.com/pocketbase/pocketbase/pull/2726) | perf | Прибрано зайвий запит кількості адмінів на гарячому шляху middleware | `apis/middlewares.go` |
+| [#3192](https://github.com/pocketbase/pocketbase/pull/3192) | fix | Відновлення попередніх правил API при відкаті автоміграції | `plugins/migratecmd/templates.go` |
 
 </details>
 
 <details>
-<summary><b>Method</b></summary>
+<summary><b>Методика</b></summary>
 
-Two clones of PocketBase at the same commit: one wired with `graft init`, one untouched and verified graft-free. Each task run headless (`claude -p`, Claude Opus) with an empty MCP config. Understanding questions were graded by whether the answer pointed to the right files and functions; PR tasks were scored on whether the agent's diff touched the same files as the merged PR. Every transcript was audited to confirm graft was actually used in the graft arm and absent from the standard arm.
+Два клони PocketBase на одному коміті: один підключений через `graft init`, другий недоторканий і перевірений на відсутність graft. Кожна задача запускалася без інтерфейсу (`claude -p`, Claude Opus) з порожньою конфігурацією MCP. Питання на розуміння оцінювалися за тим, чи вказала відповідь на правильні файли й функції; задачі з PR — за тим, чи змінив diff агента ті самі файли, що й змерджений PR. Кожен транскрипт перевірено, щоб підтвердити, що graft справді використовувався в гілці з graft і був відсутній у стандартній.
 
 </details>
 
 ---
 
-## Development
+## Розробка
 
-The product implementation is Go 1.27. Node.js is needed only for the optional npm packaging and launcher tests.
+Graft написаний на Go 1.27 з cgo (прив'язкам Tree-sitter потрібен C-тулчейн).
 
 ```bash
 git clone https://github.com/h0rn3t/Graft.git
@@ -579,7 +563,7 @@ go test ./...
 go run ./cmd/graft build .
 ```
 
-The complete Go release gate is:
+Повна перевірка перед релізом:
 
 ```bash
 go build ./...
@@ -590,32 +574,30 @@ test -z "$(gofmt -l .)"
 go fix -diff ./...
 ```
 
-To verify the optional npm distribution, shims, and postinstall behavior:
+Щоб зібрати релізний бінарник із вшитою версією:
 
 ```bash
-npm install
-npm run build       # builds bin/graft-<platform>-<arch> from Go
-npm test
+go build -trimpath -ldflags "-s -w -X main.version=0.2.0" -o graft ./cmd/graft
 ```
 
----
-
-## Native Go architecture
-
-Graft is one native Go application. The same binary implements the public CLI, graph extraction and queries, MCP server, host wiring, hooks, statusline, and upkeep.
-
-- `cmd/graft` — public command surface and runtime entry points.
-- `internal/graph` — deterministic extraction, resolution, cards, indexing, freshness, and workspace federation.
-- `internal/hosts` — agent configuration, MCP registration, native shims, and init/uninstall behavior.
-- `internal/upkeep` — wiring reconciliation when the installed version changes.
-- `cmd/graft/testdata/goldens` — Go-owned regression fixtures for retained CLI behavior.
-
-There is no TypeScript backend, JavaScript library API, browser viewer, GitHub App, deep meaning layer, or TypeScript launcher fallback. The optional npm package contains only a small launcher, the host-native Go binary, and packaging scripts.
-
-`docs/cli-contract.json` is the public CLI contract and is checked against both `programSpec` and the Go environment inventory.
+Без `-X main.version` команда `graft --version` показує версію модуля, яку записав `go install ...@vX.Y.Z` (або pseudo-version для збірки всередині git-checkout).
 
 ---
 
-## License
+## Архітектура на Go
 
-MIT. See [LICENSE](LICENSE).
+Graft — це один нативний Go-застосунок. Той самий бінарник реалізує публічний CLI, витягування графа й запити до нього, MCP-сервер, підключення агентів, хуки, statusline та підтримку підключень в актуальному стані.
+
+- `cmd/graft` — публічні команди та точки входу.
+- `internal/graph` — детерміноване витягування, зведення, картки, індексування, перевірка актуальності та федерація воркспейсів.
+- `internal/hosts` — конфігурація агентів, реєстрація MCP, шими та поведінка init/uninstall.
+- `internal/upkeep` — узгодження підключень, коли змінюється встановлена версія.
+- `cmd/graft/testdata/goldens` — регресійні фікстури на Go для збереженої поведінки CLI.
+
+`docs/cli-contract.json` — це публічний контракт CLI; він перевіряється і проти `programSpec`, і проти переліку змінних середовища в Go.
+
+---
+
+## Ліцензія
+
+MIT. Дивіться [LICENSE](LICENSE).
