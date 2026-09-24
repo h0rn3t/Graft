@@ -12,14 +12,23 @@ import (
 )
 
 // WiredHostIDs lists the hosts a previous init wired here, read off disk: the
-// Claude Code hook shim, each owned instruction file, and each shared file that
-// carries graft's fenced section.
+// Claude Code hook shim, each owned instruction file, and each file with
+// graft's fenced section. A file several hosts share, as AGENTS.md is, cannot
+// say which of them was chosen, so those hosts come from the stamp alone.
 func WiredHostIDs(repo string) []string {
 	var ids []string
 	if _, err := os.Stat(filepath.Join(repo, ".claude", "helpers", "graft-hooks.cjs")); err == nil {
 		ids = append(ids, "claude")
 	}
-	for _, host := range hosts.Hosts() {
+	registry := hosts.Hosts()
+	shared := make(map[string]int, len(registry))
+	for _, host := range registry {
+		shared[host.RelPath]++
+	}
+	for _, host := range registry {
+		if shared[host.RelPath] > 1 {
+			continue
+		}
 		path := filepath.Join(repo, host.RelPath)
 		if host.Kind == hosts.KindSection {
 			data, err := os.ReadFile(path)

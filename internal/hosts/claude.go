@@ -1,7 +1,6 @@
 package hosts
 
 import (
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -13,7 +12,8 @@ const (
 	statuslineCommand = `node "${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-statusline.cjs"`
 	statuslineHelper  = "graft-statusline.cjs"
 	footerRegex       = `graft/[\w./-]+\.md`
-	repoHelpers       = "${CLAUDE_PROJECT_DIR:-.}/.claude/helpers"
+	// repoHookScript stays double-quoted so the shell expands the project dir.
+	repoHookScript = `"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs"`
 )
 
 var (
@@ -52,20 +52,18 @@ func ClaudeGlobalTargets(home string) []PlannedWrite {
 	}
 }
 
-func hookCommand(sub, helpers string) string {
-	return `node "` + helpers + `/graft-hooks.cjs" ` + sub
-}
-
 type graftBlock struct {
 	event  string
 	blocks []jsonjs.Value
 }
 
-func graftBlocks(helpers string) []graftBlock {
+// graftBlocks renders graft's Claude Code hook blocks for the quoted shim
+// script. Claude Code reads a hook's timeout in seconds.
+func graftBlocks(script string) []graftBlock {
 	block := func(matcher, sub string, timeout float64) *jsonjs.Object {
 		handler := jsonjs.NewObject()
 		handler.Set("type", "command")
-		handler.Set("command", hookCommand(sub, helpers))
+		handler.Set("command", "node "+script+" "+sub)
 		handler.Set("timeout", timeout)
 		out := jsonjs.NewObject()
 		if matcher != "" {
@@ -76,12 +74,12 @@ func graftBlocks(helpers string) []graftBlock {
 	}
 	return []graftBlock{
 		{event: "PostToolUse", blocks: []jsonjs.Value{
-			block("Write|Edit|MultiEdit", "post-edit", 10000),
-			block("Bash|mcp__graft__|Read|Grep|Glob", "tool-savings", 8000),
+			block("Write|Edit|MultiEdit", "post-edit", 10),
+			block("Bash|mcp__graft__|Read|Grep|Glob", "tool-savings", 8),
 		}},
-		{event: "UserPromptSubmit", blocks: []jsonjs.Value{block("", "prompt", 15000)}},
-		{event: "SessionStart", blocks: []jsonjs.Value{block("", "session-start", 8000)}},
-		{event: "Stop", blocks: []jsonjs.Value{block("", "stop", 8000)}},
+		{event: "UserPromptSubmit", blocks: []jsonjs.Value{block("", "prompt", 15)}},
+		{event: "SessionStart", blocks: []jsonjs.Value{block("", "session-start", 8)}},
+		{event: "Stop", blocks: []jsonjs.Value{block("", "stop", 8)}},
 	}
 }
 
@@ -127,13 +125,48 @@ func StatuslineWanted(statusline bool) bool {
 	return statusline && !envTruthy("GRAFT_NO_STATUSLINE")
 }
 
-func mergeHookBlocks(merged *jsonjs.Object, helpers string) {
-	hooksValue, present := merged.Get("hooks")
-	hooks := jsonjs.Spread(hooksValue, present && hooksValue != nil)
-	merged.Set("hooks", hooks)
-	for _, entry := range graftBlocks(helpers) {
-		current, _ := hooks.Get(entry.event)
-		prior, _ := jsonjs.AsArray(current)
+// arrayField returns object[key] as an array: absent or null is empty, and
+// anything else reports false so the caller leaves the user's value alone.
+func arrayField(object *jsonjs.Object, key string) ([]jsonjs.Value, bool) {
+	value, present := object.Get(key)
+	if !present || value == nil {
+		return nil, true
+	}
+	return jsonjs.AsArray(value)
+}
+
+// ownObject replaces object[key] with a copy it may edit, like
+// `object[key] = { ...object[key] }`: absent or null becomes {}, and anything
+// else but an object reports false and stays as it is.
+func ownObject(object *jsonjs.Object, key string) (*jsonjs.Object, bool) {
+	value, present := object.Get(key)
+	child := jsonjs.NewObject()
+	if present && value != nil {
+		current, ok := jsonjs.AsObject(value)
+		if !ok {
+			return nil, false
+		}
+		child = current.Clone()
+	}
+	object.Set(key, child)
+	return child, true
+}
+
+// mergeHookBlocks replaces graft's hook blocks in merged.hooks, keeping the
+// user's blocks. A hooks value or event that is not the expected shape is left
+// as it is and reported, where naming the file.
+func mergeHookBlocks(merged *jsonjs.Object, script, where string) []string {
+	hooks, ok := ownObject(merged, "hooks")
+	if !ok {
+		return []string{where + ": hooks is not an object — graft's hooks were not added."}
+	}
+	var warnings []string
+	for _, entry := range graftBlocks(script) {
+		prior, ok := arrayField(hooks, entry.event)
+		if !ok {
+			warnings = append(warnings, where+": hooks."+entry.event+" is not an array — graft's "+entry.event+" hook was not added.")
+			continue
+		}
 		next := make([]jsonjs.Value, 0, len(prior)+len(entry.blocks))
 		for _, item := range prior {
 			if !isGraftEntry(item) {
@@ -142,34 +175,42 @@ func mergeHookBlocks(merged *jsonjs.Object, helpers string) {
 		}
 		hooks.Set(entry.event, append(next, entry.blocks...))
 	}
+	return warnings
 }
 
 // MergeGraftSettings merges graft's statusline, hooks, footer regex, and Bash
 // allowlist into a repo's .claude/settings.json, keeping the user's entries.
+// A field of an unexpected shape is left untouched and reported.
 func MergeGraftSettings(existing *jsonjs.Object, statusline bool) (*jsonjs.Object, []string) {
+	const where = ".claude/settings.json"
 	merged := existing.Clone()
 	warnings := make([]string, 0)
 	wanted := StatuslineWanted(statusline)
 	applyStatusline(merged, "statusLine", wanted,
 		"Existing statusLine left untouched (a session allows only one). To use Graft, point it at .claude/helpers/graft-statusline.cjs.", &warnings)
 	applyStatusline(merged, "subagentStatusLine", wanted, "Existing subagentStatusLine left untouched.", &warnings)
-	mergeHookBlocks(merged, repoHelpers)
+	warnings = append(warnings, mergeHookBlocks(merged, repoHookScript, where)...)
 
-	footerValue, _ := merged.Get("footerLinksRegexes")
-	priorFooter, _ := jsonjs.AsArray(footerValue)
-	footers := make([]jsonjs.Value, 0, len(priorFooter)+1)
-	for _, item := range priorFooter {
-		if !IsGraftFooterRegex(item) {
-			footers = append(footers, item)
+	if priorFooter, ok := arrayField(merged, "footerLinksRegexes"); ok {
+		footers := make([]jsonjs.Value, 0, len(priorFooter)+1)
+		for _, item := range priorFooter {
+			if !IsGraftFooterRegex(item) {
+				footers = append(footers, item)
+			}
 		}
+		merged.Set("footerLinksRegexes", append(footers, footerRegex))
+	} else {
+		warnings = append(warnings, where+": footerLinksRegexes is not an array — graft's footer link was not added.")
 	}
-	merged.Set("footerLinksRegexes", append(footers, footerRegex))
 
-	permissionsValue, present := merged.Get("permissions")
-	permissions := jsonjs.Spread(permissionsValue, present && permissionsValue != nil)
-	merged.Set("permissions", permissions)
-	allowValue, _ := permissions.Get("allow")
-	priorAllow, _ := jsonjs.AsArray(allowValue)
+	permissions, ok := ownObject(merged, "permissions")
+	if !ok {
+		return merged, append(warnings, where+": permissions is not an object — graft's Bash allowlist was not added.")
+	}
+	priorAllow, ok := arrayField(permissions, "allow")
+	if !ok {
+		return merged, append(warnings, where+": permissions.allow is not an array — graft's Bash allowlist was not added.")
+	}
 	allow := make([]jsonjs.Value, 0, len(priorAllow)+len(allowEntries))
 	for _, item := range priorAllow {
 		if !IsGraftAllowEntry(item) {
@@ -194,96 +235,95 @@ type ClaudeInitResult struct {
 }
 
 // RunClaudeInit writes the repo's Claude Code layer, plus the user-level copy
-// under home unless global is false.
+// under home unless global is false. Each file is written only when its
+// content changes. A settings file that cannot be read or is not a JSON object
+// is left alone with a warning.
 func RunClaudeInit(repo string, env Env, statusline, global bool) (ClaudeInitResult, error) {
+	f := openFiles(repo, env.Home)
+	defer f.close()
 	targets := ClaudeTargets(repo)
 	settingsPath, statuslinePath, hooksPath, skillPath, mcpPath := targets[0].Path, targets[1].Path, targets[2].Path, targets[3].Path, targets[4].Path
-	if err := os.MkdirAll(filepath.Dir(statuslinePath), 0o755); err != nil {
-		return ClaudeInitResult{}, err
-	}
-	existing := jsonjs.NewObject()
-	if data, err := os.ReadFile(settingsPath); err == nil {
-		if value, err := jsonjs.Parse(data); err == nil {
-			existing = jsonjs.Spread(value, value != nil)
+	result := ClaudeInitResult{SettingsPath: settingsPath, Shims: []string{statuslinePath, hooksPath}, Skill: skillPath}
+	existing, _, ok, err := f.readJSONObject(settingsPath)
+	switch {
+	case err != nil:
+		result.Warnings = append(result.Warnings, "Could not read "+settingsPath+" ("+err.Error()+") — left unchanged; graft's hooks were not added.")
+	case !ok:
+		result.Warnings = append(result.Warnings, settingsPath+" is not a valid JSON object — left unchanged; graft's hooks were not added.")
+	default:
+		merged, warnings := MergeGraftSettings(existing, statusline)
+		result.Warnings = append(result.Warnings, warnings...)
+		if _, err := f.writeOwnedFile("claude", settingsPath, jsonjs.Stringify(merged, 2)+"\n", 0); err != nil {
+			return ClaudeInitResult{}, err
 		}
-	}
-	merged, warnings := MergeGraftSettings(existing, statusline)
-	if err := os.WriteFile(settingsPath, []byte(jsonjs.Stringify(merged, 2)+"\n"), 0o644); err != nil {
-		return ClaudeInitResult{}, err
 	}
 	for _, shim := range []struct{ path, content string }{
 		{statuslinePath, StatuslineShim(env.BakedDir)},
 		{hooksPath, HooksShim(env.BakedDir)},
 	} {
-		if err := os.WriteFile(shim.path, []byte(shim.content), 0o755); err != nil {
-			return ClaudeInitResult{}, err
-		}
-		if err := os.Chmod(shim.path, 0o755); err != nil {
+		if _, err := f.writeOwnedFile("claude", shim.path, shim.content, 0o755); err != nil {
 			return ClaudeInitResult{}, err
 		}
 	}
-	if err := os.MkdirAll(filepath.Dir(skillPath), 0o755); err != nil {
+	if _, err := f.writeOwnedFile("claude", skillPath, SkillTemplate(), 0); err != nil {
 		return ClaudeInitResult{}, err
 	}
-	if err := os.WriteFile(skillPath, []byte(SkillTemplate()), 0o644); err != nil {
+	if result.MCP, err = f.mergeJSONKey("claude", mcpPath, "mcpServers", env.Launch.object()); err != nil {
 		return ClaudeInitResult{}, err
 	}
-	mcp, err := MergeJSONKey("claude", mcpPath, "mcpServers", env.Launch.object())
-	if err != nil {
-		return ClaudeInitResult{}, err
-	}
-	result := ClaudeInitResult{SettingsPath: settingsPath, Shims: []string{statuslinePath, hooksPath}, Skill: skillPath, MCP: mcp, Warnings: warnings}
 	if global {
-		result.Global = InstallClaudeGlobal(env)
+		writes, warnings, err := f.installClaudeGlobal(env)
+		if err != nil {
+			return ClaudeInitResult{}, err
+		}
+		result.Global = writes
+		result.Warnings = append(result.Warnings, warnings...)
 	}
 	return result, nil
 }
 
-// InstallClaudeGlobal writes the user-level shim, hook entries, and MCP
-// registration. Failures are reported as skipped writes, never returned.
-func InstallClaudeGlobal(env Env) []ConfigWrite {
+// installClaudeGlobal writes the user-level shim, hook entries, and MCP
+// registration. A config that is not a JSON object is reported as skipped; a
+// read or write failure is returned.
+func (f *files) installClaudeGlobal(env Env) ([]ConfigWrite, []string, error) {
 	targets := ClaudeGlobalTargets(env.Home)
 	shimTarget, settingsTarget, mcpTarget := targets[0], targets[1], targets[2]
-	skipped := func(target PlannedWrite) ConfigWrite {
-		return ConfigWrite{ID: target.ID, Path: target.Path, Action: ActionUnparseable}
-	}
-	out := make([]ConfigWrite, 0, 3)
-	shim, err := writeOwnedFile(shimTarget.ID, shimTarget.Path, HooksShim(env.BakedDir), 0o755)
+	shim, err := f.writeOwnedFile(shimTarget.ID, shimTarget.Path, HooksShim(env.BakedDir), 0o755)
 	if err != nil {
-		shim = skipped(shimTarget)
+		return nil, nil, err
 	}
-	out = append(out, shim)
-	if shim.Action != ActionUnparseable {
-		write, err := upsertGlobalHooks(settingsTarget, filepath.ToSlash(globalHelpersDir(env.Home)))
-		if err != nil {
-			write = skipped(settingsTarget)
-		}
-		out = append(out, write)
-	}
-	mcp, err := MergeJSONKey(mcpTarget.ID, mcpTarget.Path, "mcpServers", env.Launch.object())
+	script := shellPath(filepath.ToSlash(filepath.Join(globalHelpersDir(env.Home), "graft-hooks.cjs")))
+	hooks, warnings, err := f.upsertGlobalHooks(settingsTarget, script)
 	if err != nil {
-		mcp = skipped(mcpTarget)
+		return nil, nil, err
 	}
-	return append(out, mcp)
+	mcp, err := f.mergeJSONKey(mcpTarget.ID, mcpTarget.Path, "mcpServers", env.Launch.object())
+	if err != nil {
+		return nil, nil, err
+	}
+	return []ConfigWrite{shim, hooks, mcp}, warnings, nil
 }
 
-func upsertGlobalHooks(target PlannedWrite, helpers string) (ConfigWrite, error) {
-	root, existed, ok := readJSONObject(target.Path)
+func (f *files) upsertGlobalHooks(target PlannedWrite, script string) (ConfigWrite, []string, error) {
+	root, existed, ok, err := f.readJSONObject(target.Path)
+	if err != nil {
+		return ConfigWrite{}, nil, err
+	}
 	if !ok {
-		return ConfigWrite{ID: target.ID, Path: target.Path, Action: ActionUnparseable}, nil
+		return ConfigWrite{ID: target.ID, Path: target.Path, Action: ActionUnparseable}, nil, nil
 	}
 	before := jsonjs.Stringify(root, 0)
 	merged := root.Clone()
-	mergeHookBlocks(merged, helpers)
+	warnings := mergeHookBlocks(merged, script, target.Path)
 	if jsonjs.Stringify(merged, 0) == before {
-		return ConfigWrite{ID: target.ID, Path: target.Path, Action: ActionUnchanged}, nil
+		return ConfigWrite{ID: target.ID, Path: target.Path, Action: ActionUnchanged}, warnings, nil
 	}
-	if err := writeJSON(target.Path, merged); err != nil {
-		return ConfigWrite{}, err
+	if err := f.writeJSON(target.Path, merged); err != nil {
+		return ConfigWrite{}, nil, err
 	}
 	action := ActionCreated
 	if existed {
 		action = ActionUpdated
 	}
-	return ConfigWrite{ID: target.ID, Path: target.Path, Action: action}, nil
+	return ConfigWrite{ID: target.ID, Path: target.Path, Action: action}, warnings, nil
 }

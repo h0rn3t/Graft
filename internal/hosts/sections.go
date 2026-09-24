@@ -2,8 +2,8 @@ package hosts
 
 import (
 	"errors"
-	"os"
-	"path/filepath"
+	"fmt"
+	"io/fs"
 	"regexp"
 	"slices"
 	"strings"
@@ -70,15 +70,17 @@ func markerLine(lines []string, marker string, from int) int {
 	return -1
 }
 
-// UpsertSection writes body into filePath between markers: creating the file,
+// errUnclosedMarker refuses a file whose graft start marker has no end marker:
+// the region's extent is unknown, so any edit could destroy the user's text.
+var errUnclosedMarker = errors.New("unclosed graft marker")
+
+// upsertSection writes body into filePath between markers: creating the file,
 // replacing an existing block, or appending a new one after the user's content.
-func UpsertSection(filePath, body string, markers Markers) (UpsertAction, error) {
-	data, err := os.ReadFile(filePath)
-	if errors.Is(err, os.ErrNotExist) {
-		if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
-			return "", err
-		}
-		return UpsertCreated, os.WriteFile(filePath, []byte(FencedBlock(body, "\n", markers)+"\n"), 0o644)
+// A start marker without its end marker is refused and the file left alone.
+func (f *files) upsertSection(filePath, body string, markers Markers) (UpsertAction, error) {
+	data, err := f.readFile(filePath)
+	if errors.Is(err, fs.ErrNotExist) {
+		return UpsertCreated, f.writeFile(filePath, []byte(FencedBlock(body, "\n", markers)+"\n"), 0o644)
 	}
 	if err != nil {
 		return "", err
@@ -91,13 +93,16 @@ func UpsertSection(filePath, body string, markers Markers) (UpsertAction, error)
 	if start != -1 {
 		end = markerLine(lines, markers.End, start+1)
 	}
-	if start != -1 && end != -1 {
+	if start != -1 && end == -1 {
+		return "", fmt.Errorf("%s: %w %s; fix the file by hand", filePath, errUnclosedMarker, markers.Start)
+	}
+	if start != -1 {
 		if strings.Join(lines[start:end+1], "\n") == FencedBlock(body, "\n", markers) {
 			return UpsertUnchanged, nil
 		}
 		block := strings.Split(FencedBlock(body, eol, markers), eol)
 		next := slices.Concat(lines[:start], block, lines[end+1:])
-		return UpsertReplaced, os.WriteFile(filePath, []byte(strings.Join(next, eol)), 0o644)
+		return UpsertReplaced, f.writeFile(filePath, []byte(strings.Join(next, eol)), 0o644)
 	}
 	separator := eol + eol
 	switch {
@@ -106,5 +111,5 @@ func UpsertSection(filePath, body string, markers Markers) (UpsertAction, error)
 	case strings.HasSuffix(text, eol):
 		separator = eol
 	}
-	return UpsertAppended, os.WriteFile(filePath, []byte(text+separator+FencedBlock(body, eol, markers)+eol), 0o644)
+	return UpsertAppended, f.writeFile(filePath, []byte(text+separator+FencedBlock(body, eol, markers)+eol), 0o644)
 }

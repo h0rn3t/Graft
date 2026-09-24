@@ -185,10 +185,16 @@ func FormatRetractions(retractions []Retraction, apply bool) string {
 	for _, host := range order {
 		lines = append(lines, "\n"+host+":")
 		for _, retraction := range byHost[host] {
-			mark, note := "~", " ("+retraction.What+")"
+			mark, action, note := "~", verb, " ("+retraction.What+")"
+			cause := "unknown error"
+			if retraction.Err != nil {
+				cause = retraction.Err.Error()
+			}
 			switch retraction.Action {
 			case RetractUnparseable:
-				mark, note = "⚠", " — not valid JSON, left untouched (remove the graft entry by hand)"
+				mark, note = "⚠", " — "+cause+", left untouched (remove the graft entry by hand)"
+			case RetractFailed:
+				mark, action, note = "✗", "could not remove", " — "+cause
 			case RetractDeleted:
 				mark, note = "-", " ("+retraction.What+" — deleted)"
 			}
@@ -196,7 +202,7 @@ func FormatRetractions(retractions []Retraction, apply bool) string {
 			if retraction.Scope == ScopeGlobal {
 				scope = " [machine-wide]"
 			}
-			lines = append(lines, fmt.Sprintf("  %s %s: %s%s%s", mark, verb, retraction.Path, scope, note))
+			lines = append(lines, fmt.Sprintf("  %s %s: %s%s%s", mark, action, retraction.Path, scope, note))
 		}
 	}
 	return strings.TrimPrefix(strings.Join(lines, "\n"), "\n")

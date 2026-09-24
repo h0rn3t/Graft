@@ -56,7 +56,7 @@ func instructionTarget(repo string, host Host) PlannedWrite {
 
 // PlanInit lists every host graft can wire with the files selecting it would
 // touch, Claude Code first. A non-nil ids restricts the plan to those hosts.
-func PlanInit(repo, home string, launch Launch, ids []string) []HostPlan {
+func PlanInit(repo, home string, _ Launch, ids []string) []HostPlan {
 	detected := make(map[string]bool)
 	for _, host := range DetectHosts(home, repo) {
 		detected[host.ID] = true
@@ -67,7 +67,7 @@ func PlanInit(repo, home string, launch Launch, ids []string) []HostPlan {
 	}}
 	for _, host := range Hosts() {
 		writes := []PlannedWrite{instructionTarget(repo, host)}
-		for _, target := range MCPTargets(repo, []string{host.ID}, home, launch) {
+		for _, target := range MCPTargets(repo, []string{host.ID}, home) {
 			writes = append(writes, target.PlannedWrite)
 		}
 		switch host.ID {

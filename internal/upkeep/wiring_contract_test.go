@@ -44,6 +44,8 @@ func TestReconcileWiringRewritesLegacyShimAtCurrentVersion(t *testing.T) {
 func TestReconcileWiringContract(t *testing.T) {
 	now := time.Date(2026, 9, 22, 10, 20, 30, 456_000_000, time.FixedZone("UTC+3", 3*60*60))
 	defaultOptions := WiringOptions{Global: true, MCP: true, Hooks: true, Statusline: true}
+	// Without a stamp nobody chose machine-wide writes.
+	noStampOptions := WiringOptions{MCP: true, Hooks: true, Statusline: true}
 	tests := []struct {
 		name                  string
 		contextDir            string
@@ -93,13 +95,13 @@ func TestReconcileWiringContract(t *testing.T) {
 			nilRewrite: true,
 		},
 		{
-			name:            "legacy hosts are sorted and receive default options",
+			name:            "unstamped hosts are sorted and get no machine-wide writes",
 			wired:           []string{"gemini", "agents", "gemini"},
 			wantWiredCalls:  1,
 			wantRewrite:     true,
 			wantHosts:       []string{"agents", "gemini"},
-			wantOptions:     defaultOptions,
-			wantNote:        "· graft refreshed this repo's agent wiring (including this machine's ~/.codex config) (written by unwired, now 2.0.0): agents, gemini.",
+			wantOptions:     noStampOptions,
+			wantNote:        "· graft refreshed this repo's agent wiring (written by unwired, now 2.0.0): agents, gemini.",
 			wantStoredStamp: true,
 			mutateHosts:     true,
 		},
@@ -131,7 +133,7 @@ func TestReconcileWiringContract(t *testing.T) {
 			wantWiredCalls:  1,
 			wantRewrite:     true,
 			wantHosts:       []string{"gemini"},
-			wantOptions:     defaultOptions,
+			wantOptions:     noStampOptions,
 			wantNote:        "· graft refreshed this repo's agent wiring (written by unwired, now 2.0.0): gemini.",
 			wantStoredStamp: true,
 		},
@@ -142,7 +144,7 @@ func TestReconcileWiringContract(t *testing.T) {
 			wantWiredCalls:  1,
 			wantRewrite:     true,
 			wantHosts:       []string{"gemini"},
-			wantOptions:     defaultOptions,
+			wantOptions:     noStampOptions,
 			wantNote:        "· graft refreshed this repo's agent wiring (written by unwired, now 2.0.0): gemini.",
 			wantStoredStamp: true,
 		},
@@ -181,8 +183,8 @@ func TestReconcileWiringContract(t *testing.T) {
 			wantWiredCalls: 1,
 			wantRewrite:    true,
 			wantHosts:      []string{"agents"},
-			wantOptions:    defaultOptions,
-			wantNote:       "· graft refreshed this repo's agent wiring (including this machine's ~/.codex config) (written by unwired, now 2.0.0): agents.",
+			wantOptions:    noStampOptions,
+			wantNote:       "· graft refreshed this repo's agent wiring (written by unwired, now 2.0.0): agents.",
 		},
 	}
 	for _, tt := range tests {

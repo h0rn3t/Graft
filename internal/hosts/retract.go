@@ -2,6 +2,7 @@ package hosts
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -20,6 +21,14 @@ const (
 	RetractDeleted     RetractAction = "deleted"
 	RetractAbsent      RetractAction = "absent"
 	RetractUnparseable RetractAction = "skipped-unparseable"
+	// RetractFailed means the target could not be read, rewritten, or
+	// removed; Retraction.Err carries the cause.
+	RetractFailed RetractAction = "failed"
+)
+
+var (
+	errNotJSON       = errors.New("not valid JSON")
+	errNotJSONObject = errors.New("not a JSON object")
 )
 
 // Retraction reports one target graft could have written.
@@ -29,6 +38,9 @@ type Retraction struct {
 	What   string
 	Scope  Scope
 	Action RetractAction
+	// Err says why a target was skipped (RetractUnparseable) or failed
+	// (RetractFailed); nil otherwise.
+	Err error
 }
 
 // RetractOptions controls a retraction.
@@ -45,42 +57,35 @@ type RetractOptions struct {
 
 type retractTarget struct {
 	Retraction
-	run func(apply bool) RetractAction
+	run func(apply bool) (RetractAction, error)
 }
+
+var (
+	blankRuns      = regexp.MustCompile(`\n{3,}`)
+	leadingBlanks  = regexp.MustCompile(`^\n+`)
+	trailingBlanks = regexp.MustCompile(`\n+$`)
+)
 
 func isBlank(text string) bool {
 	return strings.TrimSpace(text) == ""
 }
 
-func exists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-func removeFile(path string, apply bool) RetractAction {
-	if !exists(path) {
-		return RetractAbsent
+// removeFile deletes a graft-owned file; only a file already gone counts as
+// removed without a removal.
+func (f *files) removeFile(path string, apply bool) (RetractAction, error) {
+	if _, err := f.lstat(path); errors.Is(err, fs.ErrNotExist) {
+		return RetractAbsent, nil
+	} else if err != nil {
+		return RetractFailed, err
 	}
-	if apply {
-		_ = os.Remove(path) // force: a vanished file is already retracted
-		pruneEmptyDirs(filepath.Dir(path))
+	if !apply {
+		return RetractDeleted, nil
 	}
-	return RetractDeleted
-}
-
-// pruneEmptyDirs removes up to six empty ancestors of a just-emptied directory.
-func pruneEmptyDirs(dir string) {
-	for range 6 {
-		entries, err := os.ReadDir(dir)
-		if err != nil || len(entries) > 0 || os.Remove(dir) != nil {
-			return
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			return
-		}
-		dir = parent
+	if err := f.remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return RetractFailed, err
 	}
+	f.pruneEmptyDirs(filepath.Dir(path))
+	return RetractDeleted, nil
 }
 
 func collapseBlankLines(text string) string {
@@ -89,140 +94,146 @@ func collapseBlankLines(text string) string {
 	return trailingBlanks.ReplaceAllString(collapsed, "\n")
 }
 
-// stripSection removes every graft-fenced region from a file the user owns.
-func stripSection(path string, apply bool) RetractAction {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return RetractAbsent
+// readText reads a target for retraction; a missing file is absent.
+func (f *files) readText(path string) (string, RetractAction, error) {
+	data, err := f.readFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return "", RetractAbsent, nil
 	}
-	text := string(data)
+	if err != nil {
+		return "", RetractFailed, err
+	}
+	return string(data), "", nil
+}
+
+// writeRest writes what is left of a target, or deletes it when nothing is.
+func (f *files) writeRest(path, rest string) (RetractAction, error) {
+	if isBlank(rest) {
+		return f.removeFile(path, true)
+	}
+	if err := f.writeFile(path, []byte(rest), 0o644); err != nil {
+		return RetractFailed, err
+	}
+	return RetractRemoved, nil
+}
+
+// stripSection removes every graft-fenced region from a file the user owns.
+// A start marker without its end marker leaves the whole file untouched.
+func (f *files) stripSection(path string, apply bool) (RetractAction, error) {
+	text, action, err := f.readText(path)
+	if action != "" {
+		return action, err
+	}
 	if !slices.ContainsFunc(AllMarkers, func(markers Markers) bool { return strings.Contains(text, markers.Start) }) {
-		return RetractAbsent
+		return RetractAbsent, nil
 	}
 	eol := detectEOL(text)
-	out := make([]string, 0)
-	closing, inside, found := "", false, false
-	for _, line := range splitLines(text) {
-		trimmed := strings.TrimSpace(line)
-		if !inside {
-			if at := slices.IndexFunc(AllMarkers, func(markers Markers) bool { return markers.Start == trimmed }); at >= 0 {
-				closing, inside, found = AllMarkers[at].End, true, true
-				continue
-			}
-			out = append(out, line)
+	lines := splitLines(text)
+	out := make([]string, 0, len(lines))
+	found := false
+	for i := 0; i < len(lines); i++ {
+		trimmed := strings.TrimSpace(lines[i])
+		at := slices.IndexFunc(AllMarkers, func(markers Markers) bool { return markers.Start == trimmed })
+		if at < 0 {
+			out = append(out, lines[i])
 			continue
 		}
-		if trimmed == closing {
-			inside = false
+		end := markerLine(lines, AllMarkers[at].End, i+1)
+		if end == -1 {
+			return RetractUnparseable, errUnclosedMarker
 		}
+		found, i = true, end
 	}
 	if !found {
-		return RetractAbsent
+		return RetractAbsent, nil
 	}
 	collapsed := collapseBlankLines(strings.Join(out, "\n"))
 	if !apply {
 		if isBlank(collapsed) {
-			return RetractDeleted
+			return RetractDeleted, nil
 		}
-		return RetractRemoved
-	}
-	if isBlank(collapsed) {
-		return removeFile(path, true)
+		return RetractRemoved, nil
 	}
 	if eol != "\n" {
 		collapsed = strings.ReplaceAll(collapsed, "\n", "\r\n")
 	}
-	if os.WriteFile(path, []byte(collapsed), 0o644) != nil {
-		return RetractUnparseable
-	}
-	return RetractRemoved
+	return f.writeRest(path, collapsed)
 }
 
-// readRetractObject loads a JSON config for retraction.
-func readRetractObject(path string) (*jsonjs.Object, RetractAction, bool) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return nil, RetractAbsent, false
+// readRetractObject loads a JSON config for retraction; a non-empty action
+// already says what happened to the target.
+func (f *files) readRetractObject(path string) (*jsonjs.Object, RetractAction, error) {
+	text, action, err := f.readText(path)
+	if action != "" {
+		return nil, action, err
 	}
+	value, err := jsonjs.Parse([]byte(text))
 	if err != nil {
-		return nil, RetractUnparseable, false
-	}
-	value, err := jsonjs.Parse(data)
-	if err != nil {
-		return nil, RetractUnparseable, false
+		return nil, RetractUnparseable, errNotJSON
 	}
 	object, ok := jsonjs.AsObject(value)
 	if !ok {
-		return nil, RetractUnparseable, false
+		return nil, RetractUnparseable, errNotJSONObject
 	}
-	return object, "", true
+	return object, "", nil
 }
 
 // finishJSON writes root back, or deletes the file when nothing is left.
-func finishJSON(path string, root *jsonjs.Object, apply bool) RetractAction {
+func (f *files) finishJSON(path string, root *jsonjs.Object, apply bool) (RetractAction, error) {
 	if !apply {
 		if root.Len() == 0 {
-			return RetractDeleted
+			return RetractDeleted, nil
 		}
-		return RetractRemoved
+		return RetractRemoved, nil
 	}
 	if root.Len() == 0 {
-		return removeFile(path, true)
+		return f.removeFile(path, true)
 	}
-	if os.WriteFile(path, []byte(jsonjs.Stringify(root, 2)+"\n"), 0o644) != nil {
-		return RetractUnparseable
-	}
-	return RetractRemoved
+	return f.writeRest(path, jsonjs.Stringify(root, 2)+"\n")
 }
 
-func removeJSONKey(path, topKey string, apply bool) RetractAction {
-	root, action, ok := readRetractObject(path)
-	if !ok {
-		return action
+func (f *files) removeJSONKey(path, topKey string, apply bool) (RetractAction, error) {
+	root, action, err := f.readRetractObject(path)
+	if action != "" {
+		return action, err
 	}
 	value, _ := root.Get(topKey)
 	bucket, ok := jsonjs.AsObject(value)
 	if !ok || !bucket.Has("graft") {
-		return RetractAbsent
+		return RetractAbsent, nil
 	}
 	if !apply {
 		if bucket.Len() == 1 && root.Len() == 1 {
-			return RetractDeleted
+			return RetractDeleted, nil
 		}
-		return RetractRemoved
+		return RetractRemoved, nil
 	}
 	bucket.Delete("graft")
 	if bucket.Len() == 0 {
 		root.Delete(topKey)
 	}
-	return finishJSON(path, root, true)
+	return f.finishJSON(path, root, true)
 }
 
-func removeTOMLSection(path string, apply bool) RetractAction {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return RetractAbsent
+func (f *files) removeTOMLSection(path string, apply bool) (RetractAction, error) {
+	text, action, err := f.readText(path)
+	if action != "" {
+		return action, err
 	}
-	kept, found := StripTOMLSection(string(data))
+	kept, found := StripTOMLSection(text)
 	if !found {
-		return RetractAbsent
+		return RetractAbsent, nil
 	}
 	if !apply {
 		if isBlank(kept) {
-			return RetractDeleted
+			return RetractDeleted, nil
 		}
-		return RetractRemoved
-	}
-	if isBlank(kept) {
-		return removeFile(path, true)
+		return RetractRemoved, nil
 	}
 	if !strings.HasSuffix(kept, "\n") {
 		kept += "\n"
 	}
-	if os.WriteFile(path, []byte(kept), 0o644) != nil {
-		return RetractUnparseable
-	}
-	return RetractRemoved
+	return f.writeRest(path, kept)
 }
 
 // dropGraftHooks removes every graft hook entry from root.hooks.
@@ -253,10 +264,10 @@ func mustGet(object *jsonjs.Object, key string) jsonjs.Value {
 	return value
 }
 
-func stripClaudeSettings(path string, apply bool) RetractAction {
-	root, action, ok := readRetractObject(path)
-	if !ok {
-		return action
+func (f *files) stripClaudeSettings(path string, apply bool) (RetractAction, error) {
+	root, action, err := f.readRetractObject(path)
+	if action != "" {
+		return action, err
 	}
 	before := jsonjs.Stringify(root, 0)
 	for _, key := range []string{"statusLine", "subagentStatusLine"} {
@@ -287,9 +298,9 @@ func stripClaudeSettings(path string, apply bool) RetractAction {
 		}
 	}
 	if jsonjs.Stringify(root, 0) == before {
-		return RetractAbsent
+		return RetractAbsent, nil
 	}
-	return finishJSON(path, root, apply)
+	return f.finishJSON(path, root, apply)
 }
 
 func orEmpty(value jsonjs.Value) jsonjs.Value {
@@ -299,73 +310,103 @@ func orEmpty(value jsonjs.Value) jsonjs.Value {
 	return value
 }
 
-func stripCodexHooks(path string, apply bool) RetractAction {
-	root, action, ok := readRetractObject(path)
-	if !ok {
-		return action
+func (f *files) stripCodexHooks(path string, apply bool) (RetractAction, error) {
+	root, action, err := f.readRetractObject(path)
+	if action != "" {
+		return action, err
 	}
 	if _, ok := jsonjs.AsObject(mustGet(root, "hooks")); !ok {
-		return RetractAbsent
+		return RetractAbsent, nil
 	}
 	before := jsonjs.Stringify(root, 0)
 	dropGraftHooks(root)
 	if jsonjs.Stringify(root, 0) == before {
-		return RetractAbsent
+		return RetractAbsent, nil
 	}
-	return finishJSON(path, root, apply)
+	return f.finishJSON(path, root, apply)
 }
 
-func stripIgnoreEntries(path string, entries []*regexp.Regexp, apply bool) RetractAction {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return RetractAbsent
+// ignoreRule is what graft adds to an ignore file: the comment lines it
+// writes above its entries, and the entries themselves.
+type ignoreRule struct {
+	comments []string
+	entries  []*regexp.Regexp
+}
+
+func (rule ignoreRule) ours(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	return slices.Contains(rule.comments, trimmed) ||
+		slices.ContainsFunc(rule.entries, func(entry *regexp.Regexp) bool { return entry.MatchString(trimmed) })
+}
+
+func (f *files) stripIgnoreEntries(path string, rule ignoreRule, apply bool) (RetractAction, error) {
+	text, action, err := f.readText(path)
+	if action != "" {
+		return action, err
 	}
-	text := string(data)
 	lines := strings.Split(text, "\n")
-	kept := slices.DeleteFunc(slices.Clone(lines), func(line string) bool {
-		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "#") && strings.Contains(trimmed, "graft") {
-			return true
-		}
-		return slices.ContainsFunc(entries, func(entry *regexp.Regexp) bool { return entry.MatchString(trimmed) })
-	})
-	result := collapseBlankLines(strings.Join(kept, "\n"))
-	if result == text {
-		return RetractAbsent
+	kept := slices.DeleteFunc(slices.Clone(lines), rule.ours)
+	if len(kept) == len(lines) {
+		return RetractAbsent, nil
 	}
+	result := collapseBlankLines(strings.Join(kept, "\n"))
 	if !apply {
 		if isBlank(result) {
-			return RetractDeleted
+			return RetractDeleted, nil
 		}
-		return RetractRemoved
-	}
-	if isBlank(result) {
-		return removeFile(path, true)
+		return RetractRemoved, nil
 	}
 	if !strings.HasSuffix(result, "\n") {
 		result += "\n"
 	}
-	if os.WriteFile(path, []byte(result), 0o644) != nil {
-		return RetractUnparseable
-	}
-	return RetractRemoved
+	return f.writeRest(path, result)
 }
 
-func removeDir(path string, apply bool) RetractAction {
-	if !dirExists(path) {
-		return RetractAbsent
+func (f *files) removeDir(path string, apply bool) (RetractAction, error) {
+	info, err := f.lstat(path)
+	if errors.Is(err, fs.ErrNotExist) || (err == nil && !info.IsDir()) {
+		return RetractAbsent, nil
 	}
-	if apply {
-		_ = os.RemoveAll(path) // force: whatever survives is reported by the next run
-		pruneEmptyDirs(filepath.Dir(path))
+	if err != nil {
+		return RetractFailed, err
 	}
-	return RetractDeleted
+	if !apply {
+		return RetractDeleted, nil
+	}
+	if err := f.removeAll(path); err != nil {
+		return RetractFailed, err
+	}
+	f.pruneEmptyDirs(filepath.Dir(path))
+	return RetractDeleted, nil
 }
 
 var (
-	gitignoreEntry = regexp.MustCompile(`^/?graft/?$`)
-	ignoreEntries  = []*regexp.Regexp{regexp.MustCompile(`^!?graft/?$`), regexp.MustCompile(`^graft/\.(cache|graph)/?$`)}
+	gitignoreRule = ignoreRule{
+		comments: []string{"# graft's local graph cache — regenerable, not committed (run `graft build`)."},
+		entries:  []*regexp.Regexp{regexp.MustCompile(`^/?graft/?$`)},
+	}
+	ignoreFileRule = ignoreRule{
+		comments: []string{
+			"# graft's cards are gitignored but should stay greppable: ripgrep reads",
+			"# .ignore before .gitignore, so this re-admits the tree to search only.",
+		},
+		entries: []*regexp.Regexp{regexp.MustCompile(`^!?graft/?$`), regexp.MustCompile(`^graft/\.(cache|graph)/?$`)},
+	}
 )
+
+// ContextCacheDir is <context>/.cache: contextDir when given, else GRAFT_DIR
+// (relative to repo), else <repo>/graft. The wiring stamp lives there.
+func ContextCacheDir(repo, contextDir string) string {
+	if contextDir == "" {
+		contextDir = os.Getenv("GRAFT_DIR")
+	}
+	if contextDir == "" {
+		contextDir = filepath.Join(repo, "graft")
+	} else if !filepath.IsAbs(contextDir) {
+		contextDir = filepath.Join(repo, contextDir)
+	}
+	return filepath.Join(contextDir, ".cache")
+}
 
 type targetList struct {
 	kept map[string]bool
@@ -374,7 +415,7 @@ type targetList struct {
 }
 
 // add queues a target unless a kept host owns its path or it is already queued.
-func (list *targetList) add(hostID, path, what string, scope Scope, run func(bool) RetractAction) {
+func (list *targetList) add(hostID, path, what string, scope Scope, run func(bool) (RetractAction, error)) {
 	if list.kept[path] || list.seen[path] {
 		return
 	}
@@ -383,7 +424,7 @@ func (list *targetList) add(hostID, path, what string, scope Scope, run func(boo
 }
 
 // retractTargets lists every target graft could have written, in removal order.
-func retractTargets(repo string, env Env, opts RetractOptions) []retractTarget {
+func (f *files) retractTargets(repo string, env Env, opts RetractOptions) []retractTarget {
 	exclude := func(id string) bool { return slices.Contains(opts.Exclude, id) }
 	list := &targetList{kept: keptPaths(repo, env, opts.Exclude), seen: make(map[string]bool)}
 	for _, host := range Hosts() {
@@ -392,72 +433,79 @@ func retractTargets(repo string, env Env, opts RetractOptions) []retractTarget {
 		}
 		path := filepath.Join(repo, host.RelPath)
 		if host.Kind == KindOwned {
-			list.add(host.ID, path, "graft-owned instruction file", ScopeRepo, func(apply bool) RetractAction { return removeFile(path, apply) })
+			list.add(host.ID, path, "graft-owned instruction file", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeFile(path, apply) })
 		} else {
-			list.add(host.ID, path, "fenced graft section", ScopeRepo, func(apply bool) RetractAction { return stripSection(path, apply) })
+			list.add(host.ID, path, "fenced graft section", ScopeRepo, func(apply bool) (RetractAction, error) { return f.stripSection(path, apply) })
 		}
 	}
-	for _, mcp := range MCPTargets(repo, slices.DeleteFunc(HostIDs(), exclude), env.Home, env.Launch) {
+	for _, mcp := range mcpTargets(repo, slices.DeleteFunc(HostIDs(), exclude), env.Home, true) {
 		if !opts.Global && mcp.Scope == ScopeGlobal {
 			continue
 		}
-		list.add(mcp.HostID, mcp.Path, mcp.What, mcp.Scope, func(apply bool) RetractAction {
+		list.add(mcp.HostID, mcp.Path, mcp.What, mcp.Scope, func(apply bool) (RetractAction, error) {
 			if mcp.Format == FormatTOML {
-				return removeTOMLSection(mcp.Path, apply)
+				return f.removeTOMLSection(mcp.Path, apply)
 			}
-			return removeJSONKey(mcp.Path, mcp.TopKey, apply)
+			return f.removeJSONKey(mcp.Path, mcp.TopKey, apply)
 		})
 	}
 	if !exclude("claude") {
-		addClaudeTargets(list, repo)
+		f.addClaudeTargets(list, repo)
 	}
 	if opts.Global {
-		addGlobalTargets(list, env.Home, exclude)
+		f.addGlobalTargets(list, env.Home, exclude)
 	}
+	cache := filepath.Join(repo, "graft")
 	if opts.Cache {
-		cache, gitignore, ignore := filepath.Join(repo, "graft"), filepath.Join(repo, ".gitignore"), filepath.Join(repo, ".ignore")
-		list.add("graph", cache, "local graph cache", ScopeRepo, func(apply bool) RetractAction { return removeDir(cache, apply) })
-		list.add("graph", gitignore, "graft/ ignore entry", ScopeRepo, func(apply bool) RetractAction {
-			return stripIgnoreEntries(gitignore, []*regexp.Regexp{gitignoreEntry}, apply)
+		gitignore, ignore := filepath.Join(repo, ".gitignore"), filepath.Join(repo, ".ignore")
+		list.add("graph", cache, "local graph cache", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeDir(cache, apply) })
+		list.add("graph", gitignore, "graft/ ignore entry", ScopeRepo, func(apply bool) (RetractAction, error) {
+			return f.stripIgnoreEntries(gitignore, gitignoreRule, apply)
 		})
-		list.add("graph", ignore, "graft/ search re-admit entries", ScopeRepo, func(apply bool) RetractAction {
-			return stripIgnoreEntries(ignore, ignoreEntries, apply)
+		list.add("graph", ignore, "graft/ search re-admit entries", ScopeRepo, func(apply bool) (RetractAction, error) {
+			return f.stripIgnoreEntries(ignore, ignoreFileRule, apply)
 		})
+	}
+	// A full retraction also drops the wiring stamp, or the next session
+	// would re-wire the hosts it names; removing the cache already covers it.
+	stamp := filepath.Join(ContextCacheDir(repo, ""), "wiring-stamp.json")
+	if rel, err := filepath.Rel(cache, stamp); len(opts.Exclude) == 0 && (!opts.Cache || err != nil || !filepath.IsLocal(rel)) {
+		list.add("graph", stamp, "wiring stamp", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeFile(stamp, apply) })
 	}
 	return list.out
 }
 
-func addClaudeTargets(list *targetList, repo string) {
+func (f *files) addClaudeTargets(list *targetList, repo string) {
 	claude := ClaudeTargets(repo)
 	settings, statusline, hooks, skill, mcp := claude[0].Path, claude[1].Path, claude[2].Path, claude[3].Path, claude[4].Path
-	list.add("claude", settings, "statusline + hooks + allowlist + footer regex", ScopeRepo, func(apply bool) RetractAction { return stripClaudeSettings(settings, apply) })
-	list.add("claude", statusline, "statusline shim", ScopeRepo, func(apply bool) RetractAction { return removeFile(statusline, apply) })
-	list.add("claude", hooks, "hooks shim", ScopeRepo, func(apply bool) RetractAction { return removeFile(hooks, apply) })
-	list.add("claude", skill, "graft skill", ScopeRepo, func(apply bool) RetractAction { return removeFile(skill, apply) })
-	list.add("claude", mcp, "mcpServers.graft", ScopeRepo, func(apply bool) RetractAction { return removeJSONKey(mcp, "mcpServers", apply) })
+	list.add("claude", settings, "statusline + hooks + allowlist + footer regex", ScopeRepo, func(apply bool) (RetractAction, error) { return f.stripClaudeSettings(settings, apply) })
+	list.add("claude", statusline, "statusline shim", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeFile(statusline, apply) })
+	list.add("claude", hooks, "hooks shim", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeFile(hooks, apply) })
+	list.add("claude", skill, "graft skill", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeFile(skill, apply) })
+	list.add("claude", mcp, "mcpServers.graft", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeJSONKey(mcp, "mcpServers", apply) })
 }
 
-func addGlobalTargets(list *targetList, home string, exclude func(string) bool) {
+func (f *files) addGlobalTargets(list *targetList, home string, exclude func(string) bool) {
 	if !exclude("claude") {
 		global := ClaudeGlobalTargets(home)
 		shim, settings, mcp := global[0], global[1], global[2]
-		list.add("claude", shim.Path, shim.What, ScopeGlobal, func(apply bool) RetractAction { return removeFile(shim.Path, apply) })
-		list.add("claude", settings.Path, settings.What, ScopeGlobal, func(apply bool) RetractAction { return stripClaudeSettings(settings.Path, apply) })
-		list.add("claude", mcp.Path, mcp.What, ScopeGlobal, func(apply bool) RetractAction { return removeJSONKey(mcp.Path, "mcpServers", apply) })
+		list.add("claude", shim.Path, shim.What, ScopeGlobal, func(apply bool) (RetractAction, error) { return f.removeFile(shim.Path, apply) })
+		list.add("claude", settings.Path, settings.What, ScopeGlobal, func(apply bool) (RetractAction, error) { return f.stripClaudeSettings(settings.Path, apply) })
+		list.add("claude", mcp.Path, mcp.What, ScopeGlobal, func(apply bool) (RetractAction, error) { return f.removeJSONKey(mcp.Path, "mcpServers", apply) })
 	}
 	if !exclude("agents") {
 		for _, hook := range CodexHookTargets(home) {
-			list.add(hook.HostID, hook.Path, hook.What, ScopeGlobal, func(apply bool) RetractAction {
+			list.add(hook.HostID, hook.Path, hook.What, ScopeGlobal, func(apply bool) (RetractAction, error) {
 				if strings.HasSuffix(hook.Path, ".json") {
-					return stripCodexHooks(hook.Path, apply)
+					return f.stripCodexHooks(hook.Path, apply)
 				}
-				return removeFile(hook.Path, apply)
+				return f.removeFile(hook.Path, apply)
 			})
 		}
 	}
 	if !exclude("antigravity") {
 		for _, skill := range AntigravitySkillTargets(home) {
-			list.add(skill.HostID, skill.Path, skill.What, ScopeGlobal, func(apply bool) RetractAction { return removeFile(skill.Path, apply) })
+			list.add(skill.HostID, skill.Path, skill.What, ScopeGlobal, func(apply bool) (RetractAction, error) { return f.removeFile(skill.Path, apply) })
 		}
 	}
 }
@@ -471,7 +519,7 @@ func keptPaths(repo string, env Env, exclude []string) map[string]bool {
 			kept[filepath.Join(repo, host.RelPath)] = true
 		}
 	}
-	for _, target := range MCPTargets(repo, exclude, env.Home, env.Launch) {
+	for _, target := range mcpTargets(repo, exclude, env.Home, true) {
 		kept[target.Path] = true
 	}
 	if slices.Contains(exclude, "claude") {
@@ -493,13 +541,16 @@ func keptPaths(repo string, env Env, exclude []string) map[string]bool {
 }
 
 // Retract reports, and with opts.Apply removes, graft's contribution to every
-// target it could have written.
+// target it could have written. A target that cannot be handled is reported
+// with its cause and does not stop the others.
 func Retract(repo string, env Env, opts RetractOptions) []Retraction {
-	targets := retractTargets(repo, env, opts)
+	f := openFiles(repo, env.Home)
+	defer f.close()
+	targets := f.retractTargets(repo, env, opts)
 	out := make([]Retraction, len(targets))
 	for i, target := range targets {
 		out[i] = target.Retraction
-		out[i].Action = target.run(opts.Apply)
+		out[i].Action, out[i].Err = target.run(opts.Apply)
 	}
 	return out
 }

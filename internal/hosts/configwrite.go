@@ -2,8 +2,9 @@ package hosts
 
 import (
 	"errors"
+	"fmt"
+	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/h0rn3t/Graft/internal/jsonjs"
@@ -27,29 +28,31 @@ type ConfigWrite struct {
 	Action WriteAction
 }
 
-// writeOwnedFile writes a graft-owned file idempotently, applying mode on POSIX
-// when one is given, and re-applying it when only the mode drifted.
-func writeOwnedFile(id, path, content string, mode os.FileMode) (ConfigWrite, error) {
-	data, err := os.ReadFile(path)
-	existed := err == nil
-	if existed && string(data) == content {
+// writeOwnedFile writes a graft-owned file only when its content differs,
+// applying mode on POSIX when one is given, and re-applying it when only the
+// mode drifted.
+func (f *files) writeOwnedFile(id, path, content string, mode os.FileMode) (ConfigWrite, error) {
+	data, err := f.readFile(path)
+	existed := !errors.Is(err, fs.ErrNotExist)
+	if err == nil && string(data) == content {
 		if mode != 0 {
-			if info, err := os.Stat(path); err == nil && info.Mode().Perm() != mode {
-				if err := os.Chmod(path, mode); err != nil {
+			if info, err := f.stat(path); err == nil && info.Mode().Perm() != mode {
+				if err := f.chmod(path, mode); err != nil {
 					return ConfigWrite{}, err
 				}
 			}
 		}
 		return ConfigWrite{ID: id, Path: path, Action: ActionUnchanged}, nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return ConfigWrite{}, err
+	perm := mode
+	if perm == 0 {
+		perm = 0o644
 	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	if err := f.writeFile(path, []byte(content), perm); err != nil {
 		return ConfigWrite{}, err
 	}
 	if mode != 0 {
-		if err := os.Chmod(path, mode); err != nil {
+		if err := f.chmod(path, mode); err != nil {
 			return ConfigWrite{}, err
 		}
 	}
@@ -69,28 +72,26 @@ func isGraftEntry(entry jsonjs.Value) bool {
 }
 
 // readJSONObject loads a JSON config for merging: a missing file is a fresh
-// object, a plain object merges, anything else is unparseable and left alone.
-func readJSONObject(path string) (*jsonjs.Object, bool, bool) {
-	data, err := os.ReadFile(path)
-	if errors.Is(err, os.ErrNotExist) {
-		return jsonjs.NewObject(), false, true
+// object and a plain object merges. Anything else reports ok=false and is left
+// alone; a read failure is returned as the error.
+func (f *files) readJSONObject(path string) (object *jsonjs.Object, existed, ok bool, err error) {
+	data, err := f.readFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return jsonjs.NewObject(), false, true, nil
 	}
 	if err != nil {
-		return nil, false, false
+		return nil, true, false, fmt.Errorf("read %s: %w", path, err)
 	}
 	value, err := jsonjs.Parse(data)
 	if err != nil {
-		return nil, true, false
+		return nil, true, false, nil
 	}
-	object, ok := jsonjs.AsObject(value)
-	return object, true, ok
+	object, ok = jsonjs.AsObject(value)
+	return object, true, ok, nil
 }
 
-func writeJSON(path string, value jsonjs.Value) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, []byte(jsonjs.Stringify(value, 2)+"\n"), 0o644)
+func (f *files) writeJSON(path string, value jsonjs.Value) error {
+	return f.writeFile(path, []byte(jsonjs.Stringify(value, 2)+"\n"), 0o644)
 }
 
 // ensureObject returns object[key] as an object, creating it when absent like

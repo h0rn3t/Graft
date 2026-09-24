@@ -28,9 +28,8 @@ func TestWiredHostIDsContract(t *testing.T) {
 			files: map[string]string{"GEMINI.md": "User instructions\n"},
 		},
 		{
-			name:  "shared agents section reports every registered host",
+			name:  "shared agents section names no host: the stamp decides",
 			files: map[string]string{"AGENTS.md": "<!-- graft:start -->\nowned\n<!-- graft:end -->\n"},
-			want:  []string{"agents", "hermes", "antigravity"},
 		},
 		{
 			name: "owned cursor file and claude hook marker",

@@ -2,7 +2,7 @@ package hosts
 
 import (
 	"errors"
-	"os"
+	"io/fs"
 	"path/filepath"
 	"slices"
 )
@@ -28,6 +28,8 @@ type InitResult struct {
 // registrations and hooks. Global targets are skipped when opts.Global is false;
 // Cursor's hooks are repo-local and only opts.Hooks suppresses them.
 func RunHostsInit(repo string, env Env, opts InitOptions) (InitResult, error) {
+	f := openFiles(repo, env.Home)
+	defer f.close()
 	result := InitResult{Written: []ConfigWrite{}, Unknown: []string{}, MCP: []ConfigWrite{}, Hooks: []ConfigWrite{}}
 	ids := make([]string, 0, len(opts.Agents))
 	for _, id := range opts.Agents {
@@ -37,45 +39,45 @@ func RunHostsInit(repo string, env Env, opts InitOptions) (InitResult, error) {
 			continue
 		}
 		ids = append(ids, id)
-		write, err := writeInstruction(repo, host)
+		write, err := f.writeInstruction(repo, host)
 		if err != nil {
 			return result, err
 		}
 		result.Written = append(result.Written, write)
 	}
 	if opts.MCP {
-		writes, err := RegisterMCPConfigs(repo, ids, env.Home, opts.Global, env.Launch)
+		writes, err := f.registerMCPConfigs(repo, ids, env.Home, opts.Global, env.Launch)
 		if err != nil {
 			return result, err
 		}
 		result.MCP = writes
 	}
-	hooks, err := installHostHooks(repo, env, ids, opts)
+	hooks, err := f.installHostHooks(repo, env, ids, opts)
 	result.Hooks = hooks
 	return result, err
 }
 
-func writeInstruction(repo string, host Host) (ConfigWrite, error) {
+func (f *files) writeInstruction(repo string, host Host) (ConfigWrite, error) {
 	path := filepath.Join(repo, host.RelPath)
 	if host.Kind == KindOwned {
-		action, err := writeOwnedInstruction(path, host.Content())
+		action, err := f.writeOwnedInstruction(path, host.Content())
 		return ConfigWrite{ID: host.ID, Path: path, Action: WriteAction(action)}, err
 	}
-	action, err := UpsertSection(path, host.Content(), GraftMarkers)
+	action, err := f.upsertSection(path, host.Content(), GraftMarkers)
 	return ConfigWrite{ID: host.ID, Path: path, Action: WriteAction(action)}, err
 }
 
 // installHostHooks writes the Codex hooks and Antigravity skill (global) and
 // the Cursor hooks (repo-local) for the selected hosts.
-func installHostHooks(repo string, env Env, ids []string, opts InitOptions) ([]ConfigWrite, error) {
+func (f *files) installHostHooks(repo string, env Env, ids []string, opts InitOptions) ([]ConfigWrite, error) {
 	hooks := make([]ConfigWrite, 0)
 	steps := []struct {
 		enabled bool
 		install func() ([]ConfigWrite, error)
 	}{
-		{opts.Hooks && opts.Global && slices.Contains(ids, "agents"), func() ([]ConfigWrite, error) { return InstallCodexHooks(env) }},
-		{opts.Hooks && slices.Contains(ids, "cursor"), func() ([]ConfigWrite, error) { return InstallCursorHooks(repo, env) }},
-		{opts.Global && slices.Contains(ids, "antigravity"), func() ([]ConfigWrite, error) { return InstallAntigravitySkill(env.Home) }},
+		{opts.Hooks && opts.Global && slices.Contains(ids, "agents"), func() ([]ConfigWrite, error) { return f.installCodexHooks(env) }},
+		{opts.Hooks && slices.Contains(ids, "cursor"), func() ([]ConfigWrite, error) { return f.installCursorHooks(repo, env) }},
+		{opts.Global && slices.Contains(ids, "antigravity"), func() ([]ConfigWrite, error) { return f.installAntigravitySkill(env.Home) }},
 	}
 	for _, step := range steps {
 		if !step.enabled {
@@ -92,16 +94,13 @@ func installHostHooks(repo string, env Env, ids []string, opts InitOptions) ([]C
 
 // writeOwnedInstruction writes a graft-owned instruction file and reports
 // created, replaced, or unchanged.
-func writeOwnedInstruction(path, content string) (string, error) {
-	data, err := os.ReadFile(path)
+func (f *files) writeOwnedInstruction(path, content string) (string, error) {
+	data, err := f.readFile(path)
 	if err == nil && string(data) == content {
 		return "unchanged", nil
 	}
-	existed := err == nil || !errors.Is(err, os.ErrNotExist)
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return "", err
-	}
-	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+	existed := !errors.Is(err, fs.ErrNotExist)
+	if err := f.writeFile(path, []byte(content), 0o644); err != nil {
 		return "", err
 	}
 	if existed {

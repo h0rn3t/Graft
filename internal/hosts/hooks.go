@@ -2,6 +2,7 @@ package hosts
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
@@ -36,27 +37,38 @@ type hookEntry struct {
 	timeout float64
 }
 
-// InstallCodexHooks writes the shared shim and graft's Codex hook entries.
-func InstallCodexHooks(env Env) ([]ConfigWrite, error) {
+// shellPath quotes path for a hook command line. Double quotes keep the usual
+// path readable and work in cmd.exe as well; a path holding a character that
+// double quotes leave special in a POSIX shell is single-quoted instead.
+func shellPath(path string) string {
+	if !strings.ContainsAny(path, "\"$`\n") && !strings.Contains(path, `\\`) {
+		return `"` + path + `"`
+	}
+	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
+}
+
+// installCodexHooks writes the shared shim and graft's Codex hook entries.
+// Codex reads a hook's timeout in seconds.
+func (f *files) installCodexHooks(env Env) ([]ConfigWrite, error) {
 	targets := CodexHookTargets(env.Home)
 	if len(targets) == 0 {
 		return nil, nil
 	}
 	shimPath, configPath := targets[0].Path, targets[1].Path
-	shim, err := writeOwnedFile("codex-hook-shim", shimPath, HooksShim(env.BakedDir), 0o755)
+	shim, err := f.writeOwnedFile("codex-hook-shim", shimPath, HooksShim(env.BakedDir), 0o755)
 	if err != nil {
 		return nil, err
 	}
 	entries := []hookEntry{
-		{event: "SessionStart", matcher: "startup|resume|compact", sub: "session-start", timeout: 10000},
-		{event: "UserPromptSubmit", sub: "prompt", timeout: 15000},
-		{event: "PostToolUse", matcher: "apply_patch|Write|Edit|MultiEdit", sub: "post-edit", timeout: 10000},
-		{event: "Stop", sub: "stop", timeout: 10000},
+		{event: "SessionStart", matcher: "startup|resume|compact", sub: "session-start", timeout: 10},
+		{event: "UserPromptSubmit", sub: "prompt", timeout: 15},
+		{event: "PostToolUse", matcher: "apply_patch|Write|Edit|MultiEdit", sub: "post-edit", timeout: 10},
+		{event: "Stop", sub: "stop", timeout: 10},
 	}
-	write, err := mergeHookConfig("codex-hooks", configPath, false, entries, func(entry hookEntry) *jsonjs.Object {
+	write, err := f.mergeHookConfig("codex-hooks", configPath, false, entries, func(entry hookEntry) *jsonjs.Object {
 		handler := jsonjs.NewObject()
 		handler.Set("type", "command")
-		handler.Set("command", `node "`+shimPath+`" `+entry.sub)
+		handler.Set("command", "node "+shellPath(shimPath)+" "+entry.sub)
 		handler.Set("timeout", entry.timeout)
 		out := jsonjs.NewObject()
 		if entry.matcher != "" {
@@ -71,19 +83,23 @@ func InstallCodexHooks(env Env) ([]ConfigWrite, error) {
 	return []ConfigWrite{shim, write}, nil
 }
 
+// cursorHookScript is the shim as Cursor's project hooks name it: they run
+// from the project root, so the committed config carries no absolute path.
+const cursorHookScript = ".cursor/hooks/graft-hooks.cjs"
+
 // CursorHookTargets lists Cursor's repo-local hook files.
 func CursorHookTargets(repo string) []PlannedWrite {
 	return []PlannedWrite{
-		{HostID: "cursor", ID: "cursor-hook-shim", Path: filepath.Join(repo, ".cursor", "hooks", "graft-hooks.cjs"), Scope: ScopeRepo, Kind: WriteHook, What: "session-scoring hook shim"},
+		{HostID: "cursor", ID: "cursor-hook-shim", Path: filepath.Join(repo, filepath.FromSlash(cursorHookScript)), Scope: ScopeRepo, Kind: WriteHook, What: "session-scoring hook shim"},
 		{HostID: "cursor", ID: "cursor-hooks", Path: filepath.Join(repo, ".cursor", "hooks.json"), Scope: ScopeRepo, Kind: WriteHook, What: "postToolUse / afterMCPExecution / sessionEnd"},
 	}
 }
 
-// InstallCursorHooks writes the shim and graft's Cursor project hook entries.
-func InstallCursorHooks(repo string, env Env) ([]ConfigWrite, error) {
+// installCursorHooks writes the shim and graft's Cursor project hook entries.
+func (f *files) installCursorHooks(repo string, env Env) ([]ConfigWrite, error) {
 	targets := CursorHookTargets(repo)
 	shimPath, configPath := targets[0].Path, targets[1].Path
-	shim, err := writeOwnedFile("cursor-hook-shim", shimPath, HooksShim(env.BakedDir), 0o755)
+	shim, err := f.writeOwnedFile("cursor-hook-shim", shimPath, HooksShim(env.BakedDir), 0o755)
 	if err != nil {
 		return nil, err
 	}
@@ -92,12 +108,12 @@ func InstallCursorHooks(repo string, env Env) ([]ConfigWrite, error) {
 		{event: "afterMCPExecution", sub: "cursor-mcp"},
 		{event: "sessionEnd", sub: "cursor-session-end"},
 	}
-	write, err := mergeHookConfig("cursor-hooks", configPath, true, entries, func(entry hookEntry) *jsonjs.Object {
+	write, err := f.mergeHookConfig("cursor-hooks", configPath, true, entries, func(entry hookEntry) *jsonjs.Object {
 		out := jsonjs.NewObject()
 		if entry.matcher != "" {
 			out.Set("matcher", entry.matcher)
 		}
-		out.Set("command", `node "`+shimPath+`" `+entry.sub)
+		out.Set("command", `node "`+cursorHookScript+`" `+entry.sub)
 		return out
 	})
 	if err != nil {
@@ -109,9 +125,12 @@ func InstallCursorHooks(repo string, env Env) ([]ConfigWrite, error) {
 // mergeHookConfig replaces graft's entries in a hooks.json, keeping foreign
 // entries, and leaves a config of the wrong shape untouched. withVersion adds
 // Cursor's schema version when the file has none.
-func mergeHookConfig(id, path string, withVersion bool, entries []hookEntry, render func(hookEntry) *jsonjs.Object) (ConfigWrite, error) {
+func (f *files) mergeHookConfig(id, path string, withVersion bool, entries []hookEntry, render func(hookEntry) *jsonjs.Object) (ConfigWrite, error) {
 	skipped := ConfigWrite{ID: id, Path: path, Action: ActionUnparseable}
-	root, existed, ok := readJSONObject(path)
+	root, existed, ok, err := f.readJSONObject(path)
+	if err != nil {
+		return ConfigWrite{}, err
+	}
 	if !ok {
 		return skipped, nil
 	}
@@ -140,7 +159,7 @@ func mergeHookConfig(id, path string, withVersion bool, entries []hookEntry, ren
 	if jsonjs.Stringify(root, 0) == before {
 		return ConfigWrite{ID: id, Path: path, Action: ActionUnchanged}, nil
 	}
-	if err := writeJSON(path, root); err != nil {
+	if err := f.writeJSON(path, root); err != nil {
 		return ConfigWrite{}, err
 	}
 	action := ActionCreated
@@ -158,10 +177,10 @@ func AntigravitySkillTargets(home string) []PlannedWrite {
 	}}
 }
 
-// InstallAntigravitySkill writes graft's skill into ~/.gemini/skills.
-func InstallAntigravitySkill(home string) ([]ConfigWrite, error) {
+// installAntigravitySkill writes graft's skill into ~/.gemini/skills.
+func (f *files) installAntigravitySkill(home string) ([]ConfigWrite, error) {
 	target := AntigravitySkillTargets(home)[0]
-	write, err := writeOwnedFile(target.ID, target.Path, SkillTemplate(), 0)
+	write, err := f.writeOwnedFile(target.ID, target.Path, SkillTemplate(), 0)
 	if err != nil {
 		return nil, err
 	}
