@@ -209,12 +209,12 @@ func FormatRetractions(retractions []Retraction, apply bool) string {
 }
 
 var wordmark = []string{
-	"   ,---.       __ _",
-	"  ( o o )   __ _ _ __ __ _ / _| |_",
-	"  (  ^  )  / _` | '__/ _` | |_| __|",
-	"   \\_/_  | (_| | | | (_| |  _| |_",
-	"  /|GO |\\ \\__, |_|  \\__,_|_|  \\__|",
-	" (_|___|_)|___/",
+	"     .---.         __ _",
+	"  .-( O O )-. __ _ _ __ __ _ / _| |_",
+	" (    ^    ) / _` | '__/ _` | |_| __|",
+	"  \\  |_|_|  / | (_| | | | (_| |  _| |_",
+	"  /|     |\\  \\__, |_|  \\__,_|_|  \\__|",
+	" (_|_____|_) |___/",
 }
 
 // Grouped renders an integer with en-US thousands separators.
