@@ -3,7 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const { spawnSync } = require('child_process');
 const dir = process.env.CLAUDE_PROJECT_DIR || process.cwd();
-const BAKED = "/Users/eugeneshershen/go/pkg/mod/github.com/h0rn3t/!graft@v0.0.0-20260924092051-4b28c902e5b2";
+const BAKED = "/Users/eugeneshershen/go/pkg/mod/github.com/h0rn3t/!graft@v0.0.0-20260924121007-ee5f2ff40d78";
 
 function fromPkg(base) {
   try {
