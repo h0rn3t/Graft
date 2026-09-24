@@ -24,7 +24,8 @@
   "stdout": "",
   "stderr": "",
   "files": {
-    "repo/graft/.cache/session/cursor-2.json": "{\n  \"lastQuery\": null,\n  \"perAgentQuery\": {},\n  \"graftReads\": 1,\n  \"sourceReads\": 0,\n  \"savedTokens\": 1200,\n  \"injectedPointers\": [],\n  \"nudges\": 0,\n  \"turnUsedGraft\": true,\n  \"host\": \"cursor\"\n}"
+    "repo/graft/.cache/session/cursor-2.json": "{\n  \"lastQuery\": null,\n  \"perAgentQuery\": {},\n  \"graftReads\": 1,\n  \"sourceReads\": 0,\n  \"savedTokens\": 1200,\n  \"injectedPointers\": [],\n  \"nudges\": 0,\n  \"turnUsedGraft\": true,\n  \"host\": \"cursor\"\n}",
+    "repo/graft/.cache/session/cursor-2.json.lock": ""
   },
   "checkFiles": true
 }

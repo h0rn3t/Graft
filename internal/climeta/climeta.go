@@ -3,8 +3,6 @@ package climeta
 
 import (
 	"encoding/json"
-	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 )
@@ -13,30 +11,10 @@ type packageMetadata struct {
 	Version string `json:"version"`
 }
 
-func fileURLPath(moduleURL string) (string, error) {
-	parsed, err := url.Parse(moduleURL)
-	if err != nil {
-		return "", err
-	}
-	if parsed.Scheme != "file" {
-		return "", fmt.Errorf("module URL must use the file scheme")
-	}
-	if parsed.Host != "" && parsed.Host != "localhost" {
-		return "", fmt.Errorf("unsupported file URL host %q", parsed.Host)
-	}
-	path, err := url.PathUnescape(parsed.EscapedPath())
-	if err != nil {
-		return "", err
-	}
-	return filepath.FromSlash(path), nil
-}
-
-// ResolvePackageJSONPath finds package.json next to the module or one level above it.
-func ResolvePackageJSONPath(moduleURL string) string {
-	modulePath, err := fileURLPath(moduleURL)
-	if err != nil {
-		modulePath = moduleURL
-	}
+// ResolvePackageJSONPath finds package.json one level above the directory of
+// modulePath, a file system path such as the running executable, or next to
+// it.
+func ResolvePackageJSONPath(modulePath string) string {
 	moduleDir := filepath.Dir(modulePath)
 	candidates := []string{
 		filepath.Clean(filepath.Join(moduleDir, "..", "package.json")),
@@ -50,9 +28,9 @@ func ResolvePackageJSONPath(moduleURL string) string {
 	return candidates[0]
 }
 
-// ReadCurrentVersion reads the version of the package containing moduleURL.
-func ReadCurrentVersion(moduleURL string) (string, error) {
-	data, err := os.ReadFile(ResolvePackageJSONPath(moduleURL))
+// ReadCurrentVersion reads the version of the package containing modulePath.
+func ReadCurrentVersion(modulePath string) (string, error) {
+	data, err := os.ReadFile(ResolvePackageJSONPath(modulePath))
 	if err != nil {
 		return "", err
 	}

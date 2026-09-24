@@ -90,24 +90,22 @@ func recordHookToolUse(root, id string, use hookToolUse) error {
 	if use.Kind == "" && use.SavedTokens <= 0 {
 		return nil
 	}
-	if id == "" {
-		id = "default"
-	}
-	session := readHookSession(root, id)
-	switch use.Kind {
-	case hookToolGraft:
-		session.GraftReads++
-		session.TurnUsedGraft = new(true)
-	case hookToolSource:
-		session.SourceReads++
-	}
-	if use.SavedTokens > 0 {
-		session.SavedTokens += use.SavedTokens
-	}
-	if use.Host != "" && session.Host == nil {
-		session.Host = new(use.Host)
-	}
-	return writeHookSession(root, id, session)
+	return updateHookSession(root, id, func(session *sessionState) bool {
+		switch use.Kind {
+		case hookToolGraft:
+			session.GraftReads++
+			session.TurnUsedGraft = new(true)
+		case hookToolSource:
+			session.SourceReads++
+		}
+		if use.SavedTokens > 0 {
+			session.SavedTokens += use.SavedTokens
+		}
+		if use.Host != "" && session.Host == nil {
+			session.Host = new(use.Host)
+		}
+		return true
+	})
 }
 
 func latestHookSession(root string) (string, sessionState, bool) {

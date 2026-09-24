@@ -121,8 +121,9 @@ replaces several file reads.
 
 Results already reflect uncommitted edits — the graph refreshes before each query.`
 
-// runMCP serves the retrieval tools over newline-delimited JSON-RPC 2.0.
-func runMCP(opts callersOptions, stdin io.Reader, stdout, stderr io.Writer) int {
+// runMCP serves the retrieval tools over newline-delimited JSON-RPC 2.0 until
+// stdin ends or ctx is done.
+func runMCP(ctx context.Context, opts callersOptions, stdin io.Reader, stdout, stderr io.Writer) int {
 	root, contextDir, err := resolvePaths(opts, queryPathRules, stderr)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
@@ -130,21 +131,22 @@ func runMCP(opts callersOptions, stdin io.Reader, stdout, stderr io.Writer) int 
 	}
 
 	version := currentVersion()
-	lines := mcpUpkeepLines(root, contextDir, version)
+	lines := mcpUpkeepLines(ctx, root, contextDir, version)
 	for _, line := range lines {
 		writeDiagnostic(stderr, "%s\n", line)
 	}
 	server := newMCPServerWith(opts, root, contextDir, version, mcpInstructionsFrom(lines))
-	if err := server.Run(context.Background(), &mcpTransport{reader: stdin, writer: stdout}); err != nil && !errors.Is(err, io.EOF) {
+	err = server.Run(ctx, &mcpTransport{reader: stdin, writer: stdout})
+	if err != nil && !errors.Is(err, io.EOF) && ctx.Err() == nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
 	return 0
 }
 
-func newMCPServer(opts callersOptions, root, contextDir string) *mcp.Server {
+func newMCPServer(ctx context.Context, opts callersOptions, root, contextDir string) *mcp.Server {
 	version := currentVersion()
-	return newMCPServerWith(opts, root, contextDir, version, mcpStartupInstructions(root, contextDir, version))
+	return newMCPServerWith(opts, root, contextDir, version, mcpStartupInstructions(ctx, root, contextDir, version))
 }
 
 func newMCPServerWith(opts callersOptions, root, contextDir, version, instructions string) *mcp.Server {
@@ -162,9 +164,9 @@ func newMCPServerWith(opts callersOptions, root, contextDir, version, instructio
 				Description: definition.Description,
 				InputSchema: definition.InputSchema,
 			},
-			func(_ context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+			func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				args := mcpToolArguments(request.Params.Arguments)
-				result := mcpCall(root, contextDir, opts.contextDir, request.Params.Name, args)
+				result := mcpCall(ctx, root, contextDir, opts.contextDir, request.Params.Name, args)
 				return mcpSDKResult(result), nil
 			},
 		)
@@ -207,7 +209,7 @@ func newMCPServerWith(opts callersOptions, root, contextDir, version, instructio
 					return next(ctx, method, request)
 				}
 				args := mcpToolArguments(call.Params.Arguments)
-				result := mcpCall(root, contextDir, opts.contextDir, call.Params.Name, args)
+				result := mcpCall(ctx, root, contextDir, opts.contextDir, call.Params.Name, args)
 				return mcpSDKResult(result), nil
 			default:
 				return next(ctx, method, request)
@@ -217,8 +219,8 @@ func newMCPServerWith(opts callersOptions, root, contextDir, version, instructio
 	return server
 }
 
-func mcpStartupInstructions(root, contextDir, current string) string {
-	return mcpInstructionsFrom(mcpUpkeepLines(root, contextDir, current))
+func mcpStartupInstructions(ctx context.Context, root, contextDir, current string) string {
+	return mcpInstructionsFrom(mcpUpkeepLines(ctx, root, contextDir, current))
 }
 
 func mcpInstructionsFrom(lines []string) string {
@@ -231,7 +233,7 @@ func mcpInstructionsFrom(lines []string) string {
 // mcpUpkeepLines runs the boot-time upkeep and returns the lines worth showing.
 // The stamp lives under GRAFT_DIR or <root>/graft, as the TypeScript cacheDir
 // resolves it, whatever --dir the server was given.
-func mcpUpkeepLines(root, _, current string) []string {
+func mcpUpkeepLines(ctx context.Context, root, _, current string) []string {
 	now := time.Now()
 	home := homeDir()
 	env := hosts.Env{Home: home, BakedDir: packageRoot(), Launch: hosts.ServerEntry()}
@@ -239,7 +241,7 @@ func mcpUpkeepLines(root, _, current string) []string {
 	if note := upkeep.ReconcileWiring(root, "", current, now,
 		func(repo string) ([]string, error) { return upkeep.WiredHostIDs(repo), nil },
 		func(repo string, ids []string, options upkeep.WiringOptions) error {
-			return upkeep.RewriteWiring(context.Background(), repo, ids, options, env)
+			return upkeep.RewriteWiring(ctx, repo, ids, options, env)
 		},
 	); note != "" {
 		lines = append(lines, note)
@@ -298,20 +300,30 @@ func normalizeMCPResponse(data []byte) []byte {
 	return data
 }
 
+// mcpMaxLine caps one NDJSON message. No client request comes near it, so a
+// longer line is answered with a parse error and skipped instead of ending
+// the session.
+const mcpMaxLine = 64 << 20
+
 type mcpTransport struct {
 	reader io.Reader
 	writer io.Writer
+	// maxLine overrides mcpMaxLine when positive.
+	maxLine int
 }
 
 // Connect opens the NDJSON connection used by the MCP server.
 func (t *mcpTransport) Connect(context.Context) (mcp.Connection, error) {
-	scanner := bufio.NewScanner(t.reader)
-	scanner.Buffer(make([]byte, 4096), 1<<20)
-	return &mcpConnection{scanner: scanner, reader: t.reader, writer: t.writer}, nil
+	maxLine := t.maxLine
+	if maxLine <= 0 {
+		maxLine = mcpMaxLine
+	}
+	return &mcpConnection{lines: bufio.NewReader(t.reader), maxLine: maxLine, reader: t.reader, writer: t.writer}, nil
 }
 
 type mcpConnection struct {
-	scanner      *bufio.Scanner
+	lines        *bufio.Reader
+	maxLine      int
 	reader       io.Reader
 	writer       io.Writer
 	mu           sync.Mutex
@@ -338,13 +350,21 @@ func (c *mcpConnection) Read(ctx context.Context) (jsonrpc.Message, error) {
 		c.trackRequest(message)
 		return message, nil
 	}
-	for c.scanner.Scan() {
-		line := strings.TrimSpace(c.scanner.Text())
-		if line == "" {
+	for {
+		raw, oversize, err := c.readLine()
+		if errors.Is(err, io.EOF) {
+			c.outstanding.Wait()
+			return nil, io.EOF
+		}
+		if err != nil {
+			return nil, err
+		}
+		line := bytes.TrimSpace(raw)
+		if len(line) == 0 && !oversize {
 			continue
 		}
-		message, err := jsonrpc.DecodeMessage([]byte(line))
-		if err != nil {
+		message, err := jsonrpc.DecodeMessage(line)
+		if oversize || err != nil {
 			_ = c.writeValue(map[string]any{
 				"jsonrpc": "2.0",
 				"id":      nil,
@@ -387,11 +407,29 @@ func (c *mcpConnection) Read(ctx context.Context) (jsonrpc.Message, error) {
 		c.trackRequest(message)
 		return message, nil
 	}
-	if err := c.scanner.Err(); err != nil {
-		return nil, err
+}
+
+// readLine returns the next line, newline included, reporting oversize for a
+// line longer than maxLine, whose bytes are skipped rather than buffered. A
+// last line without a newline is returned before io.EOF.
+func (c *mcpConnection) readLine() (line []byte, oversize bool, err error) {
+	for {
+		chunk, err := c.lines.ReadSlice('\n')
+		if !oversize && len(line)+len(chunk) > c.maxLine+1 {
+			oversize, line = true, nil
+		}
+		if !oversize {
+			line = append(line, chunk...)
+		}
+		switch {
+		case errors.Is(err, bufio.ErrBufferFull):
+			continue
+		case errors.Is(err, io.EOF) && (len(line) > 0 || oversize):
+			return line, oversize, nil
+		default:
+			return line, oversize, err
+		}
 	}
-	c.outstanding.Wait()
-	return nil, io.EOF
 }
 
 // Write encodes a normalized JSON-RPC message as one NDJSON line.
@@ -454,17 +492,24 @@ type mcpResult struct {
 	thrown bool
 }
 
-func mcpCall(root, contextDir, dirOverride, requestedName string, args map[string]any) (result mcpResult) {
+// mcpCall answers one tools/call. The SDK runs calls concurrently, so it
+// shares no mutable state with other calls; ctx is cancelled when the client
+// cancels the request, and is checked between the refresh and the query.
+func mcpCall(ctx context.Context, root, contextDir, dirOverride, requestedName string, args map[string]any) (result mcpResult) {
 	name := mcpAliases[requestedName]
 	if name == "" {
 		name = requestedName
 	}
 	known := name == "graft_find_code" || name == "graft_file_api" || name == "graft_check_freshness" ||
 		name == "graft_trace_calls" || name == "graft_find_all" || name == "graft_repo_map"
-	// Price this session's tokens once per call, so the savings line can carry dollars.
+	// Price this session's tokens once per call, so the savings line can carry
+	// dollars. The rate is an atomic and every call prices the same root.
 	savings.SetInputRate(savings.SessionInputRate(root))
 	if !known {
 		return mcpResult{text: "unknown tool: " + requestedName, isError: true}
+	}
+	if ctx.Err() != nil {
+		return mcpResult{text: context.Cause(ctx).Error(), isError: true, thrown: true}
 	}
 	if name != "graft_check_freshness" {
 		children, workspace := graph.ReadWorkspaceChildren(contextDir)
@@ -492,6 +537,9 @@ func mcpCall(root, contextDir, dirOverride, requestedName string, args map[strin
 			}()
 		}
 	}
+	if ctx.Err() != nil {
+		return mcpResult{text: context.Cause(ctx).Error(), isError: true, thrown: true}
+	}
 	if name != "graft_check_freshness" && !mcpGraphAvailable(contextDir) {
 		return mcpResult{text: "no graph found — run `graft build` first", isError: true}
 	}
@@ -506,14 +554,11 @@ func mcpCall(root, contextDir, dirOverride, requestedName string, args map[strin
 		if value, ok := mcpNumber(args["limit"]); ok {
 			limit = int(value)
 		}
-		command := []string{"ask", query, root, "--limit", strconv.Itoa(limit), "--source", "--no-refresh"}
-		if args["full"] == true {
-			command = append(command, "--full")
-		}
-		if in := mcpString(args["in"]); in != "" {
-			command = append(command, "--in", in)
-		}
-		return mcpRunCLI(command, dirOverride)
+		// Typed options, never argv: a query such as "--dir=/x" stays a query.
+		return mcpRunCommand(runAsk, callersOptions{
+			command: "ask", query: query, root: root, rootSet: true, contextDir: dirOverride,
+			limit: strconv.Itoa(limit), source: true, full: args["full"] == true, in: mcpString(args["in"]), noRefresh: true,
+		})
 	case "graft_file_api":
 		file := mcpString(args["file"])
 		if file == "" {
@@ -548,23 +593,17 @@ func mcpCall(root, contextDir, dirOverride, requestedName string, args map[strin
 		if _, workspace := graph.ReadWorkspaceChildren(contextDir); workspace {
 			return mcpWorkspaceGrep(root, contextDir, pattern, args)
 		}
-		command := []string{"grep", pattern, root, "--json"}
-		if args["ignore_case"] == true {
-			command = append(command, "--ignore-case")
-		}
-		if args["fixed"] == true {
-			command = append(command, "--fixed")
-		}
-		if in := mcpString(args["in"]); in != "" {
-			command = append(command, "--in", in)
-		}
-		var stdout, stderr bytes.Buffer
-		status := run(append(command, "--no-refresh"), &stdout, &stderr)
-		if status != 0 {
-			return mcpResult{text: mcpErrorText(stderr.String()), isError: true, thrown: true}
+		// Typed options, never argv: a pattern such as "-i" stays a pattern,
+		// and the graph is the one this server was started on.
+		output := mcpRunCommand(runGrep, callersOptions{
+			command: "grep", query: pattern, root: root, rootSet: true, contextDir: dirOverride, jsonOutput: true,
+			ignoreCase: args["ignore_case"] == true, fixed: args["fixed"] == true, in: mcpString(args["in"]), noRefresh: true,
+		})
+		if output.isError {
+			return output
 		}
 		var result graph.GrepResult
-		if err := json.Unmarshal(stdout.Bytes(), &result); err != nil {
+		if err := json.Unmarshal([]byte(output.text), &result); err != nil {
 			return mcpResult{text: err.Error(), isError: true, thrown: true}
 		}
 		if result.TotalHits == 0 {
@@ -594,12 +633,11 @@ func mcpCall(root, contextDir, dirOverride, requestedName string, args map[strin
 	}
 }
 
-func mcpRunCLI(args []string, dirOverride string) mcpResult {
-	if dirOverride != "" {
-		args = append(args, "--dir", dirOverride)
-	}
+// mcpRunCommand runs a CLI command with options built from tool arguments; a
+// failure answers with the command's diagnostic, as a thrown error.
+func mcpRunCommand(command func(callersOptions, io.Writer, io.Writer) int, opts callersOptions) mcpResult {
 	var stdout, stderr bytes.Buffer
-	if status := run(args, &stdout, &stderr); status != 0 {
+	if status := command(opts, &stdout, &stderr); status != 0 {
 		return mcpResult{text: mcpErrorText(stderr.String()), isError: true, thrown: true}
 	}
 	return mcpResult{text: stdout.String(), isError: false}
@@ -688,19 +726,21 @@ func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any) mcp
 	return mcpResult{text: text, isError: false}
 }
 
+// mcpDepthValue reads depth as the CLI reads --depth, so 3, "3" and "max"
+// mean the same in both; a value the CLI rejects walks direct edges only.
 func mcpDepthValue(value any) int {
-	if text, ok := value.(string); ok && (strings.EqualFold(text, "all") || strings.EqualFold(text, "full")) {
-		return int(^uint(0) >> 1)
+	raw := ""
+	switch typed := value.(type) {
+	case string:
+		raw = typed
+	case float64:
+		raw = jsonjs.FormatNumber(typed)
 	}
-	number, ok := mcpNumber(value)
-	if !ok || number < 1 {
+	depth, err := resolveDepth(raw)
+	if err != nil {
 		return 1
 	}
-	maxInt := float64(^uint(0) >> 1)
-	if number >= maxInt {
-		return int(^uint(0) >> 1)
-	}
-	return int(math.Floor(number))
+	return depth
 }
 
 func mcpWithSavings(body string, saved *savedOutput) string {

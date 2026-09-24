@@ -32,7 +32,9 @@
   "files": {
     "repo/check-stub.cjs": "process.stdout.write(\"{\\\"graph\\\":{\\\"changed\\\":[\\\"src/auth.ts\\\"],\\\"added\\\":[],\\\"removed\\\":[]}}\");\n",
     "repo/graft/.cache/.sync.lock": "{\"pid\":<PID>,\"at\":\"<ISO>\"}",
-    "repo/graft/.cache/stats.json": "{\n  \"nodeCount\": 0,\n  \"edgeCount\": 0,\n  \"languages\": [],\n  \"totalCount\": 0,\n  \"readyCount\": 0,\n  \"staleCount\": 1,\n  \"dirty\": true,\n  \"syncing\": true,\n  \"syncedAt\": null,\n  \"lastFile\": \"auth.ts\"\n}",
+    "repo/graft/.cache/session/default.json.lock": "",
+    "repo/graft/.cache/stats.json": "{\n  \"nodeCount\": 0,\n  \"edgeCount\": 0,\n  \"languages\": [],\n  \"totalCount\": 0,\n  \"readyCount\": 0,\n  \"staleCount\": 1,\n  \"dirty\": true,\n  \"syncing\": true,\n  \"syncedAt\": null,\n  \"lastFile\": \"src/auth.ts\"\n}",
+    "repo/graft/.cache/stats.json.lock": "",
     "repo/graft/.graph/wiring.json": "{\"meta\":{\"nodeCount\":2,\"edgeCount\":0,\"languages\":[\"typescript\"]},\"nodes\":[{\"id\":\"src/auth.ts\",\"name\":\"auth.ts\",\"kind\":\"file\",\"path\":\"src/auth.ts\",\"span\":\"L1-L4\"},{\"id\":\"src/client.ts#call\",\"name\":\"call\",\"kind\":\"function\",\"path\":\"src/client.ts\",\"span\":\"L1-L1\"}],\"edges\":[]}",
     "repo/sync-stub.cjs": "process.exit(0);\n"
   },

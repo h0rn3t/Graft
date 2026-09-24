@@ -359,7 +359,7 @@ func runGoldenMCP(t *testing.T, runtime *goldenRuntime, golden goldenCase) {
 	reader, writer := io.Pipe()
 	status := make(chan int, 1)
 	go func() {
-		status <- runMCP(callersOptions{root: runtime.root}, reader, &mcpReplayWriter{
+		status <- runMCP(t.Context(), callersOptions{root: runtime.root}, reader, &mcpReplayWriter{
 			replies: replies,
 			stray:   &stray,
 			waiting: waiting,

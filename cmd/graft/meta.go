@@ -3,12 +3,12 @@ package main
 import (
 	"encoding/json"
 	"io"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"runtime/debug"
 	"strings"
+	"sync"
 
 	"github.com/h0rn3t/Graft/internal/climeta"
 )
@@ -21,28 +21,25 @@ func runVersion(stdout io.Writer) int {
 	return 0
 }
 
-// executableURL is the running binary as a file URL, the form climeta expects
-// for the module whose package it resolves.
-func executableURL() string {
+// executablePath is the running binary with symlinks resolved, or "" when the
+// platform cannot say.
+func executablePath() string {
 	executable, err := os.Executable()
 	if err != nil {
 		return ""
 	}
 	if resolved, err := filepath.EvalSymlinks(executable); err == nil {
-		executable = resolved
+		return resolved
 	}
-	path := filepath.ToSlash(executable)
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-	return (&url.URL{Scheme: "file", Path: path}).String()
+	return executable
 }
 
 // packageRoot is the directory of the graft package holding this binary, or
-// the source checkout when the binary was built outside a package.
-func packageRoot() string {
-	if moduleURL := executableURL(); moduleURL != "" {
-		path := climeta.ResolvePackageJSONPath(moduleURL)
+// the source checkout when the binary was built outside a package. The binary
+// does not move while it runs, so the answer is computed once.
+var packageRoot = sync.OnceValue(func() string {
+	if executable := executablePath(); executable != "" {
+		path := climeta.ResolvePackageJSONPath(executable)
 		if _, err := os.Stat(path); err == nil {
 			return filepath.Dir(path)
 		}
@@ -51,13 +48,14 @@ func packageRoot() string {
 		return filepath.Clean(filepath.Join(filepath.Dir(source), "..", ".."))
 	}
 	return "."
-}
+})
 
 // currentVersion is the version of the graft package holding this binary,
-// falling back to the source checkout and then the module build info.
-func currentVersion() string {
-	if moduleURL := executableURL(); moduleURL != "" {
-		if version, err := climeta.ReadCurrentVersion(moduleURL); err == nil {
+// falling back to the source checkout and then the module build info. It is
+// computed once per process.
+var currentVersion = sync.OnceValue(func() string {
+	if executable := executablePath(); executable != "" {
+		if version, err := climeta.ReadCurrentVersion(executable); err == nil {
 			return version
 		}
 	}
@@ -79,4 +77,4 @@ func currentVersion() string {
 		}
 	}
 	return "0.0.0"
-}
+})

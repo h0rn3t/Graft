@@ -16,7 +16,7 @@ import (
 
 func TestMCPServerSpeaksOfficialSDK(t *testing.T) {
 	dir := t.TempDir()
-	server := newMCPServer(callersOptions{}, dir, dir)
+	server := newMCPServer(t.Context(), callersOptions{}, dir, dir)
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
 	if err != nil {
@@ -67,7 +67,7 @@ func TestMCPServerInfoReportsGraftVersion(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"version":"7.8.9"}`), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", filepath.Join(root, "package.json"), err)
 	}
-	server := newMCPServer(callersOptions{}, root, root)
+	server := newMCPServer(t.Context(), callersOptions{}, root, root)
 	serverTransport, clientTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
 	if err != nil {
@@ -113,7 +113,7 @@ func TestMCPStartupReconcilesGeminiWiringContract(t *testing.T) {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", stampPath, err)
 	}
 
-	got := mcpStartupInstructions(root, contextDir, "2.0.0")
+	got := mcpStartupInstructions(t.Context(), root, contextDir, "2.0.0")
 	const note = "· graft refreshed this repo's agent wiring (written by 1.0.0, now 2.0.0): gemini."
 	if !strings.HasPrefix(got, note+"\n\n"+mcpInstructionsText) {
 		t.Errorf("mcpStartupInstructions(%q, %q, %q) = %q, want refresh note before MCP instructions", root, contextDir, "2.0.0", got)
@@ -163,7 +163,7 @@ func TestRunMCPPreservesNDJSONBoundary(t *testing.T) {
 		`{"jsonrpc":"2.0","id":3,"method":"resources/list"}`,
 	}, "\n")
 	var stdout, stderr bytes.Buffer
-	status := runMCP(callersOptions{command: "mcp", root: dir, rootSet: true}, strings.NewReader(input), &stdout, &stderr)
+	status := runMCP(t.Context(), callersOptions{command: "mcp", root: dir, rootSet: true}, strings.NewReader(input), &stdout, &stderr)
 	if status != 0 {
 		t.Fatalf("runMCP() status = %d, want 0; stderr = %q", status, stderr.String())
 	}
@@ -216,6 +216,7 @@ func TestRunMCPAcceptsLegacyCallBeforeInitialize(t *testing.T) {
 	dir := t.TempDir()
 	var stdout, stderr bytes.Buffer
 	status := runMCP(
+		t.Context(),
 		callersOptions{command: "mcp", root: dir, rootSet: true},
 		strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"graft_ask","arguments":{"query":"missing"}}}`+"\n"),
 		&stdout,
@@ -242,7 +243,7 @@ func TestRunMCPAcceptsLegacyCallBeforeInitialize(t *testing.T) {
 
 func TestMCPCallWorkspaceRepoMap(t *testing.T) {
 	root, contextDir := workspaceMapFixture(t)
-	got := mcpCall(root, contextDir, "", "graft_repo_map", map[string]any{"max_dirs": 2})
+	got := mcpCall(t.Context(), root, contextDir, "", "graft_repo_map", map[string]any{"max_dirs": 2})
 	if got.isError {
 		t.Fatalf("mcpCall(%q, %q, graft_repo_map) = %#v, want success", root, contextDir, got)
 	}
@@ -291,7 +292,7 @@ func TestMCPCallRefreshesWorkspaceChildren(t *testing.T) {
 		}
 	}
 
-	got := mcpCall(root, contextDir, "", "graft_repo_map", map[string]any{})
+	got := mcpCall(t.Context(), root, contextDir, "", "graft_repo_map", map[string]any{})
 	if got.isError {
 		t.Fatalf("mcpCall(%q, %q, graft_repo_map) = %#v, want success", root, contextDir, got)
 	}
@@ -341,7 +342,7 @@ func TestMCPCallPreservesUnsupportedWorkspaceChild(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(parentContext, "workspace.json"), []byte(`{"version":1,"children":["web"]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := mcpCall(root, parentContext, "", "graft_repo_map", nil)
+	got := mcpCall(t.Context(), root, parentContext, "", "graft_repo_map", nil)
 	if got.isError {
 		t.Fatalf("mcpCall() = %#v, want success", got)
 	}
@@ -406,7 +407,7 @@ func TestMCPWorkspaceRoutesContract(t *testing.T) {
 		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			got := mcpCall(root, contextDir, "", tt.tool, tt.args)
+			got := mcpCall(t.Context(), root, contextDir, "", tt.tool, tt.args)
 			if got.isError != tt.wantError {
 				t.Errorf("mcpCall(%q, %q, %q, %#v) isError = %t, want %t; text = %q", root, contextDir, tt.tool, tt.args, got.isError, tt.wantError, got.text)
 			}
@@ -427,7 +428,7 @@ func TestMCPWorkspaceFreshnessDoesNotRepairDrift(t *testing.T) {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", apiSource, err)
 	}
 
-	got := mcpCall(root, contextDir, "", "graft_check_freshness", map[string]any{})
+	got := mcpCall(t.Context(), root, contextDir, "", "graft_check_freshness", map[string]any{})
 	if got.isError || !strings.Contains(got.text, "api/: STALE (1 added, 1 removed, 1 changed)") || !strings.Contains(got.text, "web/: OK") {
 		t.Errorf("mcpCall(%q, %q, graft_check_freshness) = %#v, want stale api and clean web", root, contextDir, got)
 	}
@@ -488,7 +489,7 @@ func TestMCPRefreshContract(t *testing.T) {
 				}
 			}
 
-			got := mcpCall(root, contextDir, "", tt.tool, map[string]any{"file": "src/app.ts"})
+			got := mcpCall(t.Context(), root, contextDir, "", tt.tool, map[string]any{"file": "src/app.ts"})
 			if got.isError {
 				t.Fatalf("mcpCall(%q, %q, %q) = %#v, want success", root, contextDir, tt.tool, got)
 			}

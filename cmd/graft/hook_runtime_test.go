@@ -26,19 +26,44 @@ func TestHookPromptTimeoutContract(t *testing.T) {
 	if got := hookPromptAskTimeout(root); got != 6*time.Second {
 		t.Errorf("hookPromptAskTimeout(no settings) = %s, want 6s", got)
 	}
-	project := `{"hooks":{"UserPromptSubmit":[{"hooks":[{"command":"node .claude/helpers/graft-hooks.cjs prompt","timeout":15000}]}]}}`
+	// Claude Code reads a hook timeout in seconds; graft's budget stays below it.
+	project := `{"hooks":{"UserPromptSubmit":[{"hooks":[{"command":"node .claude/helpers/graft-hooks.cjs prompt","timeout":15}]}]}}`
 	if err := os.WriteFile(filepath.Join(root, ".claude", "settings.json"), []byte(project), 0o644); err != nil {
 		t.Fatalf("os.WriteFile(project settings) error = %v, want nil", err)
 	}
 	if got := hookPromptAskTimeout(root); got != 13*time.Second {
 		t.Errorf("hookPromptAskTimeout(15s) = %s, want 13s", got)
 	}
-	user := `{"hooks":{"UserPromptSubmit":[{"hooks":[{"command":"node /home/.claude/helpers/graft-hooks.cjs prompt","timeout":8000}]}]}}`
+	user := `{"hooks":{"UserPromptSubmit":[{"hooks":[{"command":"node /home/.claude/helpers/graft-hooks.cjs prompt","timeout":8}]}]}}`
 	if err := os.WriteFile(filepath.Join(config, "settings.json"), []byte(user), 0o644); err != nil {
 		t.Fatalf("os.WriteFile(user settings) error = %v, want nil", err)
 	}
 	if got := hookPromptAskTimeout(root); got != 6*time.Second {
 		t.Errorf("hookPromptAskTimeout(smallest declared) = %s, want 6s", got)
+	}
+
+	tests := []struct {
+		timeout string
+		want    time.Duration
+	}{
+		{timeout: "4", want: 2 * time.Second},
+		{timeout: "1", want: 500 * time.Millisecond},
+		{timeout: "60", want: hookTimeoutCeiling},
+		// Older releases wrote milliseconds; the host waits that many seconds,
+		// and graft still keeps its prompt budget.
+		{timeout: "15000", want: hookTimeoutCeiling},
+	}
+	if err := os.Remove(filepath.Join(config, "settings.json")); err != nil {
+		t.Fatalf("os.Remove(user settings) error = %v, want nil", err)
+	}
+	for _, tt := range tests {
+		settings := `{"hooks":{"UserPromptSubmit":[{"hooks":[{"command":"node .claude/helpers/graft-hooks.cjs prompt","timeout":` + tt.timeout + `}]}]}}`
+		if err := os.WriteFile(filepath.Join(root, ".claude", "settings.json"), []byte(settings), 0o644); err != nil {
+			t.Fatalf("os.WriteFile(project settings) error = %v, want nil", err)
+		}
+		if got := hookPromptAskTimeout(root); got != tt.want {
+			t.Errorf("hookPromptAskTimeout(timeout %s) = %s, want %s", tt.timeout, got, tt.want)
+		}
 	}
 }
 
@@ -79,6 +104,10 @@ func TestHookLastFileScopeContract(t *testing.T) {
 	var stderr bytes.Buffer
 	if got := lastHookFileScope(root, "auth.go", &stderr); got != "" || stderr.Len() == 0 {
 		t.Errorf("lastHookFileScope(ambiguous) = (%q, %q), want empty with diagnostic", got, stderr.String())
+	}
+	stderr.Reset()
+	if got := lastHookFileScope(root, "frontend/auth.go", &stderr); got != "frontend" || stderr.Len() != 0 {
+		t.Errorf("lastHookFileScope(repo-relative) = (%q, %q), want frontend", got, stderr.String())
 	}
 	stderr.Reset()
 	wiring.Nodes = wiring.Nodes[:1]

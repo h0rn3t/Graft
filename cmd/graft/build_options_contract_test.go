@@ -11,6 +11,36 @@ import (
 	"github.com/h0rn3t/Graft/internal/graph"
 )
 
+func TestPatchBuildConfigWritesStableKeyOrder(t *testing.T) {
+	const want = "{\n  \"custom\": {\n    \"keep\": true\n  },\n  \"followSubmodules\": false,\n  \"includeDirs\": [\n    \"vendor\"\n  ],\n  \"followNestedRepos\": true\n}"
+	opts := callersOptions{includeDirs: []string{"vendor"}, followSubmodules: new(false), followNestedRepos: new(true)}
+	// A map encoder orders keys at random, so one lucky run proves nothing.
+	for range 20 {
+		root := t.TempDir()
+		configPath := filepath.Join(root, ".graft", "config.json")
+		if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(configPath, []byte(`{"custom":{"keep":true},"followSubmodules":true}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := patchBuildConfig(root, opts); err != nil {
+			t.Fatalf("patchBuildConfig(%q) error = %v, want nil", root, err)
+		}
+		data, err := os.ReadFile(configPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := string(data); got != want {
+			t.Fatalf("patchBuildConfig(%q) config = %q, want %q", root, got, want)
+		}
+		ignore, err := os.ReadFile(filepath.Join(root, ".gitignore"))
+		if err != nil || !strings.Contains(string(ignore), "/.graft/") {
+			t.Fatalf("patchBuildConfig(%q) .gitignore = (%q, %v), want /.graft/ entry", root, ignore, err)
+		}
+	}
+}
+
 func TestBuildPersistsWalkOptionsAndKeepsUnrelatedConfig(t *testing.T) {
 	root := t.TempDir()
 	for _, rel := range []string{"src/app.ts", "vendor/dep.ts"} {

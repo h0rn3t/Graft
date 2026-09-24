@@ -59,7 +59,7 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if opts.source {
-		inlineAskSource(root, *loaded, &result, opts.full)
+		inlineAskHits(root, askCruxByPointer(*loaded), result.Hits, opts.full)
 		result.Saved = askSavings(*loaded, result.Hits)
 	}
 	if opts.jsonOutput {
@@ -129,8 +129,9 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 		if opts.source {
 			// Each child inlines its own spans, crux included, before fusion.
 			childRoot := filepath.Join(root, child)
-			inlineAskSource(childRoot, *loaded, &childResult, opts.full)
-			inlineAskRanking(childRoot, *loaded, childResult.Ranking, opts.full)
+			cruxByPointer := askCruxByPointer(*loaded)
+			inlineAskHits(childRoot, cruxByPointer, childResult.Hits, opts.full)
+			inlineAskRanking(childRoot, cruxByPointer, childResult.Ranking, opts.full)
 		}
 		ranking := childResult.Ranking
 		groups := make([]workspaceGroup, 0)
@@ -670,34 +671,36 @@ func askEscalationNudge(result graph.AskResult) string {
 	return fmt.Sprintf("\n\n[graft] only %d %s — don't re-ask with new wording; switch tool: `graft grep \"<literal>\"` for every occurrence · `graft skeleton <file>` for a file's full API · `graft callers <symbol>` for who-uses.", len(result.Hits), noun)
 }
 
-func inlineAskSource(root string, wiring graph.GraphV1, result *graph.AskResult, full bool) {
-	inlineAskHits(root, wiring, result.Hits, full)
-}
-
-// inlineAskRanking inlines source into a child's internal ranking queues too,
-// as the TypeScript ask does before a workspace parent fuses them.
-func inlineAskRanking(root string, wiring graph.GraphV1, ranking *graph.AskRankingMetadata, full bool) {
-	if ranking == nil {
-		return
-	}
-	for index := range ranking.Groups {
-		inlineAskHits(root, wiring, ranking.Groups[index].Hits, full)
-		inlineAskHits(root, wiring, ranking.Groups[index].BaselineHits, full)
-	}
-	for index := range ranking.Baseline {
-		hits := []graph.AskHit{ranking.Baseline[index].Hit}
-		inlineAskHits(root, wiring, hits, full)
-		ranking.Baseline[index].Hit = hits[0]
-	}
-}
-
-func inlineAskHits(root string, wiring graph.GraphV1, hits []graph.AskHit, full bool) {
+// askCruxByPointer maps each node's path:span pointer to its crux excerpt;
+// callers build it once per graph and share it across every inline pass.
+func askCruxByPointer(wiring graph.GraphV1) map[string]string {
 	cruxByPointer := make(map[string]string)
 	for _, node := range wiring.Nodes {
 		if node.Crux != nil && node.Crux.Code != "" {
 			cruxByPointer[node.Path+":"+node.Span] = node.Crux.Code
 		}
 	}
+	return cruxByPointer
+}
+
+// inlineAskRanking inlines source into a child's internal ranking queues too,
+// as the TypeScript ask does before a workspace parent fuses them.
+func inlineAskRanking(root string, cruxByPointer map[string]string, ranking *graph.AskRankingMetadata, full bool) {
+	if ranking == nil {
+		return
+	}
+	for index := range ranking.Groups {
+		inlineAskHits(root, cruxByPointer, ranking.Groups[index].Hits, full)
+		inlineAskHits(root, cruxByPointer, ranking.Groups[index].BaselineHits, full)
+	}
+	for index := range ranking.Baseline {
+		hits := []graph.AskHit{ranking.Baseline[index].Hit}
+		inlineAskHits(root, cruxByPointer, hits, full)
+		ranking.Baseline[index].Hit = hits[0]
+	}
+}
+
+func inlineAskHits(root string, cruxByPointer map[string]string, hits []graph.AskHit, full bool) {
 	for index := range hits {
 		hit := &hits[index]
 		path, from, to, ok := parseAskPointer(hit.Pointer)

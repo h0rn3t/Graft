@@ -1,7 +1,6 @@
 package climeta
 
 import (
-	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,24 +8,26 @@ import (
 
 func TestPackageMetadata(t *testing.T) {
 	repository := t.TempDir()
-	sourceDir := filepath.Join(repository, "src")
-	if err := os.Mkdir(sourceDir, 0o755); err != nil {
+	binDir := filepath.Join(repository, "bin")
+	if err := os.Mkdir(binDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	packageJSON := filepath.Join(repository, "package.json")
 	if err := os.WriteFile(packageJSON, []byte(`{"version":"0.19.0"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	moduleURL := (&url.URL{Scheme: "file", Path: filepath.ToSlash(filepath.Join(sourceDir, "cli.ts"))}).String()
+	// A plain path, never a file URL: on Windows the URL round trip turned
+	// C:\x\graft.exe into \C:\x\graft.exe.
+	executable := filepath.Join(binDir, "graft.exe")
 
-	if got, want := ResolvePackageJSONPath(moduleURL), packageJSON; got != want {
-		t.Errorf("ResolvePackageJSONPath(%q) = %q, want %q", moduleURL, got, want)
+	if got, want := ResolvePackageJSONPath(executable), packageJSON; got != want {
+		t.Errorf("ResolvePackageJSONPath(%q) = %q, want %q", executable, got, want)
 	}
-	got, err := ReadCurrentVersion(moduleURL)
+	got, err := ReadCurrentVersion(executable)
 	if err != nil {
-		t.Fatalf("ReadCurrentVersion(%q) error = %v", moduleURL, err)
+		t.Fatalf("ReadCurrentVersion(%q) error = %v", executable, err)
 	}
 	if got != "0.19.0" {
-		t.Errorf("ReadCurrentVersion(%q) = %q, want %q", moduleURL, got, "0.19.0")
+		t.Errorf("ReadCurrentVersion(%q) = %q, want %q", executable, got, "0.19.0")
 	}
 }

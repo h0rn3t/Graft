@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json/jsontext"
 	"encoding/json/v2"
 	"math"
 	"os"
@@ -11,6 +12,11 @@ import (
 )
 
 const hookTranscriptTailBytes = 1 << 20
+
+// hookLenientJSON decodes what hosts send the way JSON.parse does: a lone
+// surrogate escape or invalid UTF-8 becomes U+FFFD and a repeated key keeps
+// its last value, instead of the whole document being rejected.
+var hookLenientJSON = json.JoinOptions(jsontext.AllowInvalidUTF8(true), jsontext.AllowDuplicateNames(true))
 
 var hookSavingsTallyPattern = regexp.MustCompile(`(?i)graft\s+saved\s*[~≈]?\s*[\d,.]+\s*[km]?\s*(tok|tokens)`)
 
@@ -129,7 +135,7 @@ func hookTranscriptEntries(path string) []hookTranscriptEntry {
 			continue
 		}
 		var entry hookTranscriptEntry
-		if json.Unmarshal([]byte(line), &entry) == nil {
+		if json.Unmarshal([]byte(line), &entry, hookLenientJSON) == nil {
 			entries = append(entries, entry)
 		}
 	}
@@ -174,8 +180,7 @@ func hookAssistantText(content any) string {
 	}
 }
 
-func lastHookAssistantTurn(path string) *hookAssistantTurn {
-	entries := hookTranscriptEntries(path)
+func lastHookAssistantTurn(entries []hookTranscriptEntry) *hookAssistantTurn {
 	var parts []string
 	var uuid *string
 	for _, entry := range slices.Backward(entries) {
@@ -217,8 +222,7 @@ func hookNumber(value any) float64 {
 	return 0
 }
 
-func lastHookTurnBilling(path string) *hookTurnBilling {
-	entries := hookTranscriptEntries(path)
+func lastHookTurnBilling(entries []hookTranscriptEntry) *hookTurnBilling {
 	seen := make(map[string]struct{})
 	var uuid *string
 	costMicros := 0

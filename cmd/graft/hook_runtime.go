@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -25,6 +26,14 @@ const (
 	hookTimeoutDefault  = 8 * time.Second
 	hookTimeoutOverhead = 2 * time.Second
 	hookTimeoutFloor    = 4 * time.Second
+	// hookTimeoutCeiling is the prompt budget graft's own 15 s hook allows. It
+	// also bounds a millisecond timeout written by older graft releases, which
+	// the host reads as seconds.
+	hookTimeoutCeiling = 13 * time.Second
+	// hookInputLimit caps the payload a hook reads. Hosts inline whole tool
+	// results, so the cap is generous; a payload past it is dropped whole
+	// rather than cut into invalid JSON.
+	hookInputLimit = 64 << 20
 )
 
 var hookPatchFilePattern = regexp.MustCompile(`(?m)^\*\*\*\s+(?:Add|Update)\s+File:\s+(.+?)\s*$`)
@@ -32,14 +41,18 @@ var hookPatchFilePattern = regexp.MustCompile(`(?m)^\*\*\*\s+(?:Add|Update)\s+Fi
 var (
 	hookHomeDir = homeDir
 	hookAsk     = askHookGraph
-	hookCheck   = func(root, contextDir string) int {
-		result, err := graph.CheckGraph(root, contextDir)
-		if err != nil {
+	// hookCheck counts the files that drifted from the last build's
+	// fingerprint: a walk plus a hash of files whose size or mtime changed,
+	// never a re-extraction.
+	hookCheck = func(root, contextDir string) int {
+		drift, err := graph.ProbeDrift(root, contextDir, graph.ExtractorID, sourcefiles.Options{})
+		if err != nil || drift == nil {
 			return 0
 		}
-		return len(result.Added) + len(result.Changed) + len(result.Removed)
+		return len(drift.Added) + len(drift.Changed) + len(drift.Removed)
 	}
 	hookStartSync = startHookSync
+	hookSyncBuild = buildHookSync
 )
 
 type hookInput map[string]any
@@ -49,8 +62,8 @@ func readHookInput(stdin io.Reader) hookInput {
 	if stdin == nil {
 		return input
 	}
-	data, err := io.ReadAll(io.LimitReader(stdin, 1<<20))
-	if err != nil || jsonv2.Unmarshal(data, &input) != nil {
+	data, err := io.ReadAll(io.LimitReader(stdin, hookInputLimit+1))
+	if err != nil || len(data) > hookInputLimit || jsonv2.Unmarshal(data, &input, hookLenientJSON) != nil {
 		return hookInput{}
 	}
 	return input
@@ -142,7 +155,12 @@ func handleHookPostEdit(ctx context.Context, input hookInput, root string, stdou
 		return
 	}
 	contextDir := hookContextDir(root)
+	// Repo-relative, so a scope hint can tell backend/auth.go from
+	// frontend/auth.go; a file outside the repository keeps its base name.
 	lastFile := filepath.Base(file)
+	if rel, err := filepath.Rel(root, file); err == nil && filepath.IsLocal(rel) {
+		lastFile = filepath.ToSlash(rel)
+	}
 	_, _ = patchHookStats(root, hookStatsPatch{
 		Dirty:       new(true),
 		StaleCount:  new(hookCheckStaleCount(ctx, root, contextDir)),
@@ -225,66 +243,60 @@ func handleHookCursorMCP(input hookInput, root string) {
 	})
 }
 
-func sampleHookTurnCost(input hookInput, root string) {
-	path := input.string("transcript_path")
-	if path == "" {
-		return
-	}
-	billing := lastHookTurnBilling(path)
+func sampleHookTurnCost(root, id string, entries []hookTranscriptEntry) {
+	billing := lastHookTurnBilling(entries)
 	if billing == nil {
 		return
 	}
-	id := hookSessionID(input)
-	session := readHookSession(root, id)
-	if session.LastBillingUUID != nil && *session.LastBillingUUID == billing.UUID {
-		return
-	}
-	cost := billing.CostMicros
-	if session.InputCostMicros != nil {
-		cost += *session.InputCostMicros
-	}
-	tokens := billing.Tokens
-	if session.InputTokensBilled != nil {
-		tokens += *session.InputTokensBilled
-	}
-	uuid := billing.UUID
-	session.InputCostMicros = &cost
-	session.InputTokensBilled = &tokens
-	session.LastBillingUUID = &uuid
-	_ = writeHookSession(root, id, session)
-}
-
-func countHookTallyTurn(input hookInput, root string) {
-	id := hookSessionID(input)
-	session := readHookSession(root, id)
-	if session.TurnUsedGraft == nil || !*session.TurnUsedGraft {
-		return
-	}
-	turn := lastHookAssistantTurn(input.string("transcript_path"))
-	if turn == nil || (session.LastTallyUUID != nil && *session.LastTallyUUID == turn.UUID) {
-		session.TurnUsedGraft = new(false)
-		_ = writeHookSession(root, id, session)
-		return
-	}
-	graftTurns := 1
-	if session.GraftTurns != nil {
-		graftTurns += *session.GraftTurns
-	}
-	session.GraftTurns = &graftTurns
-	if hasSavingsTally(turn.Text) {
-		reported := 1
-		if session.ReportedTurns != nil {
-			reported += *session.ReportedTurns
+	_ = updateHookSession(root, id, func(session *sessionState) bool {
+		if session.LastBillingUUID != nil && *session.LastBillingUUID == billing.UUID {
+			return false
 		}
-		session.ReportedTurns = &reported
-	}
-	uuid := turn.UUID
-	session.LastTallyUUID = &uuid
-	session.TurnUsedGraft = new(false)
-	_ = writeHookSession(root, id, session)
+		cost := billing.CostMicros
+		if session.InputCostMicros != nil {
+			cost += *session.InputCostMicros
+		}
+		tokens := billing.Tokens
+		if session.InputTokensBilled != nil {
+			tokens += *session.InputTokensBilled
+		}
+		uuid := billing.UUID
+		session.InputCostMicros = &cost
+		session.InputTokensBilled = &tokens
+		session.LastBillingUUID = &uuid
+		return true
+	})
 }
 
-func hookSyncBuild(root string) error {
+func countHookTallyTurn(root, id string, entries []hookTranscriptEntry) {
+	_ = updateHookSession(root, id, func(session *sessionState) bool {
+		if session.TurnUsedGraft == nil || !*session.TurnUsedGraft {
+			return false
+		}
+		session.TurnUsedGraft = new(false)
+		turn := lastHookAssistantTurn(entries)
+		if turn == nil || (session.LastTallyUUID != nil && *session.LastTallyUUID == turn.UUID) {
+			return true
+		}
+		graftTurns := 1
+		if session.GraftTurns != nil {
+			graftTurns += *session.GraftTurns
+		}
+		session.GraftTurns = &graftTurns
+		if hasSavingsTally(turn.Text) {
+			reported := 1
+			if session.ReportedTurns != nil {
+				reported += *session.ReportedTurns
+			}
+			session.ReportedTurns = &reported
+		}
+		uuid := turn.UUID
+		session.LastTallyUUID = &uuid
+		return true
+	})
+}
+
+func buildHookSync(root string) error {
 	var stdout, stderr bytes.Buffer
 	opts := callersOptions{command: "build", root: root, rootSet: true}
 	if os.Getenv("GRAFT_DIR") != "" {
@@ -308,6 +320,7 @@ func startHookSync(root string) bool {
 	command.Stdin = strings.NewReader("")
 	command.Stdout = io.Discard
 	command.Stderr = io.Discard
+	command.SysProcAttr = detachedProcAttr()
 	if err := command.Start(); err != nil {
 		return false
 	}
@@ -316,8 +329,10 @@ func startHookSync(root string) bool {
 }
 
 func handleHookStop(input hookInput, root string) {
-	sampleHookTurnCost(input, root)
-	countHookTallyTurn(input, root)
+	id := hookSessionID(input)
+	entries := hookTranscriptEntries(input.string("transcript_path"))
+	sampleHookTurnCost(root, id, entries)
+	countHookTallyTurn(root, id, entries)
 	stats := readHookStats(root)
 	if stats == nil || !stats.Dirty {
 		return
@@ -337,23 +352,29 @@ func handleHookStop(input hookInput, root string) {
 }
 
 func runHookSync(root string, stdout, stderr io.Writer) {
+	// Claim the pending edits before building: an edit that lands while the
+	// build runs sets Dirty again, and the final update below keeps it.
+	_, _ = patchHookStats(root, hookStatsPatch{Dirty: new(false)})
 	if err := hookSyncBuild(root); err != nil {
-		_, _ = patchHookStats(root, hookStatsPatch{Syncing: new(false)})
+		_, _ = patchHookStats(root, hookStatsPatch{Syncing: new(false), Dirty: new(true)})
 		graph.ReleaseLock(hookCacheDir(root))
 		return
 	}
 	wiring, err := graph.Read(graph.WiringPath(hookContextDir(root)))
 	if err != nil {
-		_, _ = patchHookStats(root, hookStatsPatch{Syncing: new(false)})
+		_, _ = patchHookStats(root, hookStatsPatch{Syncing: new(false), Dirty: new(true)})
 		graph.ReleaseLock(hookCacheDir(root))
 		return
 	}
-	stats := computeHookStats(*wiring)
-	dirty, stale, syncing, synced := false, 0, false, time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
-	_, _ = patchHookStats(root, hookStatsPatch{
-		NodeCount: &stats.NodeCount, EdgeCount: &stats.EdgeCount, Languages: &stats.Languages,
-		TotalCount: &stats.TotalCount, ReadyCount: &stats.ReadyCount, Dirty: &dirty, StaleCount: &stale,
-		Syncing: &syncing, SyncedAtSet: true, SyncedAt: &synced,
+	built := computeHookStats(*wiring)
+	synced := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
+	_, _ = updateHookStats(root, func(stats *hookStats) {
+		stats.NodeCount, stats.EdgeCount, stats.Languages = built.NodeCount, built.EdgeCount, built.Languages
+		stats.TotalCount, stats.ReadyCount = built.TotalCount, built.ReadyCount
+		stats.Syncing, stats.SyncedAt = false, &synced
+		if !stats.Dirty {
+			stats.StaleCount = 0
+		}
 	})
 	graph.ReleaseLock(hookCacheDir(root))
 }
@@ -379,12 +400,14 @@ func computeHookStats(wiring graph.GraphV1) hookStats {
 	return stats
 }
 
-func hookInstalledTimeout(root, event string) (int, bool) {
+// hookInstalledTimeout is the smallest timeout the Claude Code settings give
+// graft's hook for event. Claude Code reads the value in seconds.
+func hookInstalledTimeout(root, event string) (time.Duration, bool) {
 	user := os.Getenv("CLAUDE_CONFIG_DIR")
 	if user == "" {
 		user = filepath.Join(homeDir(), ".claude")
 	}
-	smallest := 0
+	var smallest time.Duration
 	for _, file := range []string{
 		filepath.Join(root, ".claude", "settings.json"),
 		filepath.Join(root, ".claude", "settings.local.json"),
@@ -407,11 +430,13 @@ func hookInstalledTimeout(root, event string) (int, bool) {
 		}
 		for _, block := range settings.Hooks[event] {
 			for _, hook := range block.Hooks {
-				if strings.Contains(hook.Command, "graft-hooks.cjs") && hook.Timeout != nil {
-					timeout := int(*hook.Timeout)
-					if smallest == 0 || timeout < smallest {
-						smallest = timeout
-					}
+				if !strings.Contains(hook.Command, "graft-hooks.cjs") || hook.Timeout == nil || !(*hook.Timeout > 0) {
+					continue
+				}
+				// Capped at a million seconds so the conversion cannot overflow.
+				timeout := time.Duration(min(*hook.Timeout, 1e6) * float64(time.Second))
+				if smallest == 0 || timeout < smallest {
+					smallest = timeout
 				}
 			}
 		}
@@ -419,12 +444,19 @@ func hookInstalledTimeout(root, event string) (int, bool) {
 	return smallest, smallest > 0
 }
 
+// hookPromptAskTimeout is graft's own budget inside the host's prompt-hook
+// timeout: hookTimeoutOverhead is left for process start and output, and the
+// budget stays below the host timeout however small that is.
 func hookPromptAskTimeout(root string) time.Duration {
-	installed, ok := hookInstalledTimeout(root, "UserPromptSubmit")
+	host, ok := hookInstalledTimeout(root, "UserPromptSubmit")
 	if !ok {
 		return hookTimeoutDefault - hookTimeoutOverhead
 	}
-	return max(hookTimeoutFloor, time.Duration(installed)*time.Millisecond-hookTimeoutOverhead)
+	budget := host - hookTimeoutOverhead
+	if budget < hookTimeoutFloor {
+		budget = min(hookTimeoutFloor, host/2)
+	}
+	return min(budget, hookTimeoutCeiling)
 }
 
 func lastHookFileScope(root, lastFile string, stderr io.Writer) string {
@@ -439,11 +471,16 @@ func lastHookFileScope(root, lastFile string, stderr io.Writer) string {
 	if scopes == nil || len(*scopes) <= 1 {
 		return ""
 	}
+	// A repo-relative lastFile names one file; a bare base name, as older
+	// releases stored it, matches that name in any directory.
+	matches := func(path string) bool {
+		return path == lastFile || !strings.Contains(lastFile, "/") && strings.HasSuffix(path, "/"+lastFile)
+	}
 	prefix := ""
 	found := 0
 	ambiguous := false
 	for _, node := range wiring.Nodes {
-		if node.Kind != "file" || (node.Path != lastFile && !strings.HasSuffix(node.Path, "/"+lastFile)) {
+		if node.Kind != "file" || !matches(node.Path) {
 			continue
 		}
 		found++
@@ -510,21 +547,29 @@ func handleHookPrompt(ctx context.Context, input hookInput, root string, stdout,
 	if !ok {
 		return
 	}
-	id := hookSessionID(input)
-	session := readHookSession(root, id)
-	session.LastQuery = &prompt
-	if agent := input.object("agent")["name"]; agent != nil {
-		if name, ok := agent.(string); ok && name != "" {
-			session.PerAgentQuery[name] = prompt
+	agent, _ := input.object("agent")["name"].(string)
+	text := ""
+	remember := func(session *sessionState) bool {
+		session.LastQuery = &prompt
+		if agent != "" {
+			session.PerAgentQuery[agent] = prompt
 		}
+		text = relevantHookRetrieval(&result, session, 3)
+		return true
 	}
-	if text := relevantHookRetrieval(&result, &session, 3); text != "" {
+	id := hookSessionID(input)
+	if err := updateHookSession(root, id, remember); errors.Is(err, context.DeadlineExceeded) {
+		// A peer holds the session lock: still answer the prompt, just
+		// without recording it.
+		session := readHookSession(root, id)
+		remember(&session)
+	}
+	if text != "" {
 		emitHookContext(stdout, "UserPromptSubmit", text)
 	}
-	_ = writeHookSession(root, id, session)
 }
 
-func hookSessionStartLines(root string) []string {
+func hookSessionStartLines(ctx context.Context, root string) []string {
 	now := time.Now()
 	home := hookHomeDir()
 	env := hosts.Env{Home: home, BakedDir: packageRoot(), Launch: hosts.ServerEntry()}
@@ -532,7 +577,7 @@ func hookSessionStartLines(root string) []string {
 	if note := upkeep.ReconcileWiring(root, "", currentVersion(), now,
 		func(repo string) ([]string, error) { return upkeep.WiredHostIDs(repo), nil },
 		func(repo string, ids []string, options upkeep.WiringOptions) error {
-			return upkeep.RewriteWiring(context.Background(), repo, ids, options, env)
+			return upkeep.RewriteWiring(ctx, repo, ids, options, env)
 		},
 	); note != "" {
 		lines = append(lines, note)
@@ -540,13 +585,15 @@ func hookSessionStartLines(root string) []string {
 	return lines
 }
 
-func runHook(event string, stdin io.Reader, stdout, stderr io.Writer) {
+// runHook handles one host hook event. ctx ends when the process is told to
+// stop; each event's own budget is derived from it.
+func runHook(ctx context.Context, event string, stdin io.Reader, stdout, stderr io.Writer) {
 	input := readHookInput(stdin)
 	root := hookProjectDir(input)
 
 	switch event {
 	case "session-start":
-		lines := hookSessionStartLines(root)
+		lines := hookSessionStartLines(ctx, root)
 		index, err := os.ReadFile(filepath.Join(hookContextDir(root), "INDEX.md"))
 		if err == nil {
 			orientation := formatHookOrientation(string(index), 1500, hookStaleBanner(hookIndexFreshness(root)))
@@ -558,11 +605,11 @@ func runHook(event string, stdin io.Reader, stdout, stderr io.Writer) {
 			emitHookContext(stdout, "SessionStart", strings.Join(lines, "\n"))
 		}
 	case "prompt":
-		ctx, cancel := context.WithTimeout(context.Background(), hookPromptAskTimeout(root))
+		ctx, cancel := context.WithTimeout(ctx, hookPromptAskTimeout(root))
 		defer cancel()
 		handleHookPrompt(ctx, input, root, stdout, stderr)
 	case "post-edit":
-		ctx, cancel := context.WithTimeout(context.Background(), hookTimeoutDefault)
+		ctx, cancel := context.WithTimeout(ctx, hookTimeoutDefault)
 		defer cancel()
 		handleHookPostEdit(ctx, input, root, stdout, stderr)
 	case "tool-savings":
@@ -577,7 +624,7 @@ func runHook(event string, stdin io.Reader, stdout, stderr io.Writer) {
 	case "stop":
 		handleHookStop(input, root)
 	case "post-edit-sync":
-		ctx, cancel := context.WithTimeout(context.Background(), hookTimeoutDefault)
+		ctx, cancel := context.WithTimeout(ctx, hookTimeoutDefault)
 		defer cancel()
 		handleHookPostEdit(ctx, input, root, stdout, stderr)
 		handleHookStop(input, root)

@@ -2,15 +2,19 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"math"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
@@ -91,8 +95,19 @@ type callersOutput struct {
 	Saved   *savedOutput  `json:"saved,omitempty"`
 }
 
+// signalGrace is how long work that cannot observe cancellation may run on
+// after an interrupt before the process exits, as the default handler would.
+const signalGrace = 2 * time.Second
+
 func main() {
-	if status := runWithInput(os.Args[1:], os.Stdin, os.Stdout, os.Stderr); status != 0 {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	context.AfterFunc(ctx, func() {
+		stop() // a second signal takes the default action again
+		time.AfterFunc(signalGrace, func() { os.Exit(130) })
+	})
+	status := runContext(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
+	stop()
+	if status != 0 {
 		os.Exit(status)
 	}
 }
@@ -102,6 +117,12 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	return runContext(context.Background(), args, stdin, stdout, stderr)
+}
+
+// runContext parses args and runs the command; ctx carries the process's
+// interrupt to the commands that can stop early.
+func runContext(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	parsed, err := parseCommandLine(programSpec(), args)
 	var help *helpRequest
 	var failure *cliError
@@ -127,17 +148,17 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		writeDiagnostic(stderr, "%v\n", err)
 		return 1
 	}
-	return dispatchWithInput(parsed, stdin, stdout, stderr)
+	return dispatchWithInput(ctx, parsed, stdin, stdout, stderr)
 }
 
-func dispatchWithInput(parsed invocation, stdin io.Reader, stdout, stderr io.Writer) int {
+func dispatchWithInput(ctx context.Context, parsed invocation, stdin io.Reader, stdout, stderr io.Writer) int {
 	args := parsed.args
 	switch parsed.command.path() {
 	case "_hook":
 		if len(args) == 0 {
 			return 1
 		}
-		runHook(args[0], stdin, stdout, stderr)
+		runHook(ctx, args[0], stdin, stdout, stderr)
 		return 0
 	case "_statusline":
 		runHookStatusline(stdin, stdout)
@@ -174,7 +195,7 @@ func dispatchWithInput(parsed invocation, stdin io.Reader, stdout, stderr io.Wri
 	case "map":
 		return runMap(opts, stdout, stderr)
 	case "mcp":
-		return runMCP(opts, stdin, stdout, stderr)
+		return runMCP(ctx, opts, stdin, stdout, stderr)
 	case "ask":
 		return runAsk(opts, stdout, stderr)
 	default:
@@ -498,12 +519,14 @@ func writeDiagnostic(w io.Writer, format string, args ...any) {
 
 func writeHuman(w io.Writer, root string, wiring graph.GraphV1, results []callersResult, direction graph.Direction, depth int) int {
 	var body strings.Builder
+	sources := make(map[string][]string)
 	for _, result := range results {
 		fmt.Fprintf(&body, "%s · %s · %s:%s\n", result.symbol.Name, result.symbol.Kind, result.symbol.Path, result.symbol.Span)
 		if len(result.hits) == 0 {
 			body.WriteString(looseNote(direction, result.symbol.Name, len(results)))
 			body.WriteByte('\n')
 		} else {
+			mention := regexp.MustCompile(`(^|[^[:alnum:]_$])` + regexp.QuoteMeta(result.symbol.Name) + `([^[:alnum:]_$]|$)`)
 			for _, hit := range result.hits {
 				arrow := "←"
 				if direction == graph.DirectionOut {
@@ -518,7 +541,7 @@ func writeHuman(w io.Writer, root string, wiring graph.GraphV1, results []caller
 					depthLabel = fmt.Sprintf(" [depth %d]", hit.Depth)
 				}
 				fmt.Fprintf(&body, "  %s %s %s%s\n", hit.Relation, arrow, label, depthLabel)
-				if line, number, ok := quoteFor(root, result.symbol.Name, hit); ok {
+				if line, number, ok := quoteFor(root, mention, hit, sources); ok {
 					fmt.Fprintf(&body, "      %d: %s\n", number, strings.TrimSpace(line))
 				}
 			}
@@ -590,7 +613,9 @@ func looseNote(direction graph.Direction, name string, candidateCount int) strin
 	return fmt.Sprintf("  no indexed %s — the graph has no %s call/reference edges for this symbol as written.%s Check the name (try the bare symbol, or \"Type.method\"), or find its uses with graft grep %q. Fall back to raw grep -rn only for unindexed files", label, movement, ambiguity, name)
 }
 
-func quoteFor(root, name string, hit graph.EdgeHit) (string, int, bool) {
+// quoteFor returns the first line of hit's span that mention matches. sources
+// caches each file's lines by graph path, nil for a file that cannot be read.
+func quoteFor(root string, mention *regexp.Regexp, hit graph.EdgeHit, sources map[string][]string) (string, int, bool) {
 	if hit.Node == nil || hit.Depth > 1 {
 		return "", 0, false
 	}
@@ -598,14 +623,15 @@ func quoteFor(root, name string, hit graph.EdgeHit) (string, int, bool) {
 	if !ok {
 		return "", 0, false
 	}
-	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(hit.Node.Path)))
-	if err != nil {
-		return "", 0, false
+	lines, cached := sources[hit.Node.Path]
+	if !cached {
+		if data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(hit.Node.Path))); err == nil {
+			lines = strings.Split(string(data), "\n")
+		}
+		sources[hit.Node.Path] = lines
 	}
-	lines := strings.Split(string(data), "\n")
-	pattern := regexp.MustCompile(`(^|[^[:alnum:]_$])` + regexp.QuoteMeta(name) + `([^[:alnum:]_$]|$)`)
 	for line := max(start, 1); line <= min(end, len(lines)); line++ {
-		if pattern.MatchString(lines[line-1]) {
+		if mention.MatchString(lines[line-1]) {
 			return lines[line-1], line, true
 		}
 	}
