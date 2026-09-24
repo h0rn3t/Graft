@@ -59,7 +59,7 @@ func runInit(parsed parsedFlags, stdout, stderr io.Writer) int {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
-	env := hosts.Env{Home: home, BakedDir: packageRoot(), Launch: hosts.ServerEntry()}
+	env := hosts.Env{Home: home, Binary: executablePath(), Launch: hosts.ServerEntry()}
 	return initRepo(repo, env, opts, stderr)
 }
 

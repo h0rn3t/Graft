@@ -17,7 +17,7 @@ const (
 )
 
 var (
-	allowEntries    = []string{"Bash(graft:*)", "Bash(npx graft:*)", "Bash(graft-dev:*)"}
+	allowEntries    = []string{"Bash(graft:*)", "Bash(graft-dev:*)"}
 	graftAllowEntry = regexp.MustCompile(`^Bash\((?:graft|npx graft|graft-dev|node dist/cli\.js)(?::|\))`)
 )
 
@@ -261,8 +261,8 @@ func RunClaudeInit(repo string, env Env, statusline, global bool) (ClaudeInitRes
 		}
 	}
 	for _, shim := range []struct{ path, content string }{
-		{statuslinePath, StatuslineShim(env.BakedDir)},
-		{hooksPath, HooksShim(env.BakedDir)},
+		{statuslinePath, StatuslineShim(env.Binary)},
+		{hooksPath, HooksShim(env.Binary)},
 	} {
 		if _, err := f.writeOwnedFile("claude", shim.path, shim.content, 0o755); err != nil {
 			return ClaudeInitResult{}, err
@@ -291,7 +291,7 @@ func RunClaudeInit(repo string, env Env, statusline, global bool) (ClaudeInitRes
 func (f *files) installClaudeGlobal(env Env) ([]ConfigWrite, []string, error) {
 	targets := ClaudeGlobalTargets(env.Home)
 	shimTarget, settingsTarget, mcpTarget := targets[0], targets[1], targets[2]
-	shim, err := f.writeOwnedFile(shimTarget.ID, shimTarget.Path, HooksShim(env.BakedDir), 0o755)
+	shim, err := f.writeOwnedFile(shimTarget.ID, shimTarget.Path, HooksShim(env.Binary), 0o755)
 	if err != nil {
 		return nil, nil, err
 	}

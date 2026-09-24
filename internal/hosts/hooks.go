@@ -11,8 +11,8 @@ import (
 type Env struct {
 	// Home is the user's home directory.
 	Home string
-	// BakedDir is the installed package root, the shims' first candidate.
-	BakedDir string
+	// Binary is the running graft executable, the shims' first candidate.
+	Binary string
 	// Launch is the MCP launch command decided for this run.
 	Launch Launch
 }
@@ -55,7 +55,7 @@ func (f *files) installCodexHooks(env Env) ([]ConfigWrite, error) {
 		return nil, nil
 	}
 	shimPath, configPath := targets[0].Path, targets[1].Path
-	shim, err := f.writeOwnedFile("codex-hook-shim", shimPath, HooksShim(env.BakedDir), 0o755)
+	shim, err := f.writeOwnedFile("codex-hook-shim", shimPath, HooksShim(env.Binary), 0o755)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func CursorHookTargets(repo string) []PlannedWrite {
 func (f *files) installCursorHooks(repo string, env Env) ([]ConfigWrite, error) {
 	targets := CursorHookTargets(repo)
 	shimPath, configPath := targets[0].Path, targets[1].Path
-	shim, err := f.writeOwnedFile("cursor-hook-shim", shimPath, HooksShim(env.BakedDir), 0o755)
+	shim, err := f.writeOwnedFile("cursor-hook-shim", shimPath, HooksShim(env.Binary), 0o755)
 	if err != nil {
 		return nil, err
 	}

@@ -3,22 +3,17 @@ package main
 import (
 	"bytes"
 	"errors"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-// packagedBinary builds graft into <pkg>/bin next to a package.json at version.
-func packagedBinary(t *testing.T, version string) string {
+// stampedBinary builds graft with its release version stamped at link time.
+func stampedBinary(t *testing.T, version string) string {
 	t.Helper()
-	pkg := t.TempDir()
-	if err := os.WriteFile(filepath.Join(pkg, "package.json"), []byte(`{"name":"@nanonets/graft","version":"`+version+`"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	binary := filepath.Join(pkg, "bin", "graft")
-	if output, err := exec.Command("go", "build", "-o", binary, ".").CombinedOutput(); err != nil {
+	binary := filepath.Join(t.TempDir(), "graft")
+	if output, err := exec.Command("go", "build", "-ldflags=-X main.version=v"+version, "-o", binary, ".").CombinedOutput(); err != nil {
 		t.Fatalf("go build: %v\n%s", err, output)
 	}
 	return binary
@@ -40,7 +35,7 @@ func runBinary(t *testing.T, binary string, args ...string) (int, string, string
 }
 
 func TestVersionContract(t *testing.T) {
-	binary := packagedBinary(t, "1.2.3")
+	binary := stampedBinary(t, "1.2.3")
 	cases := []struct {
 		name       string
 		args       []string

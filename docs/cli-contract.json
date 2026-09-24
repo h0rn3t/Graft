@@ -223,5 +223,5 @@
     "GRAFT_NO_STATUSLINE": { "scope": "cli", "effect": "omit the Claude statusLine block" },
     "GRAFT_REFRESH": { "scope": "cli", "effect": "`hash` confirms every file by content" }
   },
-  "hookRuntime": "Claude, Codex and Cursor hooks and the Claude statusline use plain-JS shims that locate the installed package and spawn its native graft binary with `_hook <sub>` or `_statusline`."
+  "hookRuntime": "Claude, Codex and Cursor hooks and the Claude statusline use plain-JS shims that spawn the graft binary that wrote them (else `graft` on PATH) with `_hook <sub>` or `_statusline`."
 }

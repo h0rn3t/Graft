@@ -82,7 +82,7 @@ func TestRepoSymlinksNeverRedirectWrites(t *testing.T) {
 				t.Fatalf("Chmod(%q) error = %v, want nil", victim, err)
 			}
 			symlinkOrSkip(t, target, filepath.Join(repo, filepath.FromSlash(tt.link)))
-			env := Env{Home: home, BakedDir: "/pkg", Launch: binLaunch}
+			env := Env{Home: home, Binary: "/pkg/graft", Launch: binLaunch}
 
 			_, _ = RunClaudeInit(repo, env, true, false)                                       // an error is fine; a write through the link is not
 			_, _ = RunHostsInit(repo, env, InitOptions{Agents: []string{"agents"}, MCP: true}) // same

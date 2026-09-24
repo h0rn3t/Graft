@@ -628,7 +628,7 @@ func handleHookPrompt(ctx context.Context, input hookInput, root string, stdout,
 func hookSessionStartLines(ctx context.Context, root string) []string {
 	now := time.Now()
 	home := hookHomeDir()
-	env := hosts.Env{Home: home, BakedDir: packageRoot(), Launch: hosts.ServerEntry()}
+	env := hosts.Env{Home: home, Binary: executablePath(), Launch: hosts.ServerEntry()}
 	lines := make([]string, 0, 2)
 	if note := upkeep.ReconcileWiring(root, "", currentVersion(), now,
 		func(repo string) ([]string, error) { return upkeep.WiredHostIDs(repo), nil },

@@ -1,10 +1,8 @@
-node_modules/
-dist/
 *.log
 
 # graft's local graph cache — regenerable, not committed. Each dev runs
 # `graft build` locally (it re-adds this line itself), so the folder is a
-# personal cache like node_modules, never a shared artifact.
+# personal cache, never a shared artifact.
 graft/
 
 # Env
@@ -41,6 +39,3 @@ openspec/
 # Local agent instructions.
 CLAUDE.md
 AGENTS.md
-
-# Native Go CLI binaries, built per platform by scripts/build-go.mjs.
-/bin/graft-*

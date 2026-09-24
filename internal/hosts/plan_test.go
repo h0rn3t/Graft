@@ -65,14 +65,14 @@ func TestMergeGraftSettingsRemovesLegacyAllowEntry(t *testing.T) {
 	for i, value := range allow {
 		got[i] = jsonjs.String(value)
 	}
-	if !reflect.DeepEqual(got, []string{"Bash(ls:*)", "Bash(graft:*)", "Bash(npx graft:*)", "Bash(graft-dev:*)"}) {
+	if !reflect.DeepEqual(got, []string{"Bash(ls:*)", "Bash(graft:*)", "Bash(graft-dev:*)"}) {
 		t.Errorf("MergeGraftSettings() allow = %v, want legacy TS entry removed", got)
 	}
 }
 
 func TestPlanMatchesTheWritesAnApplyMakes(t *testing.T) {
 	repo, home := machine(t)
-	env := Env{Home: home, BakedDir: "/pkg", Launch: binLaunch}
+	env := Env{Home: home, Binary: "/pkg/graft", Launch: binLaunch}
 	before := listFiles(t, repo, home)
 	plans := PlanInit(repo, home, env.Launch, nil)
 	if after := listFiles(t, repo, home); !slices.Equal(after, before) {
@@ -106,7 +106,7 @@ func TestPlanMatchesTheWritesAnApplyMakes(t *testing.T) {
 // home while repo-level targets, Cursor's hooks included, are still written.
 func TestNoGlobalKeepsHomeUntouched(t *testing.T) {
 	repo, home := machine(t)
-	env := Env{Home: home, BakedDir: "/pkg", Launch: binLaunch}
+	env := Env{Home: home, Binary: "/pkg/graft", Launch: binLaunch}
 	before := listFiles(t, home)
 	if _, err := RunClaudeInit(repo, env, true, false); err != nil {
 		t.Fatal(err)

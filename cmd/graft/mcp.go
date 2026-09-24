@@ -247,7 +247,7 @@ func mcpInstructionsFrom(lines []string) string {
 func mcpUpkeepLines(ctx context.Context, root, _, current string) []string {
 	now := time.Now()
 	home := homeDir()
-	env := hosts.Env{Home: home, BakedDir: packageRoot(), Launch: hosts.ServerEntry()}
+	env := hosts.Env{Home: home, Binary: executablePath(), Launch: hosts.ServerEntry()}
 	lines := make([]string, 0, 2)
 	if note := upkeep.ReconcileWiring(root, "", current, now,
 		func(repo string) ([]string, error) { return upkeep.WiredHostIDs(repo), nil },
