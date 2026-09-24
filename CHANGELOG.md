@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.1 - 2026-09-24
+
+### Removed
+
+- **The npm distribution.** `@nanonets/graft`, its Node launcher, and its build and postinstall scripts are gone. Install with `go install github.com/h0rn3t/Graft/cmd/graft@latest`.
+
+### Changed
+
+- **The version is stamped into the binary.** Release builds set it with `-ldflags "-X main.version=<v>"`. Otherwise `graft --version` reports the module version that `go install ...@vX.Y.Z` records, instead of reading `package.json`.
+- **Hook and statusline shims run the graft binary directly.** They call the executable that wrote them, or `graft` on PATH, instead of searching npm package roots. Hooks now work for `go install` users. The Claude allowlist no longer adds `Bash(npx graft:*)`.
+- **Grammar updates.** tree-sitter-c is now 0.24.2 and tree-sitter-go 0.25.0. The extractor ID changed, so existing graphs rebuild once on the next query.
+- The README is now in Ukrainian. The English version moved to `README.en.md`, and each file links to the other. The logo no longer shows a version number.
+
 ## 0.2.0 - 2026-09-24
 
 ### Changed
