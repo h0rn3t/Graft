@@ -549,6 +549,52 @@ func TestEnsureFreshGraphReprobesAfterLockContract(t *testing.T) {
 	})
 }
 
+func TestEnsureFreshGraphKeepsLSPEdgesAndCards(t *testing.T) {
+	t.Setenv("GRAFT_NO_REFRESH", "false")
+	root := t.TempDir()
+	outDir := filepath.Join(root, "graft")
+	opts := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts"}}
+	for _, name := range []string{"a", "b", "c"} {
+		writeRefreshSource(t, root, "src/"+name+".ts", "export function "+name+"() {}\n")
+	}
+	built, err := BuildGraph(root, opts)
+	if err != nil {
+		t.Fatalf("BuildGraph(%q) error = %v, want nil", root, err)
+	}
+	unchangedCaller := EdgeV1{Source: "src/a.ts#a", Target: "src/b.ts#b", Relation: "calls", Confidence: "lsp_resolved"}
+	editedCaller := EdgeV1{Source: "src/c.ts#c", Target: "src/b.ts#b", Relation: "calls", Confidence: "lsp_resolved"}
+	built.Graph.Edges = append(built.Graph.Edges, unchangedCaller, editedCaller)
+	if _, err := Write(built.Graph, outDir); err != nil {
+		t.Fatalf("Write(graph, %q) error = %v, want nil", outDir, err)
+	}
+	if err := WriteFingerprint(outDir, ExtractorID, built.Fingerprints, nil); err != nil {
+		t.Fatalf("WriteFingerprint(%q) error = %v, want nil", outDir, err)
+	}
+	if _, err := WriteCards(built.Graph, outDir); err != nil {
+		t.Fatalf("WriteCards(graph, %q) error = %v, want nil", outDir, err)
+	}
+	writeRefreshSource(t, root, "src/c.ts", "export function c() {}\nexport function d() {}\n")
+
+	options := RefreshOptions{Source: opts}
+	if got := EnsureFreshGraph(root, options); !got.Refreshed {
+		t.Fatalf("EnsureFreshGraph(%q, %#v) = %#v, want a refresh", root, options, got)
+	}
+	wiring, err := Read(WiringPath(outDir))
+	if err != nil {
+		t.Fatalf("Read(%q) error = %v, want nil", WiringPath(outDir), err)
+	}
+	if !slices.Contains(wiring.Edges, unchangedCaller) || slices.Contains(wiring.Edges, editedCaller) {
+		t.Errorf("EnsureFreshGraph(%q) edges = %v, want %v kept and %v dropped", root, wiring.Edges, unchangedCaller, editedCaller)
+	}
+	if wiring.Meta.EdgeCount != len(wiring.Edges) {
+		t.Errorf("EnsureFreshGraph(%q) meta edge count = %d, want %d", root, wiring.Meta.EdgeCount, len(wiring.Edges))
+	}
+	card := filepath.Join(outDir, "src", "c.md")
+	if data, err := os.ReadFile(card); err != nil || !strings.Contains(string(data), "- d · function") {
+		t.Errorf("ReadFile(%q) after refresh = (%q, %v), want the new d function listed", card, data, err)
+	}
+}
+
 // holdGraphLock takes outDir's graph writer lock for the rest of the test, or
 // until the returned release runs.
 func holdGraphLock(t *testing.T, outDir string) (release func()) {

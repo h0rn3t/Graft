@@ -8,8 +8,12 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"unicode/utf16"
+	"sync"
+	"time"
+	"unicode"
+	"unicode/utf8"
 
+	"github.com/h0rn3t/Graft/internal/savings"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
@@ -61,9 +65,22 @@ type LSPResult struct {
 	Server  string // Resolved executable path, or empty when no server applies.
 }
 
+const (
+	// lspTotalBudget bounds a whole enrichment run, server startup and
+	// indexing included; what was collected by then is kept.
+	lspTotalBudget = 10 * time.Minute
+	// lspWorkers is how many source files are queried at once. JSON-RPC lets
+	// requests overlap, and a few in flight hide the server's per-request
+	// latency without flooding it.
+	lspWorkers = 4
+	// lspReadyProbes is how many definitions the readiness wait rotates over.
+	lspReadyProbes = 3
+)
+
 // EnrichWithLSP adds compiler-resolved call edges when a supported language
 // server is installed. Server startup, indexing, and request failures leave the
-// existing graph usable and return the edges collected so far.
+// existing graph usable and return the edges collected so far. The run stops
+// after lspTotalBudget even when ctx allows longer.
 func EnrichWithLSP(ctx context.Context, graph *GraphV1, root string) LSPResult {
 	result := LSPResult{}
 	if graph == nil {
@@ -89,6 +106,8 @@ func EnrichWithLSP(ctx context.Context, graph *GraphV1, root string) LSPResult {
 	if err != nil {
 		return result
 	}
+	ctx, cancel := context.WithTimeout(ctx, lspTotalBudget)
+	defer cancel()
 	client, err := startLSPClient(ctx, server, root)
 	if err != nil {
 		return result // Server startup failure leaves the AST graph intact.
@@ -132,101 +151,205 @@ func EnrichWithLSP(ctx context.Context, graph *GraphV1, root string) LSPResult {
 	for _, language := range server.languages {
 		serverLanguages[language] = struct{}{}
 	}
-	sources := make([]NodeV1, 0)
+	// Sources are grouped by file, in first-seen order, so each file is opened
+	// once, queried, and closed again.
+	var files []lspSourceFile
+	fileIndex := make(map[string]int)
 	for _, node := range graph.Nodes {
 		if node.Kind != "function" && node.Kind != "method" {
 			continue
 		}
-		if _, ok := serverLanguages[lspLanguage(node.Path)]; ok {
-			sources = append(sources, node)
+		if _, ok := serverLanguages[lspLanguage(node.Path)]; !ok {
+			continue
 		}
-	}
-
-	fileLines := make(map[string][]string)
-	linesOf := func(rel string) []string {
-		if lines, ok := fileLines[rel]; ok {
-			return lines
-		}
-		text, readable, err := sourcefiles.Read(filepath.Join(root, filepath.FromSlash(rel)))
-		if err != nil || !readable {
-			fileLines[rel] = nil // Unreadable sources cannot provide an LSP position.
-			return nil
-		}
-		lines := strings.Split(text, "\n")
-		fileLines[rel] = lines
-		return lines
-	}
-	namePosition := func(node NodeV1) (lspPosition, bool) {
-		start, _, ok := parseLSPSpan(node.Span)
+		index, ok := fileIndex[node.Path]
 		if !ok {
-			return lspPosition{}, false
+			index = len(files)
+			fileIndex[node.Path] = index
+			files = append(files, lspSourceFile{abs: filepath.Join(root, filepath.FromSlash(node.Path))})
 		}
-		lines := linesOf(node.Path)
-		for line := start - 1; line < min(start+2, len(lines)); line++ {
-			if column := strings.Index(lines[line], node.Name); column >= 0 {
-				character := len(utf16.Encode([]rune(lines[line][:column])))
-				return lspPosition{Line: line, Character: character}, true
-			}
-		}
-		return lspPosition{}, false
+		files[index].sources = append(files[index].sources, node)
 	}
 
-	for _, source := range sources {
-		if position, ok := namePosition(source); ok {
-			if !client.waitUntilReady(ctx, filepath.Join(root, filepath.FromSlash(source.Path)), position) {
-				return result
+	probes := make([]lspProbe, 0, lspReadyProbes)
+	for _, file := range files {
+		lines := readLSPLines(file.abs)
+		for _, source := range file.sources {
+			if position, ok := lspNamePosition(lines, source); ok {
+				probes = append(probes, lspProbe{abs: file.abs, position: position})
+				break
 			}
+		}
+		if len(probes) == lspReadyProbes {
 			break
 		}
 	}
+	if !client.waitUntilReady(ctx, probes) {
+		return result
+	}
+
+	// Workers fill calls per file; the merge below walks them in source order,
+	// so the edges added do not depend on which worker answered first.
+	calls := make([][][]lspItem, len(files))
+	next := make(chan int)
+	var workers sync.WaitGroup
+	for range min(lspWorkers, len(files)) {
+		workers.Go(func() {
+			for index := range next {
+				calls[index] = client.queryFile(ctx, files[index])
+			}
+		})
+	}
+	for index := range files {
+		if ctx.Err() != nil {
+			break
+		}
+		next <- index
+	}
+	close(next)
+	workers.Wait()
 
 	existing := make(map[string]struct{}, len(graph.Edges))
 	for _, edge := range graph.Edges {
 		existing[edge.Source+"\x00"+string(edge.Relation)+"\x00"+edge.Target] = struct{}{}
 	}
-	for _, source := range sources {
-		abs := filepath.Join(root, filepath.FromSlash(source.Path))
-		client.didOpen(abs)
-		position, ok := namePosition(source)
-		if !ok {
-			continue
-		}
-		items := client.prepareCallHierarchy(ctx, abs, position)
-		if len(items) == 0 {
-			continue
-		}
-		result.Queried++
-		for _, callee := range client.outgoingCalls(ctx, items[0]) {
-			calleePath, ok := lspFilePath(callee.URI)
-			if !ok {
+	for index, file := range files {
+		for position, callees := range calls[index] {
+			if callees == nil {
 				continue
 			}
-			rel, err := filepath.Rel(root, calleePath)
-			if err != nil || !filepath.IsLocal(rel) {
-				continue
+			source := file.sources[position]
+			result.Queried++
+			for _, callee := range callees {
+				calleePath, ok := lspFilePath(callee.URI)
+				if !ok {
+					continue
+				}
+				rel, err := filepath.Rel(root, calleePath)
+				if err != nil || !filepath.IsLocal(rel) {
+					continue
+				}
+				rel = filepath.ToSlash(rel)
+				line := callee.Range.Start.Line
+				if callee.SelectionRange != nil {
+					line = callee.SelectionRange.Start.Line
+				}
+				target := nodeAt(rel, line+1)
+				if target == nil || target.ID == source.ID {
+					continue
+				}
+				key := source.ID + "\x00calls\x00" + target.ID
+				if _, ok := existing[key]; ok {
+					continue
+				}
+				existing[key] = struct{}{}
+				graph.Edges = append(graph.Edges, EdgeV1{
+					Source: source.ID, Target: target.ID, Relation: "calls", Confidence: "lsp_resolved",
+				})
+				result.Added++
 			}
-			rel = filepath.ToSlash(rel)
-			line := callee.Range.Start.Line
-			if callee.SelectionRange != nil {
-				line = callee.SelectionRange.Start.Line
-			}
-			target := nodeAt(rel, line+1)
-			if target == nil || target.ID == source.ID {
-				continue
-			}
-			key := source.ID + "\x00calls\x00" + target.ID
-			if _, ok := existing[key]; ok {
-				continue
-			}
-			existing[key] = struct{}{}
-			graph.Edges = append(graph.Edges, EdgeV1{
-				Source: source.ID, Target: target.ID, Relation: "calls", Confidence: "lsp_resolved",
-			})
-			result.Added++
 		}
 	}
 	graph.Meta.EdgeCount = len(graph.Edges)
 	return result
+}
+
+// lspSourceFile is one source file and the definitions queried in it.
+type lspSourceFile struct {
+	abs     string
+	sources []NodeV1
+}
+
+// queryFile opens file, asks for each source's outgoing calls, and closes it
+// again. The result holds one entry per source: nil when the server returned
+// no call hierarchy item for it, else the callees, possibly none.
+func (c *lspClient) queryFile(ctx context.Context, file lspSourceFile) [][]lspItem {
+	calls := make([][]lspItem, len(file.sources))
+	c.didOpen(ctx, file.abs)
+	defer c.didClose(ctx, file.abs)
+	lines := readLSPLines(file.abs)
+	for index, source := range file.sources {
+		if ctx.Err() != nil {
+			break
+		}
+		position, ok := lspNamePosition(lines, source)
+		if !ok {
+			continue
+		}
+		items := c.prepareCallHierarchy(ctx, file.abs, position)
+		if len(items) == 0 {
+			continue
+		}
+		calls[index] = append(make([]lspItem, 0), c.outgoingCalls(ctx, items[0])...)
+	}
+	return calls
+}
+
+// readLSPLines splits a source into lines; an unreadable source has none and
+// so provides no LSP position.
+func readLSPLines(abs string) []string {
+	text, readable, err := sourcefiles.Read(abs)
+	if err != nil || !readable {
+		return nil
+	}
+	return strings.Split(text, "\n")
+}
+
+// lspNamePosition is where node's name is declared, in LSP coordinates: the
+// first whole-identifier occurrence of the name on the first three lines of
+// its span, past a Go method's receiver. The character counts UTF-16 units.
+func lspNamePosition(lines []string, node NodeV1) (lspPosition, bool) {
+	start, _, ok := parseLSPSpan(node.Span)
+	if !ok || node.Name == "" {
+		return lspPosition{}, false
+	}
+	for line := start - 1; line < min(start+2, len(lines)); line++ {
+		if column := identifierColumn(lines[line], node.Name); column >= 0 {
+			return lspPosition{Line: line, Character: savings.Length(lines[line][:column])}, true
+		}
+	}
+	return lspPosition{}, false
+}
+
+// identifierColumn is the byte offset of name in line as a whole identifier,
+// not inside a longer one such as `Read` in `Reader`, or -1. A Go method's
+// receiver list is skipped, since its type may share the method's name.
+func identifierColumn(line, name string) int {
+	from := 0
+	if trimmed := strings.TrimLeft(line, " \t"); strings.HasPrefix(trimmed, "func (") {
+		depth := 0
+	receiver:
+		for index := len(line) - len(trimmed) + len("func "); index < len(line); index++ {
+			switch line[index] {
+			case '(':
+				depth++
+			case ')':
+				depth--
+				if depth == 0 {
+					from = index + 1
+					break receiver
+				}
+			}
+		}
+	}
+	for from <= len(line) {
+		offset := strings.Index(line[from:], name)
+		if offset < 0 {
+			return -1
+		}
+		column := from + offset
+		before, _ := utf8.DecodeLastRuneInString(line[:column])
+		after, _ := utf8.DecodeRuneInString(line[column+len(name):])
+		if !isIdentifierRune(before) && !isIdentifierRune(after) {
+			return column
+		}
+		from = column + 1
+	}
+	return -1
+}
+
+func isIdentifierRune(r rune) bool {
+	return r == '_' || r == '$' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
 
 func pickLSPServer(languages map[string]struct{}) (lspServer, bool) {

@@ -127,6 +127,7 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 		return RefreshResult{Drift: drift, Note: note}
 	}
 	defer release()
+	latest := drift
 	if drift != nil {
 		fingerprint, err = ReadFingerprint(outDir, ExtractorID)
 		if err != nil {
@@ -142,6 +143,7 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 			}
 			return RefreshResult{Note: seedNote}
 		}
+		latest = now
 	}
 	if fingerprint != nil {
 		options.Source.OnlyDirs = slices.Clone(fingerprint.OnlyDirs)
@@ -159,6 +161,9 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 			len(built.Errors), built.Errors[0],
 		)}
 	}
+	if prior, err := Read(WiringPath(outDir)); err == nil {
+		carryOverLSPEdges(&built.Graph, prior.Edges, latest)
+	}
 	if _, err := Write(built.Graph, outDir); err != nil {
 		return RefreshResult{Drift: drift, Note: fmt.Sprintf("graph refresh skipped: %v", err)}
 	}
@@ -167,6 +172,12 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 	}
 	if err := WriteFingerprint(outDir, ExtractorID, built.Fingerprints, options.Source.OnlyDirs); err != nil {
 		return RefreshResult{Refreshed: true, Drift: drift, Note: fmt.Sprintf("fingerprint write failed: %v", err)}
+	}
+	// Cards exist only where graft build wrote them; keep those in step.
+	if _, err := os.Stat(filepath.Join(outDir, "INDEX.md")); err == nil {
+		if _, err := WriteCards(built.Graph, outDir); err != nil {
+			return RefreshResult{Refreshed: true, Drift: drift, Note: fmt.Sprintf("card write failed: %v", err)}
+		}
 	}
 	var notes []string
 	if seedNote != "" {
@@ -177,6 +188,48 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 	}
 	note := strings.Join(notes, "; ")
 	return RefreshResult{Refreshed: true, Drift: drift, Note: note}
+}
+
+// carryOverLSPEdges keeps the compiler-resolved call edges of a graph built
+// with --lsp, which a refresh does not recompute. An edge survives when both
+// ends still exist and the calling file is not in drift; without a drift
+// record nothing is known to be unchanged, so nothing is kept.
+func carryOverLSPEdges(graph *GraphV1, prior []EdgeV1, drift *Drift) {
+	if drift == nil {
+		return
+	}
+	changed := make(map[string]struct{}, len(drift.Changed)+len(drift.Added))
+	for _, path := range slices.Concat(drift.Changed, drift.Added) {
+		changed[path] = struct{}{}
+	}
+	pathOf := make(map[string]string, len(graph.Nodes))
+	for _, node := range graph.Nodes {
+		pathOf[node.ID] = node.Path
+	}
+	existing := make(map[string]struct{}, len(graph.Edges))
+	for _, edge := range graph.Edges {
+		existing[edge.Source+"\x00"+string(edge.Relation)+"\x00"+edge.Target] = struct{}{}
+	}
+	for _, edge := range prior {
+		if edge.Confidence != "lsp_resolved" {
+			continue
+		}
+		sourcePath, sourceOK := pathOf[edge.Source]
+		_, targetOK := pathOf[edge.Target]
+		if !sourceOK || !targetOK {
+			continue
+		}
+		if _, dirty := changed[sourcePath]; dirty {
+			continue
+		}
+		key := edge.Source + "\x00" + string(edge.Relation) + "\x00" + edge.Target
+		if _, ok := existing[key]; ok {
+			continue
+		}
+		existing[key] = struct{}{}
+		graph.Edges = append(graph.Edges, edge)
+	}
+	graph.Meta.EdgeCount = len(graph.Edges)
 }
 
 // EnsureFreshChildren refreshes changed child graphs in workspace order.

@@ -7,6 +7,33 @@ import (
 	"testing"
 )
 
+func TestLSPNamePosition(t *testing.T) {
+	tests := []struct {
+		name  string
+		lines []string
+		node  NodeV1
+		want  lspPosition
+		ok    bool
+	}{
+		{"method name inside its receiver type", []string{"package io", "func (r *Reader) Read(p []byte) (int, error) {"}, NodeV1{Name: "Read", Span: "L2-L4"}, lspPosition{Line: 1, Character: 17}, true},
+		{"receiver type named like the method", []string{"func (s Get) Get() {}"}, NodeV1{Name: "Get", Span: "L1-L1"}, lspPosition{Line: 0, Character: 13}, true},
+		{"generic receiver", []string{"func (s *Stack[T]) Push(v T) {}"}, NodeV1{Name: "Push", Span: "L1-L1"}, lspPosition{Line: 0, Character: 19}, true},
+		{"prefix of a longer identifier first", []string{"def load_all(): return load()", ""}, NodeV1{Name: "load", Span: "L1-L1"}, lspPosition{Line: 0, Character: 23}, true},
+		{"name on a later line", []string{"@decorator", "def run():"}, NodeV1{Name: "run", Span: "L1-L2"}, lspPosition{Line: 1, Character: 4}, true},
+		{"UTF-16 columns", []string{"const ключ😀 = 1; function go() {}"}, NodeV1{Name: "go", Span: "L1-L1"}, lspPosition{Line: 0, Character: 27}, true},
+		{"absent name", []string{"function other() {}"}, NodeV1{Name: "run", Span: "L1-L1"}, lspPosition{}, false},
+		{"span past the file", []string{"x"}, NodeV1{Name: "x", Span: "L5-L6"}, lspPosition{}, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := lspNamePosition(tt.lines, tt.node)
+			if got != tt.want || ok != tt.ok {
+				t.Errorf("lspNamePosition(%q, %q) = (%+v, %t), want (%+v, %t)", tt.lines, tt.node.Name, got, ok, tt.want, tt.ok)
+			}
+		})
+	}
+}
+
 func TestReadLSPMessageFraming(t *testing.T) {
 	body := `{"jsonrpc":"2.0","id":7,"method":"initialize","params":{}}`
 	input := fmt.Sprintf("Content-Length: %d\r\nContent-Type: application/vscode-jsonrpc; charset=utf-8\r\n\r\n%s", len(body), body)
