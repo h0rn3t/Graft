@@ -133,6 +133,10 @@ func TestHookPriceTable(t *testing.T) {
 		{model: "claude-sonnet-4-6", want: 3, ok: true},
 		{model: "claude-haiku-4-5", want: 1, ok: true},
 		{model: "claude-fable-5-1", want: 10, ok: true},
+		{model: "claude-opus-5-5", want: 4, ok: true},
+		{model: "claude-opus-4-5-20251101", want: 5, ok: true},
+		{model: "claude-opus-4-1", want: 15, ok: true},
+		{model: "claude-sonnet-4-5", want: 3, ok: true},
 		{model: "gpt-5"},
 	}
 	for _, test := range tests {

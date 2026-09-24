@@ -67,11 +67,16 @@ func inputUSDPerMtok(model string) (float64, bool) {
 	switch {
 	case strings.HasPrefix(model, "claude-fable-5"), strings.HasPrefix(model, "claude-mythos-5"):
 		return 10, true
-	case strings.HasPrefix(model, "claude-opus-5"), strings.HasPrefix(model, "claude-opus-4-6"), strings.HasPrefix(model, "claude-opus-4-7"), strings.HasPrefix(model, "claude-opus-4-8"):
+	// claude-opus-5-5 must match before the claude-opus-5 prefix it shares.
+	case strings.HasPrefix(model, "claude-opus-5-5"):
+		return 4, true
+	case strings.HasPrefix(model, "claude-opus-5"), strings.HasPrefix(model, "claude-opus-4-5"), strings.HasPrefix(model, "claude-opus-4-6"), strings.HasPrefix(model, "claude-opus-4-7"), strings.HasPrefix(model, "claude-opus-4-8"):
 		return 5, true
+	case strings.HasPrefix(model, "claude-opus-4-1"):
+		return 15, true
 	case strings.HasPrefix(model, "claude-sonnet-5"):
 		return 2, true
-	case strings.HasPrefix(model, "claude-sonnet-4-6"):
+	case strings.HasPrefix(model, "claude-sonnet-4-5"), strings.HasPrefix(model, "claude-sonnet-4-6"):
 		return 3, true
 	case strings.HasPrefix(model, "claude-haiku-4-5"):
 		return 1, true
