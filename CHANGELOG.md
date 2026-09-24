@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0-beta.1 - 2026-09-25
+
+### Changed
+
+- **Symbols carry their doc comments.** A build attaches the comment block directly above each definition to that symbol's `summary`, in every supported language. Tool directives (`//go:`, `//nolint`, `# noqa`, `eslint-` and similar), license headers and C/C++ preprocessor lines are left out. The graph still has no LLM-generated summaries.
+- **Ranked retrieval matches what the code is documented to do.** `ask`, `graft_find_code` and prompt-hook retrieval find a symbol through words that appear only in its doc comment. Name and path matches still rank at least as high. On 30 plain-English queries over this repository, mean reciprocal rank rose from 0.24 to 0.32 and top-5 hits from 11 to 15. Name-based queries did not change.
+- **Documented hits show their first doc line.** CLI `ask` and `graft_find_code` print it after the signature and before the excerpt, and it is the first thing dropped when an answer exceeds its budget. Ask JSON adds an optional `doc` field; `snippet` stays the signature. `skeleton` and `graft_file_api` append ` — <doc line>`, and graft cards list the doc line instead of the signature. Prompt-hook pointers and caller/callee answers are unchanged.
+- The extractor ID changed, so existing graphs rebuild once on the next query.
+
 ## 0.2.1 - 2026-09-24
 
 ### Removed
