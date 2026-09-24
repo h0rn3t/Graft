@@ -28,7 +28,8 @@ transcripts/
 
 # graft's local repository settings — not committed.
 /.graft/
-docs/
+/docs/*
+!/docs/cli-contract.json
 openspec/
 .agents/
 .claude/
