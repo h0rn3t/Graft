@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="./a328474a-ba6a-42b1-9746-a1358d0a449d.png" alt="Graft" width="320" />
+<img src="./7dc2c390-d955-48e9-a47f-edfb4e712195.png" alt="Graft" width="320" />
 
 [English](README.en.md) · **Українська**
 
