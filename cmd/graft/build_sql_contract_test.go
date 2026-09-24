@@ -11,50 +11,30 @@ import (
 	"github.com/h0rn3t/Graft/internal/graph"
 )
 
-func TestBuildSQLParseFailurePreservesGraphContract(t *testing.T) {
+func TestBuildSQLParseFailureDegradesToFileNodeContract(t *testing.T) {
 	root := t.TempDir()
-	file := filepath.Join(root, "schema.sql")
-	if err := os.WriteFile(file, []byte("CREATE TABLE app.users (id bigint);\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v", file, err)
+	for name, source := range map[string]string{
+		"schema.sql": "CREATE TABLE app.users (id bigint;\n",
+		"main.ts":    "export function run() {}\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(source), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", name, err)
+		}
 	}
 	var stdout, stderr bytes.Buffer
-	if status := run([]string{"build", root}, &stdout, &stderr); status != 0 {
-		t.Fatalf("run(build %q) status = %d, want 0; stderr = %q", root, status, stderr.String())
+	if status := run([]string{"build", root}, &stdout, &stderr); status != 0 || !strings.Contains(stderr.String(), "schema.sql: SQL statements not indexed") {
+		t.Fatalf("run(build %q) = (status %d, stderr %q), want 0 and a schema.sql limitation", root, status, stderr.String())
 	}
-	outDir := filepath.Join(root, "graft")
-	graphPath := graph.WiringPath(outDir)
-	fingerprintPath, err := graph.FingerprintPath(outDir, graph.ExtractorID)
+	wiring, err := graph.Read(graph.WiringPath(filepath.Join(root, "graft")))
 	if err != nil {
-		t.Fatalf("FingerprintPath(%q, %q) error = %v", outDir, graph.ExtractorID, err)
+		t.Fatalf("graph.Read(wiring) error = %v", err)
 	}
-	beforeGraph, err := os.ReadFile(graphPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%q) error = %v", graphPath, err)
+	var ids []string
+	for _, node := range wiring.Nodes {
+		ids = append(ids, node.ID)
 	}
-	beforeFingerprint, err := os.ReadFile(fingerprintPath)
-	if err != nil {
-		t.Fatalf("ReadFile(%q) error = %v", fingerprintPath, err)
-	}
-	if err := os.WriteFile(file, []byte("CREATE TABLE app.users (id bigint;\n"), 0o644); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v", file, err)
-	}
-	stdout.Reset()
-	stderr.Reset()
-	if status := run([]string{"build", root}, &stdout, &stderr); status == 0 || !strings.Contains(stderr.String(), "schema.sql") {
-		t.Errorf("run(build %q) = (status %d, stderr %q), want nonzero and SQL diagnostic", root, status, stderr.String())
-	}
-	for _, item := range []struct {
-		path string
-		want []byte
-	}{{graphPath, beforeGraph}, {fingerprintPath, beforeFingerprint}} {
-		got, err := os.ReadFile(item.path)
-		if err != nil {
-			t.Errorf("ReadFile(%q) error = %v", item.path, err)
-			continue
-		}
-		if !bytes.Equal(got, item.want) {
-			t.Errorf("run(build %q) changed %q after SQL parse failure", root, item.path)
-		}
+	if want := []string{"main.ts", "main.ts#run", "schema.sql"}; !slices.Equal(ids, want) {
+		t.Errorf("run(build %q) node ids = %q, want %q", root, ids, want)
 	}
 }
 

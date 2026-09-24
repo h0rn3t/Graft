@@ -11,6 +11,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/h0rn3t/Graft/internal/grammars/python"
+	"github.com/h0rn3t/Graft/internal/savings"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	golang "github.com/tree-sitter/tree-sitter-go/bindings/go"
@@ -89,6 +90,8 @@ type extractResult struct {
 	language string
 	nodes    []NodeV1
 	rawEdges []rawEdge
+	// limitation explains a file indexed without its symbols.
+	limitation string
 }
 
 type importBinding struct {
@@ -161,8 +164,8 @@ func extractFile(rel, source string) (extractResult, error) {
 		return extractSQL(rel, source)
 	}
 	if generic, ok := genericLanguageOf(rel); ok {
-		if adapter, native := genericNativeGrammars[generic]; native {
-			return extractGenericTags(rel, source, generic, adapter.language(), *adapter.tags)
+		if grammar, native := genericNativeGrammars[generic]; native {
+			return extractGenericTags(rel, source, generic, grammar)
 		}
 	}
 	lang, label, ok := languageOf(rel)
@@ -183,7 +186,7 @@ func extractFile(rel, source string) (extractResult, error) {
 	defer tree.Close()
 	root := tree.RootNode()
 
-	chars := len(utf16.Encode([]rune(source)))
+	chars := savings.Length(source)
 	x := &extractor{
 		source:   sourceBytes,
 		lang:     lang,

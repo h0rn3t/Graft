@@ -3,8 +3,10 @@ package graph
 import (
 	"fmt"
 	"path"
+	"slices"
 	"strings"
 
+	"github.com/h0rn3t/Graft/internal/savings"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
@@ -14,7 +16,22 @@ type sqlToken struct {
 	kind       byte
 }
 
+// lexSQL tokenizes source. A backslash escapes the next character inside a
+// single-quoted string, as MySQL dumps and PostgreSQL escape strings write it;
+// when that reading leaves a quote open, the standard reading, where a
+// backslash is literal, is tried before giving up.
 func lexSQL(source string) ([]sqlToken, error) {
+	tokens, err := lexSQLMode(source, true)
+	if err == nil {
+		return tokens, nil
+	}
+	if standard, standardErr := lexSQLMode(source, false); standardErr == nil {
+		return standard, nil
+	}
+	return nil, err
+}
+
+func lexSQLMode(source string, backslashEscapes bool) ([]sqlToken, error) {
 	tokens := make([]sqlToken, 0)
 	for i := 0; i < len(source); {
 		if source[i] <= ' ' {
@@ -56,6 +73,10 @@ func lexSQL(source string) ([]sqlToken, error) {
 			i++
 			closed := false
 			for i < len(source) {
+				if backslashEscapes && quote == '\'' && source[i] == '\\' {
+					i += 2
+					continue
+				}
 				if source[i] == quote {
 					i++
 					if i < len(source) && source[i] == quote {
@@ -133,22 +154,50 @@ func sqlName(tokens []sqlToken, at int) (string, int) {
 	return name.String(), at
 }
 
+// extractSQL indexes one SQL file. Source the lexer or the statement splitter
+// cannot follow degrades to the file node alone, so one unusual dialect file
+// never blocks the rest of the graph.
 func extractSQL(rel, source string) (extractResult, error) {
-	tokens, err := lexSQL(source)
-	if err != nil {
-		return extractResult{}, fmt.Errorf("parse %q: %w", rel, err)
+	chars := savings.Length(source)
+	newlines := make([]int, 0, strings.Count(source, "\n"))
+	for offset := range len(source) {
+		if source[offset] == '\n' {
+			newlines = append(newlines, offset)
+		}
 	}
-	chars := len(source)
-	nodes := []NodeV1{{
+	file := NodeV1{
 		ID: rel, Name: path.Base(rel), Kind: "file", Path: rel,
-		Span:     fmt.Sprintf("L1-L%d", strings.Count(source, "\n")+1),
+		Span:     fmt.Sprintf("L1-L%d", len(newlines)+1),
 		Exported: true, Origin: "sql", BodyHash: sourcefiles.Hash(source),
 		Chars: &chars, BodyText: new(searchBody(source, maxFileBodyChars)), SummaryState: "pending",
-	}}
+	}
+	symbols, edges, err := parseSQL(rel, source, newlines)
+	if err != nil {
+		return extractResult{
+			language: "sql", nodes: []NodeV1{file}, rawEdges: make([]rawEdge, 0),
+			limitation: fmt.Sprintf("%s: SQL statements not indexed (%v)", rel, err),
+		}, nil
+	}
+	return extractResult{language: "sql", nodes: append([]NodeV1{file}, symbols...), rawEdges: edges}, nil
+}
+
+// parseSQL returns the definitions and references of source's statements;
+// newlines holds the byte offset of every line break in source.
+func parseSQL(rel, source string, newlines []int) ([]NodeV1, []rawEdge, error) {
+	tokens, err := lexSQL(source)
+	if err != nil {
+		return nil, nil, err
+	}
+	lineOf := func(offset int) int {
+		before, _ := slices.BinarySearch(newlines, offset)
+		return before + 1
+	}
+	nodes := make([]NodeV1, 0)
 	edges := make([]rawEdge, 0)
 	minted := map[string]struct{}{rel: {}}
 	for start := 0; start < len(tokens); {
 		end, depth := start, 0
+	scan:
 		for ; end < len(tokens); end++ {
 			switch tokens[end].text {
 			case "(":
@@ -156,18 +205,17 @@ func extractSQL(rel, source string) (extractResult, error) {
 			case ")":
 				depth--
 				if depth < 0 {
-					return extractResult{}, fmt.Errorf("parse %q: unmatched SQL parenthesis at byte %d", rel, tokens[end].start)
+					return nil, nil, fmt.Errorf("unmatched SQL parenthesis at byte %d", tokens[end].start)
 				}
 			case ";":
 				if depth == 0 {
 					end++
-					goto statement
+					break scan
 				}
 			}
 		}
-	statement:
 		if depth != 0 {
-			return extractResult{}, fmt.Errorf("parse %q: unclosed SQL parenthesis at byte %d", rel, tokens[start].start)
+			return nil, nil, fmt.Errorf("unclosed SQL parenthesis at byte %d", tokens[start].start)
 		}
 		stmt := tokens[start:end]
 		start = end
@@ -198,7 +246,7 @@ func extractSQL(rel, source string) (extractResult, error) {
 					}
 					name, _ := sqlName(stmt, at)
 					if name == "" {
-						return extractResult{}, fmt.Errorf("parse %q: CREATE %s has no name at byte %d", rel, stmt[at-1].text, stmt[0].start)
+						return nil, nil, fmt.Errorf("CREATE %s has no name at byte %d", stmt[at-1].text, stmt[0].start)
 					}
 					base := rel + "#" + name
 					sourceID = base
@@ -218,11 +266,9 @@ func extractSQL(rel, source string) (extractResult, error) {
 						header = header[:cut]
 					}
 					header = strings.TrimSpace(header)
-					firstLine := strings.Count(source[:stmt[0].start], "\n") + 1
-					lastLine := strings.Count(source[:stmt[len(stmt)-1].end], "\n") + 1
 					nodes = append(nodes, NodeV1{
 						ID: sourceID, Name: name, Kind: kind, Path: rel,
-						Span: fmt.Sprintf("L%d-L%d", firstLine, lastLine), Signature: &header,
+						Span: fmt.Sprintf("L%d-L%d", lineOf(stmt[0].start), lineOf(stmt[len(stmt)-1].end)), Signature: &header,
 						Exported: true, Origin: "sql", BodyHash: sourcefiles.Hash(body),
 						BodyText: new(searchBody(body, maxBodyChars)), SummaryState: "pending",
 					})
@@ -248,5 +294,5 @@ func extractSQL(rel, source string) (extractResult, error) {
 		}
 		addReferences(stmt)
 	}
-	return extractResult{language: "sql", nodes: nodes, rawEdges: edges}, nil
+	return nodes, edges, nil
 }

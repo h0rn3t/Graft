@@ -51,7 +51,8 @@ func goReceiverParameter(node *sitter.Node) *sitter.Node {
 	return nil
 }
 
-// goReceiverType is a method receiver's base type, unwrapping a pointer.
+// goReceiverType is a method receiver's base type, unwrapping a pointer and
+// type parameters: `Stack` in `func (s *Stack[T])`.
 func goReceiverType(node *sitter.Node, source []byte) string {
 	parameter := goReceiverParameter(node)
 	if parameter == nil {
@@ -61,10 +62,20 @@ func goReceiverType(node *sitter.Node, source []byte) string {
 	if receiverType != nil && receiverType.Kind() == "pointer_type" {
 		receiverType = lastNamedChild(receiverType)
 	}
+	receiverType = goGenericBase(receiverType)
 	if receiverType == nil || receiverType.Kind() != "type_identifier" {
 		return ""
 	}
 	return nodeText(receiverType, source)
+}
+
+// goGenericBase is the named type of an instantiated generic type, `Stack` in
+// `Stack[T]`; any other node is returned unchanged.
+func goGenericBase(node *sitter.Node) *sitter.Node {
+	if node != nil && node.Kind() == "generic_type" {
+		return node.ChildByFieldName("type")
+	}
+	return node
 }
 
 // goReceiverVar is the receiver parameter's name: `w` in `func (w *Worker)`.
@@ -121,6 +132,7 @@ func (w *bindingWalk) handleGo(node *sitter.Node, scope []string) {
 		if varType != nil && varType.Kind() == "pointer_type" {
 			varType = lastNamedChild(varType)
 		}
+		varType = goGenericBase(varType)
 		if name != nil && name.Kind() == "identifier" && varType != nil && varType.Kind() == "type_identifier" {
 			w.bindings.set(scopePath, w.text(name), w.text(varType))
 		}
@@ -153,7 +165,7 @@ func (w *bindingWalk) goExpressionType(expression *sitter.Node) string {
 	}
 	switch expression.Kind() {
 	case "composite_literal":
-		if literalType := expression.ChildByFieldName("type"); literalType != nil && literalType.Kind() == "type_identifier" {
+		if literalType := goGenericBase(expression.ChildByFieldName("type")); literalType != nil && literalType.Kind() == "type_identifier" {
 			return w.text(literalType)
 		}
 	case "call_expression":

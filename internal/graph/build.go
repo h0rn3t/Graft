@@ -17,7 +17,7 @@ import (
 // ExtractorID names the native extractor in its cache and fingerprint sidecars.
 // Bump it whenever extraction output or a grammar version changes, so a graph
 // built by an older extractor is never trusted as fresh.
-const ExtractorID = "go-v6"
+const ExtractorID = "go-v7"
 
 var goModuleLine = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)
 
@@ -74,6 +74,8 @@ type cachedFile struct {
 	Nodes    []NodeV1     `json:"nodes"`
 	RawEdges []cachedEdge `json:"rawEdges"`
 	Error    string       `json:"error,omitempty"`
+	// Limitation replays extractResult.limitation on a cache hit.
+	Limitation string `json:"limitation,omitempty"`
 }
 
 type extractCache struct {
@@ -90,8 +92,9 @@ const extractCacheVersion = 2
 // SourceExtensions, so files without a native adapter are reported in
 // Unsupported. The graph is partial when Unsupported or Errors is non-empty.
 // When opts.OutDir is set, an extractor-specific parse cache is stored in its
-// `.cache` directory unless opts.NoCacheWrite is set, and the prior graph's
-// meaning layer is carried over.
+// `.cache` directory unless opts.NoCacheWrite is set. Every node starts with a
+// pending meaning layer; nothing is carried over from the prior graph.
+// A SQL file whose statements cannot be parsed contributes its file node only.
 // Persist the returned fingerprints only after Write succeeds.
 func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 	if opts.OnlyDirs == nil && opts.OutDir != "" {
@@ -229,6 +232,9 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 				result.Errors = append(result.Errors, fmt.Sprintf("%s: %s", file.Rel, cached.Error))
 				continue
 			}
+			if cached.Limitation != "" {
+				result.Limitations = append(result.Limitations, cached.Limitation)
+			}
 			nodes = append(nodes, cached.Nodes...)
 			for _, edge := range cached.RawEdges {
 				rawEdges = append(rawEdges, rawEdge{
@@ -254,6 +260,10 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 			continue
 		}
 		entry.Nodes = extracted.nodes
+		entry.Limitation = extracted.limitation
+		if extracted.limitation != "" {
+			result.Limitations = append(result.Limitations, extracted.limitation)
+		}
 		for _, edge := range extracted.rawEdges {
 			entry.RawEdges = append(entry.RawEdges, cachedEdge{
 				Source: edge.source, Relation: edge.relation, TargetID: edge.targetID,

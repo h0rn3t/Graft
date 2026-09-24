@@ -180,7 +180,8 @@ func TestRunCheckPartialGraphDoesNotRepairIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(source, []byte("CREATE TABLE app.users (id bigint;\n"), 0o644); err != nil {
+	// A UTF-16BE file cannot be decoded, so the fresh extraction is partial.
+	if err := os.WriteFile(source, []byte{0xfe, 0xff, 0x00, 'S'}, 0o644); err != nil {
 		t.Fatal(err)
 	}
 	stdout.Reset()

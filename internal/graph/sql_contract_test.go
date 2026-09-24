@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf16"
 
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
@@ -59,24 +60,92 @@ func TestSQLExtractorContract(t *testing.T) {
 func TestSQLAnonymousAndInvalidContract(t *testing.T) {
 	cases := []struct {
 		name, source string
-		wantErr      bool
+		wantEdges    bool
 	}{
-		{"anonymous", "-- report\nSELECT * FROM app.users;\n", false},
-		{"unterminated string", "CREATE TYPE app.status AS ENUM ('active);", true},
-		{"missing name", "CREATE TABLE (id bigint);", true},
-		{"unclosed parenthesis", "CREATE TABLE app.users (id bigint;", true},
-		{"unclosed dollar quote", "CREATE FUNCTION app.f() RETURNS int AS $$ SELECT 1;", true},
+		{"anonymous", "-- report\nSELECT * FROM app.users;\n", true},
+		{"unterminated string", "CREATE TYPE app.status AS ENUM ('active);", false},
+		{"missing name", "CREATE TABLE (id bigint);", false},
+		{"unclosed parenthesis", "CREATE TABLE app.users (id bigint;", false},
+		{"unmatched parenthesis", "SELECT 1) FROM app.users;", false},
+		{"unclosed dollar quote", "CREATE FUNCTION app.f() RETURNS int AS $$ SELECT 1;", false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := extractFile("query.sql", tc.source)
-			if (err != nil) != tc.wantErr {
-				t.Fatalf("extractFile(%q, %q) error = %v, want error %t", "query.sql", tc.source, err, tc.wantErr)
+			if err != nil {
+				t.Fatalf("extractFile(%q, %q) error = %v, want nil", "query.sql", tc.source, err)
 			}
-			if !tc.wantErr && (len(got.nodes) != 1 || got.nodes[0].BodyText == nil || !strings.Contains(*got.nodes[0].BodyText, "SELECT")) {
+			if len(got.nodes) != 1 || got.nodes[0].ID != "query.sql" || got.nodes[0].BodyText == nil || *got.nodes[0].BodyText == "" {
 				t.Errorf("extractFile(%q, %q) nodes = %#v, want searchable file node only", "query.sql", tc.source, got.nodes)
 			}
+			if gotEdges := len(got.rawEdges) > 0; gotEdges != tc.wantEdges {
+				t.Errorf("extractFile(%q, %q) raw edges = %#v, want edges %t", "query.sql", tc.source, got.rawEdges, tc.wantEdges)
+			}
 		})
+	}
+}
+
+func TestSQLQuoteEscapesContract(t *testing.T) {
+	cases := []struct {
+		name, source string
+	}{
+		{"backslash escaped quote", "INSERT INTO app.people VALUES ('O\\'Brien');\nCREATE TABLE app.teams (id bigint);\n"},
+		{"doubled quote", "INSERT INTO app.people VALUES ('O''Brien');\nCREATE TABLE app.teams (id bigint);\n"},
+		{"literal trailing backslash", "SELECT 'C:\\';\nCREATE TABLE app.teams (id bigint);\n"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := extractFile("seed.sql", tc.source)
+			if err != nil {
+				t.Fatalf("extractFile(%q, %q) error = %v, want nil", "seed.sql", tc.source, err)
+			}
+			if !slices.ContainsFunc(got.nodes, func(node NodeV1) bool { return node.ID == "seed.sql#app.teams" && node.Span == "L2-L2" }) {
+				t.Errorf("extractFile(%q, %q) nodes = %#v, want seed.sql#app.teams at L2-L2", "seed.sql", tc.source, got.nodes)
+			}
+		})
+	}
+}
+
+func TestSQLCharsCountUTF16Units(t *testing.T) {
+	const source = "-- café 😀\nSELECT 1;\n"
+	got, err := extractFile("query.sql", source)
+	if err != nil {
+		t.Fatalf("extractFile(%q, %q) error = %v, want nil", "query.sql", source, err)
+	}
+	if want := len(utf16.Encode([]rune(source))); got.nodes[0].Chars == nil || *got.nodes[0].Chars != want {
+		t.Errorf("extractFile(%q, %q) file chars = %v, want %d", "query.sql", source, got.nodes[0].Chars, want)
+	}
+}
+
+func TestBuildGraphDegradesUnparsableSQLFile(t *testing.T) {
+	root := t.TempDir()
+	for name, source := range map[string]string{
+		"broken.sql": "INSERT INTO app.notes VALUES ('it''s \\');\nSELECT 1);\n",
+		"schema.sql": "CREATE TABLE app.users (id bigint);\n",
+	} {
+		if err := os.WriteFile(filepath.Join(root, name), []byte(source), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v", name, err)
+		}
+	}
+	opts := sourcefiles.Options{OutDir: filepath.Join(root, "graft")}
+	built, err := BuildGraph(root, opts)
+	if err != nil {
+		t.Fatalf("BuildGraph(%q, %#v) error = %v, want nil", root, opts, err)
+	}
+	if len(built.Errors) != 0 {
+		t.Errorf("BuildGraph(%q, %#v) errors = %q, want none", root, opts, built.Errors)
+	}
+	if len(built.Limitations) != 1 || !strings.HasPrefix(built.Limitations[0], "broken.sql: ") {
+		t.Errorf("BuildGraph(%q, %#v) limitations = %q, want one for broken.sql", root, opts, built.Limitations)
+	}
+	replayed, err := BuildGraph(root, opts)
+	if err != nil || replayed.Reused != 2 || !slices.Equal(replayed.Limitations, built.Limitations) {
+		t.Errorf("BuildGraph(%q, %#v) replay = (reused %d, limitations %q, %v), want 2 reused and %q", root, opts, replayed.Reused, replayed.Limitations, err, built.Limitations)
+	}
+	for _, id := range []string{"broken.sql", "schema.sql", "schema.sql#app.users"} {
+		if !slices.ContainsFunc(built.Graph.Nodes, func(node NodeV1) bool { return node.ID == id }) {
+			t.Errorf("BuildGraph(%q, %#v) nodes = %#v, want %q", root, opts, built.Graph.Nodes, id)
+		}
 	}
 }
 

@@ -1,11 +1,15 @@
 package graph
 
 import (
+	"cmp"
 	_ "embed"
 	"fmt"
 	"path"
+	"slices"
 	"strings"
+	"sync"
 
+	"github.com/h0rn3t/Graft/internal/savings"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 	c "github.com/tree-sitter/tree-sitter-c/bindings/go"
@@ -22,20 +26,40 @@ var cTags string
 //go:embed queries/cpp.scm
 var cppTags string
 
-var genericNativeGrammars = map[string]struct {
+// genericGrammar is a native grammar indexed through its tags query.
+type genericGrammar struct {
 	language func() *sitter.Language
-	tags     *string
-}{
-	"rust": {func() *sitter.Language { return sitter.NewLanguage(rust.Language()) }, &rustTags},
-	"c":    {func() *sitter.Language { return sitter.NewLanguage(c.Language()) }, &cTags},
-	"cpp":  {func() *sitter.Language { return sitter.NewLanguage(cpp.Language()) }, &cppTags},
+	// query is compiled once per process and never closed. A compiled
+	// tree-sitter query is immutable, so extractions share it; the per-match
+	// state lives in the QueryCursor each extraction creates.
+	query func() (*sitter.Query, error)
+}
+
+func newGenericGrammar(name string, language func() *sitter.Language, tags string) genericGrammar {
+	return genericGrammar{language: language, query: sync.OnceValues(func() (*sitter.Query, error) {
+		query, err := sitter.NewQuery(language(), tags)
+		if err != nil {
+			return nil, fmt.Errorf("compile %s tags query: %s", name, err.Message)
+		}
+		return query, nil
+	})}
+}
+
+var genericNativeGrammars = map[string]genericGrammar{
+	"rust": newGenericGrammar("rust", func() *sitter.Language { return sitter.NewLanguage(rust.Language()) }, rustTags),
+	"c":    newGenericGrammar("c", func() *sitter.Language { return sitter.NewLanguage(c.Language()) }, cTags),
+	"cpp":  newGenericGrammar("cpp", func() *sitter.Language { return sitter.NewLanguage(cpp.Language()) }, cppTags),
 }
 
 // extractGenericTags implements the shared tags-query tier for native grammars.
-func extractGenericTags(rel, source, name string, lang *sitter.Language, tags string) (extractResult, error) {
+func extractGenericTags(rel, source, name string, grammar genericGrammar) (extractResult, error) {
+	query, err := grammar.query()
+	if err != nil {
+		return extractResult{}, err
+	}
 	parser := sitter.NewParser()
 	defer parser.Close()
-	if err := parser.SetLanguage(lang); err != nil {
+	if err := parser.SetLanguage(grammar.language()); err != nil {
 		return extractResult{}, fmt.Errorf("set %s grammar: %w", name, err)
 	}
 	data := []byte(source)
@@ -44,15 +68,10 @@ func extractGenericTags(rel, source, name string, lang *sitter.Language, tags st
 		return extractResult{}, fmt.Errorf("parse %q: tree-sitter returned no tree", rel)
 	}
 	defer tree.Close()
-	query, queryErr := sitter.NewQuery(lang, tags)
-	if queryErr != nil {
-		return extractResult{}, fmt.Errorf("compile %s tags query: %s", name, queryErr.Message)
-	}
-	defer query.Close()
 	cursor := sitter.NewQueryCursor()
 	defer cursor.Close()
 
-	chars := len(data)
+	chars := savings.Length(source)
 	nodes := []NodeV1{{
 		ID: rel, Name: path.Base(rel), Kind: "file", Path: rel,
 		Span:     fmt.Sprintf("L1-L%d", strings.Count(source, "\n")+1),
@@ -130,15 +149,34 @@ func extractGenericTags(rel, source, name string, lang *sitter.Language, tags st
 			calls = append(calls, reference{name: nameNode.Utf8Text(data), at: nameNode.StartByte()})
 		}
 	}
+	// Definitions are syntax nodes, so any two are nested or disjoint. Sorted by
+	// start, the innermost one around a call is on the enclosing chain of the
+	// last definition that starts at or before it.
+	slices.SortFunc(defs, func(a, b definition) int { return cmp.Compare(a.start, b.start) })
+	parents := make([]int, len(defs))
+	open := make([]int, 0)
+	for index, def := range defs {
+		for len(open) > 0 && defs[open[len(open)-1]].end <= def.start {
+			open = open[:len(open)-1]
+		}
+		parents[index] = -1
+		if len(open) > 0 {
+			parents[index] = open[len(open)-1]
+		}
+		open = append(open, index)
+	}
 	for _, call := range calls {
 		if _, isDef := defNameAt[call.at]; isDef {
 			continue
 		}
-		sourceID, width := rel, uint(^uint(0))
-		for _, def := range defs {
-			if def.start <= call.at && call.at < def.end && def.end-def.start < width {
-				sourceID, width = def.id, def.end-def.start
-			}
+		enclosing, _ := slices.BinarySearchFunc(defs, call.at+1, func(def definition, at uint) int { return cmp.Compare(def.start, at) })
+		enclosing--
+		for enclosing >= 0 && call.at >= defs[enclosing].end {
+			enclosing = parents[enclosing]
+		}
+		sourceID := rel
+		if enclosing >= 0 {
+			sourceID = defs[enclosing].id
 		}
 		edges = append(edges, rawEdge{source: sourceID, relation: "calls", name: call.name, file: rel})
 	}
