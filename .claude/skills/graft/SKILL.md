@@ -83,8 +83,8 @@ projection, rebuilt at the end of the turn rather than on each query, so after a
 they can lag. The tools above never do — prefer them, and treat a card's spans as
 stale if you have edited that file this turn.
 
-`build` is for the LLM layer (`--deep` adds a concept map; skip unless asked);
-`check` fails when `graft/` is stale, for CI.
+`build` rebuilds the structural graph after source changes; `check` reports when
+`graft/` is stale and is intended for CI.
 
 ## Scenarios: the shortest path through a coding task
 
