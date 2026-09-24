@@ -1,18 +1,26 @@
 package main
 
 import (
+	"context"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/h0rn3t/Graft/internal/blast"
 	"github.com/h0rn3t/Graft/internal/graph"
 )
 
-const blastDefaultDepth = 2
+const (
+	blastDefaultDepth = 2
+	// blastGitTimeout bounds every git run of one blast, so a hung git cannot
+	// hold a hook or a CI job forever.
+	blastGitTimeout = 2 * time.Minute
+)
 
 func runBlast(opts callersOptions, stdout, stderr io.Writer) int {
 	root, contextDir, shownDir, err := blastPaths(opts, stderr)
@@ -44,13 +52,19 @@ func runBlast(opts callersOptions, stdout, stderr io.Writer) int {
 		writeDiagnostic(stderr, "✗ no graph found at %s — run `graft build` first\n", shownDir)
 		return 1
 	}
-	if opts.base != nil && !blast.RefExists(root, *opts.base) {
+	ctx, cancel := context.WithTimeout(context.Background(), blastGitTimeout)
+	defer cancel()
+	if opts.base != nil && !blast.RefExists(ctx, root, *opts.base) {
 		writeDiagnostic(stderr, "✗ base ref \"%s\" is not in this checkout.\n  In CI, fetch enough history for the merge base: actions/checkout with `fetch-depth: 0`.\n", *opts.base)
 		return 1
 	}
-	diff, ok := blast.ChangedFiles(root, opts.base)
-	if !ok {
+	diff, err := blast.ChangedFiles(ctx, root, opts.base)
+	if errors.Is(err, blast.ErrNotRepository) {
 		writeDiagnostic(stderr, "✗ could not read a diff in %s — is this a git repository?\n", root)
+		return 1
+	}
+	if err != nil {
+		writeDiagnostic(stderr, "✗ could not read a diff in %s: %v\n", root, err)
 		return 1
 	}
 
@@ -58,11 +72,11 @@ func runBlast(opts callersOptions, stdout, stderr io.Writer) int {
 	if !opts.noOwners {
 		// With no --base there is no commit range, so the local identity stands in
 		// for the author the suggestions must leave out.
-		authors := blast.LocalIdentity(root)
+		authors := blast.LocalIdentity(ctx, root)
 		if opts.base != nil {
-			authors = blast.DiffAuthors(root, *opts.base)
+			authors = blast.DiffAuthors(ctx, root, *opts.base)
 		}
-		blast.AttachOwners(root, report, blast.OwnerOptions{Exclude: append(authors, opts.prAuthors...)})
+		blast.AttachOwners(ctx, root, report, blast.OwnerOptions{Exclude: append(authors, opts.prAuthors...)})
 	}
 
 	var output string

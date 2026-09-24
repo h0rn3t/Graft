@@ -98,18 +98,20 @@ func impactedLine(symbol Impacted, terms reachTerms, read func(string) []string)
 	return referenceLine(symbol.Path, symbol.Span, terms.modules, read)
 }
 
-// fileReader reads each file under root once and never fails.
-func fileReader(root string) func(string) []string {
+// fileReader reads each file under root once and never fails. The paths come
+// from the graph, so they are read through root and cannot name a file outside
+// it; a nil root reads nothing.
+func fileReader(root *os.Root) func(string) []string {
 	cache := make(map[string][]string)
 	return func(path string) []string {
-		if root == "" {
+		if root == nil {
 			return nil
 		}
 		if lines, ok := cache[path]; ok {
 			return lines
 		}
 		var lines []string
-		if data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(path))); err == nil {
+		if data, err := root.ReadFile(filepath.FromSlash(path)); err == nil {
 			lines = strings.Split(decodeUTF8(data), "\n")
 		}
 		cache[path] = lines

@@ -2,6 +2,7 @@ package blast
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"slices"
 	"strconv"
@@ -43,6 +44,48 @@ func mermaidLabel(lines ...string) string {
 		escaped[i] = strings.NewReplacer(`"`, "#quot;", "<", "&lt;", ">", "&gt;").Replace(line)
 	}
 	return `"` + strings.Join(escaped, "<br/>") + `"`
+}
+
+// Markdown escaping. Paths, symbol names, labels and git author names come
+// from the repository, so none of them may open a table cell, an inline code
+// span, an HTML tag or a new line in the PR comment.
+var (
+	markdownText = strings.NewReplacer(
+		`\`, `\\`, "`", "\\`", "|", `\|`, "&", "&amp;", "<", "&lt;", ">", "&gt;",
+		"\r\n", " ", "\n", " ", "\r", " ")
+	lineBreaks = strings.NewReplacer("\r\n", " ", "\n", " ", "\r", " ")
+)
+
+// mdText escapes value for markdown prose and table cells.
+func mdText(value string) string {
+	return markdownText.Replace(value)
+}
+
+// mdCode renders value as an inline code span whose fence is at least
+// minFence backticks and longer than any backtick run inside value.
+func mdCode(value string, minFence int) string {
+	value = lineBreaks.Replace(value)
+	longest, run := 0, 0
+	for _, r := range value {
+		if r != '`' {
+			run = 0
+			continue
+		}
+		run++
+		longest = max(longest, run)
+	}
+	if strings.HasPrefix(value, "`") || strings.HasSuffix(value, "`") {
+		// CommonMark strips one space from each side of such a span.
+		value = " " + value + " "
+	}
+	fence := strings.Repeat("`", max(minFence, longest+1))
+	return fence + value + fence
+}
+
+// mdCodeCell renders value as an inline code span inside a table cell, where
+// GitHub splits cells on "|" even inside code.
+func mdCodeCell(value string) string {
+	return strings.ReplaceAll(mdCode(value, 1), "|", `\|`)
 }
 
 func symbolCount(modules []*ImpactedModule) int {
@@ -106,15 +149,23 @@ func MarkdownReport(report *Report, root string) string {
 	}
 	out = append(out, "")
 	terms := newReachTerms(report.Seeds, report.Changed)
-	read := fileReader(root)
+	var sources *os.Root
+	if root != "" {
+		// Without a readable root the list simply quotes no lines.
+		if opened, err := os.OpenRoot(root); err == nil {
+			defer func() { _ = opened.Close() }() // read-only: closing cannot lose data
+			sources = opened
+		}
+	}
+	read := fileReader(sources)
 	out = append(out, detailSections(report, symbols, func(symbol Impacted) (evidenceLine, bool) {
 		return impactedLine(symbol, terms, read)
 	})...)
-	if caveats := caveatLines(report); len(caveats) > 0 {
+	if caveats := caveatLines(report, mdText); len(caveats) > 0 {
 		out = append(out, "")
 		out = append(out, caveats...)
 	}
-	out = append(out, "", fmt.Sprintf("<sub>`graft blast` · %s · %s · %s</sub>", report.Basis, depthLabel(report.Depth), plural(len(report.Changed), "changed file")))
+	out = append(out, "", fmt.Sprintf("<sub>`graft blast` · %s · %s · %s</sub>", mdText(report.Basis), depthLabel(report.Depth), plural(len(report.Changed), "changed file")))
 	return strings.Join(out, "\n") + "\n"
 }
 
@@ -130,7 +181,7 @@ func areaLabels(areas []*ChangedArea, signal TestSignal) []string {
 	labels := make([]string, 0)
 	for _, area := range areas {
 		if area.Tests == signal {
-			labels = append(labels, area.Label)
+			labels = append(labels, mdText(area.Label))
 		}
 	}
 	return labels
@@ -179,7 +230,7 @@ func impactTable(report *Report) []string {
 		hop := "—"
 		if len(module.Symbols) > 0 {
 			nearest := module.Symbols[0]
-			hop = fmt.Sprintf("`%s:%s` %s — %s, depth %d", nearest.Path, nearest.Span, nearest.Name, nearest.Relation, nearest.Depth)
+			hop = fmt.Sprintf("%s %s — %s, depth %d", mdCodeCell(nearest.Path+":"+nearest.Span), mdText(nearest.Name), mdText(string(nearest.Relation)), nearest.Depth)
 		}
 		names := make([]string, 0)
 		for _, file := range module.From {
@@ -187,7 +238,7 @@ func impactTable(report *Report) []string {
 			if !ok {
 				name = file
 			}
-			if !slices.Contains(names, name) {
+			if name = mdText(name); !slices.Contains(names, name) {
 				names = append(names, name)
 			}
 		}
@@ -198,12 +249,12 @@ func impactTable(report *Report) []string {
 		case len(names) > 0:
 			from = strings.Join(names, ", ")
 		}
-		rows = append(rows, fmt.Sprintf("| %s | %d | %s | %s |", module.Label, len(module.Symbols), hop, from))
+		rows = append(rows, fmt.Sprintf("| %s | %d | %s | %s |", mdText(module.Label), len(module.Symbols), hop, from))
 	}
 	if len(hidden) > 0 {
 		labels := make([]string, 0, 3)
 		for _, module := range hidden[:min(len(hidden), 3)] {
-			labels = append(labels, module.Label)
+			labels = append(labels, mdText(module.Label))
 		}
 		more := ""
 		if len(hidden) > 3 {
@@ -221,11 +272,15 @@ func tagLine(report *Report) (string, bool) {
 	total := len(report.Areas) + len(report.Modules)
 	bits := make([]string, 0, len(*report.Reviewers))
 	for _, person := range *report.Reviewers {
-		who := "**" + person.Name + "**"
+		who := "**" + mdText(person.Name) + "**"
 		if person.Handle != "" {
 			who = "@" + person.Handle
 		}
-		why := strings.Join(person.Areas, ", ")
+		areas := make([]string, len(person.Areas))
+		for i, area := range person.Areas {
+			areas[i] = mdText(area)
+		}
+		why := strings.Join(areas, ", ")
 		if len(person.Areas) >= 3 {
 			why = fmt.Sprintf("%d of %d areas", len(person.Areas), total)
 		}
@@ -240,7 +295,7 @@ func ownerCell(owners *[]Owner, now int64) string {
 	}
 	cells := make([]string, 0, len(*owners))
 	for _, owner := range *owners {
-		cells = append(cells, fmt.Sprintf("%s — %s, last %s", Mention(owner), plural(owner.Commits, "commit"), SinceLabel(owner.Last, now)))
+		cells = append(cells, fmt.Sprintf("%s — %s, last %s", mdText(Mention(owner)), plural(owner.Commits, "commit"), SinceLabel(owner.Last, now)))
 	}
 	return strings.Join(cells, " · ")
 }
@@ -296,7 +351,7 @@ func ownerSection(report *Report) []string {
 	}
 	ordered := append(named, unnamed...)
 	for _, row := range ordered[:min(len(ordered), maxOwnerRows)] {
-		out = append(out, fmt.Sprintf("| **%s** · %s | %s |", row.label, row.side, ownerCell(row.owners, now)))
+		out = append(out, fmt.Sprintf("| **%s** · %s | %s |", mdText(row.label), row.side, ownerCell(row.owners, now)))
 	}
 	if len(ordered) > maxOwnerRows {
 		out = append(out, fmt.Sprintf("| _…%s_ | |", plural(len(ordered)-maxOwnerRows, "further area")))
@@ -329,7 +384,7 @@ func detailSections(report *Report, symbols int, evidence func(Impacted) (eviden
 			fmt.Sprintf("<summary>%s also %s this code</summary>", plural(len(files), "test suite"), verb), "",
 			plural(symbolCount(report.TestModules), "symbol")+", kept out of the diagram and the table so they cannot crowd out the areas a reviewer has to look at.", "")
 		for _, file := range files[:min(len(files), 20)] {
-			out = append(out, "- `"+file+"`")
+			out = append(out, "- "+mdCode(file, 1))
 		}
 		if len(files) > 20 {
 			out = append(out, fmt.Sprintf("- …%d more", len(files)-20))
@@ -343,21 +398,22 @@ func symbolList(report *Report, symbols int, evidence func(Impacted) (evidenceLi
 	out := make([]string, 0)
 	listed := 0
 	for _, module := range report.Modules {
-		out = append(out, fmt.Sprintf("**%s** — %s in %s", module.Label, plural(len(module.Symbols), "symbol"), plural(len(module.Files), "file")), "")
+		out = append(out, fmt.Sprintf("**%s** — %s in %s", mdText(module.Label), plural(len(module.Symbols), "symbol"), plural(len(module.Files), "file")), "")
 		for _, symbol := range module.Symbols {
 			if listed >= maxSymbolsListed {
-				listed++
 				break
 			}
 			listed++
-			out = append(out, fmt.Sprintf("- `%s:%s` — %s (%s, depth %d)", symbol.Path, symbol.Span, symbol.Name, symbol.Relation, symbol.Depth))
+			out = append(out, fmt.Sprintf("- %s — %s (%s, depth %d)", mdCode(symbol.Path+":"+symbol.Span, 1), mdText(symbol.Name), mdText(string(symbol.Relation)), symbol.Depth))
 			if line, ok := evidence(symbol); ok {
-				out = append(out, fmt.Sprintf("  ```%d: %s```", line.N, trimJS(line.Text)))
+				out = append(out, "  "+mdCode(fmt.Sprintf("%d: %s", line.N, trimJS(line.Text)), 3))
 			}
 		}
 		out = append(out, "")
 		if listed >= maxSymbolsListed {
-			out = append(out, fmt.Sprintf("…%s not listed.", plural(symbols-listed, "further symbol")), "")
+			if symbols > listed {
+				out = append(out, fmt.Sprintf("…%s not listed.", plural(symbols-listed, "further symbol")), "")
+			}
 			break
 		}
 	}
@@ -391,7 +447,7 @@ func testSignalSection(areas []*ChangedArea) []string {
 		case len(area.ChangedTestFiles) > 0:
 			quoted := make([]string, len(area.ChangedTestFiles))
 			for i, file := range area.ChangedTestFiles {
-				quoted[i] = "`" + file + "`"
+				quoted[i] = mdCode(file, 1)
 			}
 			bits = append(bits, plural(len(area.ChangedTestFiles), "test file")+" changed here: "+strings.Join(quoted, ", "))
 		case len(area.TestFiles) > 0:
@@ -405,11 +461,11 @@ func testSignalSection(areas []*ChangedArea) []string {
 		default:
 			bits = append(bits, "no function, method or class changed here")
 		}
-		out = append(out, fmt.Sprintf("- %s **%s** — %s", testGlyph[area.Tests], area.Label, strings.Join(bits, " · ")))
+		out = append(out, fmt.Sprintf("- %s **%s** — %s", testGlyph[area.Tests], mdText(area.Label), strings.Join(bits, " · ")))
 		if len(area.Unreached) > 0 {
 			names := make([]string, 0, 8)
 			for _, name := range area.Unreached[:min(len(area.Unreached), 8)] {
-				names = append(names, "`"+name+"`")
+				names = append(names, mdCode(name, 1))
 			}
 			more := ""
 			if len(area.Unreached) > 8 {
@@ -434,15 +490,24 @@ func testModuleFiles(modules []*ImpactedModule) []string {
 	return files
 }
 
-func caveatLines(report *Report) []string {
+// caveatLines warns about deleted and unindexed files, passing each path
+// through escape.
+func caveatLines(report *Report, escape func(string) string) []string {
+	list := func(paths []string) string {
+		shown := make([]string, 0, 5)
+		for _, path := range paths[:min(len(paths), 5)] {
+			shown = append(shown, escape(path))
+		}
+		return strings.Join(shown, ", ")
+	}
 	out := make([]string, 0, 2)
 	if len(report.Deleted) > 0 {
 		out = append(out, fmt.Sprintf("⚠️ %s (%s) — their dependents cannot be computed from a graph built at this commit, since the files are gone from it.",
-			plural(len(report.Deleted), "deleted file"), strings.Join(report.Deleted[:min(len(report.Deleted), 5)], ", ")))
+			plural(len(report.Deleted), "deleted file"), list(report.Deleted)))
 	}
 	if len(report.Unindexed) > 0 {
 		out = append(out, fmt.Sprintf("⚠️ %s not in the graph (%s) — no parser claims the extension, or the index predates the file.",
-			plural(len(report.Unindexed), "changed file"), strings.Join(report.Unindexed[:min(len(report.Unindexed), 5)], ", ")))
+			plural(len(report.Unindexed), "changed file"), list(report.Unindexed)))
 	}
 	return out
 }
@@ -497,7 +562,7 @@ func TextReport(report *Report) string {
 		}
 		lines = append(lines, "")
 	}
-	for _, line := range caveatLines(report) {
+	for _, line := range caveatLines(report, func(path string) string { return path }) {
 		lines = append(lines, strings.Replace(line, "⚠️ ", "⚠ ", 1), "")
 	}
 	return trailingNewlines.ReplaceAllString(strings.Join(lines, "\n"), "\n")

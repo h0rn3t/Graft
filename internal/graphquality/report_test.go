@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -76,6 +77,53 @@ func TestJSONUsesMachineReportShape(t *testing.T) {
 		if _, ok := decoded[key]; !ok {
 			t.Errorf("Report.JSON() missing key %q", key)
 		}
+	}
+}
+
+// TestJSONMatchesGoldenBytes compares --json output byte for byte with the CLI
+// goldens, which keep count keys in first-seen order.
+func TestJSONMatchesGoldenBytes(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("..", "..", "cmd", "graft", "testdata", "goldens", "per-command", "graph-quality-cli", "*.json"))
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("filepath.Glob(graph-quality goldens) = %v, %v, want goldens", paths, err)
+	}
+	checked := 0
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var golden struct {
+			Args   []string          `json:"args"`
+			Inputs map[string]string `json:"inputs"`
+			Stdout string            `json:"stdout"`
+		}
+		if err := json.Unmarshal(data, &golden); err != nil {
+			t.Fatalf("json.Unmarshal(%s) error = %v", path, err)
+		}
+		if !slices.Contains(golden.Args, "--json") || golden.Inputs["wiring.json"] == "" {
+			continue
+		}
+		wiring := filepath.Join(t.TempDir(), "wiring.json")
+		if err := os.WriteFile(wiring, []byte(golden.Inputs["wiring.json"]), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		graph, err := Load(wiring)
+		if err != nil {
+			t.Fatalf("Load(%s input) error = %v", path, err)
+		}
+		// "<REPO>" would come out HTML-escaped, so the graph path uses a stand-in.
+		got, err := Analyze(graph, "REPO/wiring.json").JSON()
+		if err != nil {
+			t.Fatalf("Report.JSON() for %s error = %v", path, err)
+		}
+		if want := strings.ReplaceAll(golden.Stdout, "<REPO>", "REPO"); string(got)+"\n" != want {
+			t.Errorf("Report.JSON() for %s =\n%s\nwant\n%s", filepath.Base(path), got, want)
+		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("no --json golden with a wiring.json input")
 	}
 }
 

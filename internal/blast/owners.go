@@ -2,13 +2,17 @@ package blast
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"math"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/h0rn3t/Graft/internal/gitx"
 )
 
 // Owner is one person's claim on one area, from git history.
@@ -43,6 +47,8 @@ const (
 	minShare       = 0.15
 	maxPerArea     = 2
 	affectedWeight = 0.6
+	// ownerLookups bounds how many git log runs AttachOwners keeps in flight.
+	ownerLookups = 4
 	// MaxReviewers is how many people the tag line names.
 	MaxReviewers = 3
 )
@@ -73,8 +79,9 @@ type ownerEntry struct {
 	seen map[string]bool
 }
 
-// OwnersFor returns the people behind files, best first.
-func OwnersFor(root string, files []string, opts OwnerOptions) []Owner {
+// OwnersFor returns the people behind files, best first. Files are relative
+// to root, which may be a subdirectory of the repository.
+func OwnersFor(ctx context.Context, root string, files []string, opts OwnerOptions) []Owner {
 	paths := slices.Clone(files)
 	sortCodeUnits(paths)
 	if len(paths) > maxPathspec {
@@ -89,10 +96,11 @@ func OwnersFor(root string, files []string, opts OwnerOptions) []Owner {
 	}
 	args := append([]string{
 		"log", "--no-merges", "--since=" + ownerSince, "-n", strconv.Itoa(maxCommits),
-		"--format=\x01%H\x02%aI\x02%aN\x02%aE", "--name-only", "--",
+		// --relative names the files relative to root, as the graph does.
+		"--format=\x01%H\x02%aI\x02%aN\x02%aE", "--name-only", "--relative", "--",
 	}, paths...)
-	out, ok := git(root, args...)
-	if !ok {
+	out, err := gitx.Run(ctx, root, args...)
+	if err != nil {
 		return []Owner{}
 	}
 	keys, people := parseOwnerLog(out, paths, now)
@@ -120,7 +128,8 @@ func parseOwnerLog(out string, paths []string, now int64) ([]string, map[string]
 			commit = parseLogHeader(line[1:], now)
 			continue
 		}
-		if commit == nil || !wanted[line] || isBot(commit.name, commit.email) {
+		path, ok := unquoteC(line)
+		if commit == nil || !ok || !wanted[path] || isBot(commit.name, commit.email) {
 			continue
 		}
 		handle, _ := GitHubHandle(commit.email)
@@ -194,10 +203,14 @@ func rankOwners(keys []string, people map[string]*ownerEntry, exclude []string) 
 	return kept
 }
 
-// DiffAuthors lists everyone who authored or co-authored a commit in base...HEAD.
-func DiffAuthors(root, base string) []string {
-	out, ok := git(root, "log", "--format=%aN%n%aE%n%(trailers:key=Co-authored-by,valueonly)", base+"...HEAD")
-	if !ok {
+// DiffAuthors lists everyone who authored or co-authored a commit in base..HEAD,
+// the commits on HEAD that base does not have. It returns nil when git fails.
+func DiffAuthors(ctx context.Context, root, base string) []string {
+	if checkRef(base) != nil {
+		return nil
+	}
+	out, err := gitx.Run(ctx, root, "log", "--format=%aN%n%aE%n%(trailers:key=Co-authored-by,valueonly)", "--end-of-options", base+"..HEAD", "--")
+	if err != nil {
 		return nil
 	}
 	names := make([]string, 0)
@@ -224,10 +237,10 @@ func DiffAuthors(root, base string) []string {
 }
 
 // LocalIdentity returns the git user name and email configured in root.
-func LocalIdentity(root string) []string {
+func LocalIdentity(ctx context.Context, root string) []string {
 	values := make([]string, 0, 2)
 	for _, key := range []string{"user.name", "user.email"} {
-		out, _ := git(root, "config", key)
+		out, _ := gitx.Run(ctx, root, "config", key) // an unset key is no identity
 		if value := strings.TrimSpace(out); value != "" {
 			values = append(values, value)
 		}
@@ -240,12 +253,45 @@ type rankedReviewer struct {
 	weighted float64
 }
 
-// AttachOwners fills in owners on every area and module and ranks the report's reviewers.
-func AttachOwners(root string, report *Report, opts OwnerOptions) {
+// ownerLookup is one area or module whose owners AttachOwners looks up.
+type ownerLookup struct {
+	label  string
+	files  []string
+	weight float64
+	owners **[]Owner
+}
+
+// AttachOwners fills in owners on the areas, then the modules, that the owner
+// table has room for, and ranks the report's reviewers from them. Rows past
+// the table keep nil owners.
+func AttachOwners(ctx context.Context, root string, report *Report, opts OwnerOptions) {
+	lookups := make([]ownerLookup, 0, len(report.Areas)+len(report.Modules))
+	for _, area := range report.Areas {
+		lookups = append(lookups, ownerLookup{label: area.Label, files: area.Files, weight: 1, owners: &area.Owners})
+	}
+	for _, module := range report.Modules {
+		lookups = append(lookups, ownerLookup{label: module.Label, files: module.Files, weight: affectedWeight, owners: &module.Owners})
+	}
+	lookups = lookups[:min(len(lookups), maxOwnerRows)]
+
+	found := make([][]Owner, len(lookups))
+	slots := make(chan struct{}, ownerLookups)
+	var wg sync.WaitGroup
+	for i, lookup := range lookups {
+		wg.Go(func() {
+			slots <- struct{}{}
+			defer func() { <-slots }()
+			found[i] = OwnersFor(ctx, root, lookup.files, opts)
+		})
+	}
+	wg.Wait()
+
 	order := make([]string, 0)
 	ranked := make(map[string]*rankedReviewer)
-	visit := func(label string, files []string, weight float64) *[]Owner {
-		owners := OwnersFor(root, files, opts)
+	for i, lookup := range lookups {
+		owners := found[i]
+		*lookup.owners = &owners
+		label, weight := lookup.label, lookup.weight
 		for _, owner := range owners {
 			key := owner.Name
 			if owner.Handle != "" {
@@ -267,13 +313,6 @@ func AttachOwners(root string, report *Report, opts OwnerOptions) {
 				prev.Handle = owner.Handle
 			}
 		}
-		return &owners
-	}
-	for _, area := range report.Areas {
-		area.Owners = visit(area.Label, area.Files, 1)
-	}
-	for _, module := range report.Modules {
-		module.Owners = visit(module.Label, module.Files, affectedWeight)
 	}
 	all := make([]*rankedReviewer, 0, len(order))
 	for _, key := range order {

@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -188,9 +189,63 @@ func Analyze(graph Graph, path string) Report {
 	}
 }
 
-// JSON returns the report in the machine-readable format used by --json.
+// JSON returns the report in the machine-readable format used by --json. The
+// count objects keep their keys in first-seen order, as the human report does.
 func (report Report) JSON() ([]byte, error) {
-	return json.MarshalIndent(report, "", "  ")
+	return json.MarshalIndent(struct {
+		Graph        string        `json:"graph"`
+		Nodes        int           `json:"nodes"`
+		SymbolNodes  int           `json:"symbolNodes"`
+		Edges        int           `json:"edges"`
+		ByKind       orderedCounts `json:"byKind"`
+		ByOrigin     orderedCounts `json:"byOrigin"`
+		ByRelation   orderedCounts `json:"byRelation"`
+		ByConfidence orderedCounts `json:"byConfidence"`
+		Resolution   Resolution    `json:"resolution"`
+		Connectivity Connectivity  `json:"connectivity"`
+		Invariants   Invariants    `json:"invariants"`
+	}{
+		Graph:        report.Graph,
+		Nodes:        report.Nodes,
+		SymbolNodes:  report.SymbolNodes,
+		Edges:        report.Edges,
+		ByKind:       orderedCounts{report.ByKind, report.kindOrder},
+		ByOrigin:     orderedCounts{report.ByOrigin, report.originOrder},
+		ByRelation:   orderedCounts{report.ByRelation, report.relationOrder},
+		ByConfidence: orderedCounts{report.ByConfidence, report.confidenceOrder},
+		Resolution:   report.Resolution,
+		Connectivity: report.Connectivity,
+		Invariants:   report.Invariants,
+	}, "", "  ")
+}
+
+// orderedCounts encodes counts as a JSON object with its keys in order. A
+// report not built by Analyze has no order, and its keys come out sorted.
+type orderedCounts struct {
+	counts map[string]int
+	order  []string
+}
+
+// MarshalJSON writes the counts in order.
+func (c orderedCounts) MarshalJSON() ([]byte, error) {
+	order := c.order
+	if len(order) != len(c.counts) {
+		order = slices.Sorted(maps.Keys(c.counts))
+	}
+	data := []byte{'{'}
+	for i, key := range order {
+		if i > 0 {
+			data = append(data, ',')
+		}
+		name, err := json.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
+		data = append(data, name...)
+		data = append(data, ':')
+		data = strconv.AppendInt(data, int64(c.counts[key]), 10)
+	}
+	return append(data, '}'), nil
 }
 
 // Human returns the report in the human-readable format used by the command.
