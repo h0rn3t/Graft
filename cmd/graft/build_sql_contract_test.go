@@ -22,7 +22,7 @@ func TestBuildSQLParseFailureDegradesToFileNodeContract(t *testing.T) {
 		}
 	}
 	var stdout, stderr bytes.Buffer
-	if status := run([]string{"build", root}, &stdout, &stderr); status != 0 || !strings.Contains(stderr.String(), "schema.sql: SQL statements not indexed") {
+	if status := run([]string{"build", root}, &stdout, &stderr); status != 0 || !strings.Contains(stderr.String(), "schema.sql: 1 of 1 SQL statements not indexed") {
 		t.Fatalf("run(build %q) = (status %d, stderr %q), want 0 and a schema.sql limitation", root, status, stderr.String())
 	}
 	wiring, err := graph.Read(graph.WiringPath(filepath.Join(root, "graft")))

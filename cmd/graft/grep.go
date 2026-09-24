@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"strings"
 
 	"github.com/h0rn3t/Graft/internal/graph"
@@ -79,7 +80,7 @@ func grepSyntaxMessage(err error, pattern string, ignoreCase bool) (string, bool
 // runWorkspaceGrep greps every child of a workspace, as the TypeScript
 // runWorkspaceGrep does; --in does not apply there.
 func runWorkspaceGrep(root, contextDir string, opts callersOptions, stdout, stderr io.Writer) int {
-	result, coverage, err := federateGrep(root, contextDir, opts.query, opts.ignoreCase, opts.fixed)
+	result, coverage, err := federateGrep(root, contextDir, opts.query, opts.ignoreCase, opts.fixed, opts.in)
 	if err != nil {
 		// Thrown in TypeScript, so the top-level handler prints the bare message.
 		if message, ok := grepSyntaxMessage(err, opts.query, opts.ignoreCase); ok {
@@ -145,6 +146,35 @@ func formatGrepResult(result graph.GrepResult) string {
 		return body
 	}
 	return savings.With(body, result.Saved.Files, result.Saved.BaselineChars)
+}
+
+// fitGrepResult keeps the top-ranked hits whose rendered groups fit in budget
+// bytes and counts the rest as truncated, leaving result itself untouched.
+func fitGrepResult(result graph.GrepResult, budget int) graph.GrepResult {
+	used := 0
+	for index, group := range result.Groups {
+		used += len(grepGroupHeader(group)) + 2
+		for kept, hit := range group.Hits {
+			used += len(fmt.Sprintf("\n  L%d: %s", hit.Line, hit.Text))
+			if used <= budget {
+				continue
+			}
+			dropped := len(group.Hits) - kept
+			for _, rest := range result.Groups[index+1:] {
+				dropped += len(rest.Hits)
+			}
+			groups := slices.Clone(result.Groups[:index+1])
+			groups[index].Hits = group.Hits[:kept]
+			if kept == 0 {
+				groups = groups[:index]
+			}
+			result.Groups = groups
+			result.TotalHits -= dropped
+			result.Truncated.Hits += dropped
+			return result
+		}
+	}
+	return result
 }
 
 func grepHeader(result graph.GrepResult) string {

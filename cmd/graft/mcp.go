@@ -484,6 +484,11 @@ func (c *mcpConnection) writeValue(value any) error {
 	return err
 }
 
+// mcpGrepBudget caps the bytes of hit groups in one graft_find_all answer.
+// Hosts refuse a tool result past about 25k tokens, and Cyrillic source costs
+// close to a token for every two bytes, so the cap leaves room below that.
+const mcpGrepBudget = 40_000
+
 type mcpResult struct {
 	text    string
 	isError bool
@@ -609,7 +614,7 @@ func mcpCall(ctx context.Context, root, contextDir, dirOverride, requestedName s
 		if result.TotalHits == 0 {
 			return mcpResult{text: grepZeroHitNote(result), isError: false}
 		}
-		return mcpResult{text: formatGrepResult(result), isError: false}
+		return mcpResult{text: formatGrepResult(fitGrepResult(result, mcpGrepBudget)), isError: false}
 	case "graft_repo_map":
 		maxDirs := 0
 		if value, ok := mcpNumber(args["max_dirs"]); ok && value > 0 {
@@ -707,7 +712,7 @@ func mcpWorkspaceTraceCalls(root, contextDir, symbol string, args map[string]any
 }
 
 func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any) mcpResult {
-	result, coverage, err := federateGrep(root, contextDir, pattern, args["ignore_case"] == true, args["fixed"] == true)
+	result, coverage, err := federateGrep(root, contextDir, pattern, args["ignore_case"] == true, args["fixed"] == true, mcpString(args["in"]))
 	if err != nil {
 		// The TypeScript tool reports a thrown error by its bare message.
 		text := err.Error()
@@ -718,7 +723,7 @@ func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any) mcp
 	}
 	text := grepZeroHitNote(result)
 	if result.TotalHits > 0 {
-		text = formatGrepResult(result)
+		text = formatGrepResult(fitGrepResult(result, mcpGrepBudget))
 	}
 	if coverage != "" {
 		text += "\n" + coverage

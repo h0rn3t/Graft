@@ -85,6 +85,75 @@ func TestSQLAnonymousAndInvalidContract(t *testing.T) {
 	}
 }
 
+func TestSQLDialectAndRecoveryContract(t *testing.T) {
+	cases := []struct {
+		name, source   string
+		wantIDs        []string
+		wantRefs       []string
+		wantLimitation string
+	}{
+		{
+			name:    "build placeholder schema",
+			source:  "CREATE OR REPLACE FUNCTION @extschema@.gapfill(ts int) RETURNS int AS '@MODULE_PATHNAME@', 'fn' LANGUAGE C;\n",
+			wantIDs: []string{"q.sql#@extschema@.gapfill"},
+		},
+		{
+			name:    "psql variable name",
+			source:  "CREATE TABLE :TEST_TABLE (id int);\nCREATE MATERIALIZED VIEW :'CAGG' AS SELECT 1;\nCREATE TABLE app.teams (id int);\n",
+			wantIDs: []string{"q.sql#app.teams"},
+		},
+		{
+			name:    "psql meta-commands",
+			source:  "\\set ON_ERROR_STOP 1\n\\if :flag\nCREATE TABLE app.teams (id int);\n\\endif\n",
+			wantIDs: []string{"q.sql#app.teams"},
+		},
+		{
+			name:    "cast is not a psql variable",
+			source:  "CREATE TABLE app.teams (id int DEFAULT 1::int);\n",
+			wantIDs: []string{"q.sql#app.teams"},
+		},
+		{
+			name: "template branches",
+			source: "{# grouped ( #}\nSELECT * FROM (\n{% if by_team %}\n  SELECT team_id FROM app.teams GROUP BY (team_id\n" +
+				"{%- elif by_user -%}\n  SELECT id FROM app.users GROUP BY (id\n{% else %}\n  SELECT 1 FROM (VALUES (1\n{% endif %}\n)) sub;\n" +
+				"CREATE TABLE {{ table }} (id int);\nCREATE TABLE app.audit (id int);\n",
+			wantIDs:  []string{"q.sql#app.audit"},
+			wantRefs: []string{"app.teams", "app.users"},
+		},
+		{
+			name:           "malformed statements",
+			source:         "CREATE TABLE app.broken (id int;\nCREATE TABLE app.teams (id int);\nSELECT 1) FROM app.users;\nCREATE TABLE (id int);\nCREATE VIEW app.v AS SELECT 1;\n",
+			wantIDs:        []string{"q.sql#app.teams", "q.sql#app.v"},
+			wantLimitation: "q.sql: 3 of 5 SQL statements not indexed (unclosed SQL parenthesis at byte 0)",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := extractFile("q.sql", tc.source)
+			if err != nil {
+				t.Fatalf("extractFile(%q, %q) error = %v, want nil", "q.sql", tc.source, err)
+			}
+			var ids []string
+			for _, node := range got.nodes[1:] {
+				ids = append(ids, node.ID)
+			}
+			if !slices.Equal(ids, tc.wantIDs) {
+				t.Errorf("extractFile(%q, %q) symbol ids = %q, want %q", "q.sql", tc.source, ids, tc.wantIDs)
+			}
+			if got.limitation != tc.wantLimitation {
+				t.Errorf("extractFile(%q, %q) limitation = %q, want %q", "q.sql", tc.source, got.limitation, tc.wantLimitation)
+			}
+			var refs []string
+			for _, edge := range got.rawEdges {
+				refs = append(refs, edge.name)
+			}
+			if !slices.Equal(refs, tc.wantRefs) {
+				t.Errorf("extractFile(%q, %q) references = %q, want %q", "q.sql", tc.source, refs, tc.wantRefs)
+			}
+		})
+	}
+}
+
 func TestSQLQuoteEscapesContract(t *testing.T) {
 	cases := []struct {
 		name, source string

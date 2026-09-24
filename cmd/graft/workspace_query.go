@@ -14,13 +14,25 @@ import (
 )
 
 // federateGrep greps every loaded child of a workspace and merges the groups
-// under <child>/ paths, as the TypeScript federateGrep does.
-func federateGrep(root, contextDir, pattern string, ignoreCase, fixed bool) (graph.GrepResult, string, error) {
+// under <child>/ paths, as the TypeScript federateGrep does. A non-empty in
+// names one child by its first segment and a path inside it by the rest.
+func federateGrep(root, contextDir, pattern string, ignoreCase, fixed bool, in string) (graph.GrepResult, string, error) {
 	workspace := graph.LoadWorkspaceGraphs(root, contextDir)
+	onlyChild, childIn, _ := strings.Cut(strings.Trim(in, "/"), "/")
+	if onlyChild != "" && !slices.ContainsFunc(workspace.Loaded, func(child graph.WorkspaceChild) bool { return child.Name == onlyChild }) {
+		names := make([]string, 0, len(workspace.Loaded))
+		for _, child := range workspace.Loaded {
+			names = append(names, child.Name)
+		}
+		return graph.GrepResult{}, "", fmt.Errorf("no workspace repo %q - repos: %s", onlyChild, strings.Join(names, ", "))
+	}
 	result := graph.GrepResult{Pattern: pattern, Groups: make([]graph.GrepGroup, 0)}
 	saved := &graph.GrepSavings{}
 	for _, child := range workspace.Loaded {
-		childResult, err := graph.Grep(child.Graph, filepath.Join(root, child.Name), pattern, graph.GrepOptions{IgnoreCase: ignoreCase, Fixed: fixed})
+		if onlyChild != "" && child.Name != onlyChild {
+			continue
+		}
+		childResult, err := graph.Grep(child.Graph, filepath.Join(root, child.Name), pattern, graph.GrepOptions{IgnoreCase: ignoreCase, Fixed: fixed, In: childIn})
 		if err != nil {
 			return graph.GrepResult{}, "", err
 		}

@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.1 - 2026-09-24
+
+### Fixed
+
+- **One malformed SQL statement no longer unindexes its whole file.** The statement is dropped on its own, the file's other statements are still indexed, and the build reports `N of M SQL statements not indexed (...)`. A semicolon inside unclosed parentheses now ends the broken statement instead of swallowing the ones after it.
+- **SQL written for a preprocessor indexes as the SQL it expands to.** Build-time placeholders such as `@extschema@.fn` read as a schema name. psql meta-commands (`\set`, `\if`, `\copy`, `\qecho`) are skipped to the end of their line. psql variables (`:name`, `:'name'`, `:"name"`) and Jinja or Django expressions (`{{ ... }}`) stand for a dynamic name: they define nothing and raise no warning. Only the first branch of a template `{% if %}` chain decides parentheses and statement bounds, and every branch still contributes references.
+- **`graft_find_all` stays within the host's tool-result limit.** Each answer caps its hit groups at 40,000 bytes, keeps the top-ranked hits, and counts the rest as truncated. Before this, a workspace search merged up to 300 hits from every child repository with no overall cap.
+- **`in` narrows workspace searches.** `graft_find_all` and `graft grep --in` at a workspace root read the first path segment as the child repository and the rest as a path inside it, as `graft_find_code` does. Before this, `in` was silently ignored.
+
 ## 0.1.0 - 2026-09-24
 
 ### Breaking

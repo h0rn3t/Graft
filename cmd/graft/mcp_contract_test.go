@@ -364,6 +364,7 @@ func TestMCPWorkspaceRoutesContract(t *testing.T) {
 		args        map[string]any
 		wantError   bool
 		wantPhrases []string
+		wantAbsent  []string
 	}{
 		{
 			name:        "ask federates through the workspace CLI",
@@ -391,6 +392,20 @@ func TestMCPWorkspaceRoutesContract(t *testing.T) {
 			wantPhrases: []string{"api/src/app.ts", "web/src/app.ts", "2 of 3 workspace repos have graphs; run graft build to cover missing"},
 		},
 		{
+			name:        "grep narrows to one child with in",
+			tool:        "graft_find_all",
+			args:        map[string]any{"pattern": "worker", "in": "api/src"},
+			wantPhrases: []string{"api/src/app.ts"},
+			wantAbsent:  []string{"web/src/app.ts"},
+		},
+		{
+			name:        "grep rejects in outside every child",
+			tool:        "graft_find_all",
+			args:        map[string]any{"pattern": "worker", "in": "nope/src"},
+			wantError:   true,
+			wantPhrases: []string{`no workspace repo "nope" - repos: api, web`},
+		},
+		{
 			name:        "grep preserves invalid pattern errors",
 			tool:        "graft_find_all",
 			args:        map[string]any{"pattern": "["},
@@ -414,6 +429,11 @@ func TestMCPWorkspaceRoutesContract(t *testing.T) {
 			for _, phrase := range tt.wantPhrases {
 				if !strings.Contains(got.text, phrase) {
 					t.Errorf("mcpCall(%q, %q, %q, %#v) text = %q, want it to contain %q", root, contextDir, tt.tool, tt.args, got.text, phrase)
+				}
+			}
+			for _, phrase := range tt.wantAbsent {
+				if strings.Contains(got.text, phrase) {
+					t.Errorf("mcpCall(%q, %q, %q, %#v) text = %q, want it without %q", root, contextDir, tt.tool, tt.args, got.text, phrase)
 				}
 			}
 		})
