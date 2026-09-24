@@ -9,10 +9,15 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
+
+// buildLockWait bounds how long a build waits for another graph writer, such
+// as a query-time refresh or a hook sync, to finish before giving up.
+const buildLockWait = 5 * time.Minute
 
 func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 	workspacePrefix := workspaceBuildPrefix(opts)
@@ -112,6 +117,14 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 	if opts.workspaceChildName == "" {
 		writeDiagnostic(stderr, "\n")
 	}
+	lockCtx, cancelLock := context.WithTimeout(context.Background(), buildLockWait)
+	defer cancelLock()
+	release, err := graph.LockGraph(lockCtx, contextDir)
+	if err != nil {
+		writeDiagnostic(stderr, "✗ %sgraph write lock not acquired: %v\n", workspacePrefix, err)
+		return 1
+	}
+	defer release()
 	if _, err := graph.Write(built.Graph, contextDir); err != nil {
 		writeDiagnostic(stderr, "✗ %sgraph write failed: %v\n", workspacePrefix, err)
 		return 1

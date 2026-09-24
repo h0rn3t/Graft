@@ -84,16 +84,15 @@ func seedGraphFromWorktree(root, outDir string) (string, bool, error) {
 	} else if !errors.Is(err, fs.ErrNotExist) {
 		return "", false, fmt.Errorf("check worktree graph: %w", err)
 	}
-	cacheDir := filepath.Join(outDir, ".cache")
-	locked, err := waitForGraphLock(cacheDir)
+	release, err := waitForGraphLock(outDir)
 	if err != nil {
 		return "", false, err
 	}
-	if !locked {
+	if release == nil {
 		return "", true, nil
 	}
-	lockPath := filepath.Join(cacheDir, ".sync.lock")
-	defer func() { _ = os.Remove(lockPath) }() // Stale-lock recovery retries cleanup after five minutes.
+	defer release()
+	cacheDir := filepath.Join(outDir, ".cache")
 	if _, err := os.Stat(WiringPath(outDir)); err == nil {
 		return "", false, nil
 	} else if !errors.Is(err, fs.ErrNotExist) {

@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/h0rn3t/Graft/internal/fsutil"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
@@ -113,20 +115,18 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 		return RefreshResult{Note: seedNote}
 	}
 
-	cacheDir := filepath.Join(outDir, ".cache")
-	locked, err := waitForGraphLock(cacheDir)
+	release, err := waitForGraphLock(outDir)
 	if err != nil {
 		return RefreshResult{Drift: drift, Note: fmt.Sprintf("graph refresh skipped: %v", err)}
 	}
-	if !locked {
+	if release == nil {
 		note := "a graph rebuild is already in flight — answering from the current graph"
 		if seedNote != "" {
 			note = seedNote + "; " + note
 		}
 		return RefreshResult{Drift: drift, Note: note}
 	}
-	lockPath := filepath.Join(cacheDir, ".sync.lock")
-	defer func() { _ = os.Remove(lockPath) }() // Stale-lock recovery retries cleanup after five minutes.
+	defer release()
 	if drift != nil {
 		fingerprint, err = ReadFingerprint(outDir, ExtractorID)
 		if err != nil {
@@ -248,28 +248,65 @@ func RefreshNote(result RefreshResult) string {
 	return note
 }
 
-// waitForGraphLock waits up to two seconds for the shared graph writer lock.
-func waitForGraphLock(cache string) (bool, error) {
+// graphLockFile is the writer lock shared by graph builds, refreshes, worktree
+// seeding, and the hook sync marker, relative to a context directory.
+const graphLockFile = ".cache/.sync.lock"
+
+// LockGraph takes the exclusive graph writer lock of the context directory
+// outDir, waiting until it is free or ctx is done. It is an operating-system
+// advisory lock, so it dies with a crashed holder and never goes stale; the
+// lock file itself is left in place. Every writer of the wiring graph, its ask
+// index, and its fingerprint holds it while writing so the three stay a
+// consistent set. The lock is not reentrant: a holder that calls LockGraph
+// again on the same directory waits for itself.
+func LockGraph(ctx context.Context, outDir string) (release func(), err error) {
+	return fsutil.Lock(ctx, filepath.Join(outDir, filepath.FromSlash(graphLockFile)))
+}
+
+// hookMarkerStaleAfter is the age after which an AcquireLock marker whose
+// sync never cleared it is ignored.
+const hookMarkerStaleAfter = 5 * time.Minute
+
+// waitForGraphLock waits up to two seconds for the graph writer lock, the
+// time a query may spend before it answers from the current graph. A pending
+// hook sync, marked by AcquireLock, counts as a writer too, so a query does
+// not rebuild the graph the sync is about to replace. A nil release with a
+// nil error means another writer is still busy.
+func waitForGraphLock(outDir string) (release func(), err error) {
 	const (
-		wait = 2 * time.Second
-		poll = 50 * time.Millisecond
+		wait       = 2 * time.Second
+		markerPoll = 50 * time.Millisecond
 	)
-	deadline := time.Now().Add(wait)
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	lockPath := filepath.Join(outDir, filepath.FromSlash(graphLockFile))
 	for {
-		acquired, err := AcquireLock(cache)
-		if err != nil || acquired {
-			return acquired, err
+		release, err = LockGraph(ctx, outDir)
+		if errors.Is(err, context.DeadlineExceeded) {
+			return nil, nil
 		}
-		if !time.Now().Before(deadline) {
-			return false, nil
+		if err != nil {
+			return nil, fmt.Errorf("take graph writer lock: %w", err)
 		}
-		time.Sleep(poll)
+		info, err := os.Stat(lockPath)
+		if err != nil || info.Size() == 0 || time.Since(info.ModTime()) >= hookMarkerStaleAfter {
+			return release, nil
+		}
+		release()
+		select {
+		case <-ctx.Done():
+			return nil, nil
+		case <-time.After(markerPoll):
+		}
 	}
 }
 
-// AcquireLock creates the shared graph/hook lock or reclaims it after five minutes.
+// AcquireLock sets the hook sync marker in the shared lock file of cache, the
+// `.cache` directory of a context directory. The marker outlives this process
+// so a detached sync can clear it with ReleaseLock; the sync's own graph write
+// still takes LockGraph. The marker is refused while a LockGraph holder is
+// active or another marker younger than five minutes is present.
 func AcquireLock(cache string) (bool, error) {
-	const staleAfter = 5 * time.Minute
 	if err := os.MkdirAll(cache, 0o755); err != nil {
 		return false, fmt.Errorf("create graph lock directory: %w", err)
 	}
@@ -301,18 +338,59 @@ func AcquireLock(cache string) (bool, error) {
 		if attempt == 1 {
 			return false, nil
 		}
-		info, err := os.Stat(lockPath)
-		if err == nil && time.Since(info.ModTime()) < staleAfter {
-			return false, nil
+		claimed, retry, err := claimExistingLockFile(lockPath, payload, hookMarkerStaleAfter)
+		if err != nil || !retry {
+			return claimed, err
 		}
-		_ = os.Remove(lockPath)
 	}
 	return false, nil
 }
 
-// ReleaseLock releases the shared graph/hook lock.
+// claimExistingLockFile decides on a lock file that already exists. An empty
+// file is LockGraph's idle lock file and takes the marker in place; a marker
+// older than staleAfter is removed so the caller can retry; a LockGraph holder
+// or a fresh marker refuses the claim.
+func claimExistingLockFile(lockPath string, payload []byte, staleAfter time.Duration) (claimed, retry bool, err error) {
+	release, locked := tryLockFile(lockPath)
+	if !locked {
+		return false, false, nil
+	}
+	defer release()
+	info, err := os.Stat(lockPath)
+	switch {
+	case err == nil && info.Size() == 0:
+		if err := os.WriteFile(lockPath, payload, 0o644); err != nil {
+			return false, false, fmt.Errorf("write graph sync lock: %w", err)
+		}
+		return true, false, nil
+	case err == nil && time.Since(info.ModTime()) < staleAfter:
+		return false, false, nil
+	}
+	_ = os.Remove(lockPath) // the retry reports a file that cannot be replaced
+	return false, true, nil
+}
+
+// tryLockFile takes the advisory lock on lockPath without waiting.
+func tryLockFile(lockPath string) (release func(), locked bool) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	release, err := fsutil.Lock(ctx, lockPath)
+	return release, err == nil
+}
+
+// ReleaseLock clears the hook sync marker. The file is removed only while no
+// LockGraph holder has it open; otherwise the marker is truncated away, since
+// unlinking a file another writer holds would let a third writer lock a fresh
+// file beside it.
 func ReleaseLock(cache string) {
-	_ = os.Remove(filepath.Join(cache, ".sync.lock"))
+	lockPath := filepath.Join(cache, ".sync.lock")
+	release, locked := tryLockFile(lockPath)
+	if !locked {
+		_ = os.Truncate(lockPath, 0) // a missing file already means released
+		return
+	}
+	defer release()
+	_ = os.Remove(lockPath) // a missing file already means released
 }
 
 func unsupportedFingerprintFiles(fingerprint *Fingerprint, drift *Drift) []string {

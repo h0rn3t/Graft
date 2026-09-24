@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"context"
 	"errors"
 	"io/fs"
 	"os"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -277,11 +279,14 @@ func TestEnsureFreshGraphSeedsGitWorktreeContract(t *testing.T) {
 			t.Errorf("Stat(%q) after worktree seed error = %v, want copied sidecar", path, err)
 		}
 	}
-	for _, name := range []string{"unrelated.json", ".sync.lock"} {
-		path := filepath.Join(root, "graft", ".cache", name)
-		if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
-			t.Errorf("Stat(%q) after worktree seed error = %v, want no copied file", path, err)
-		}
+	unrelated := filepath.Join(root, "graft", ".cache", "unrelated.json")
+	if _, err := os.Stat(unrelated); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Stat(%q) after worktree seed error = %v, want no copied file", unrelated, err)
+	}
+	// The worktree keeps its own, empty lock file; the parent's is never copied.
+	lock := filepath.Join(root, "graft", ".cache", ".sync.lock")
+	if data, err := os.ReadFile(lock); err == nil && len(data) != 0 {
+		t.Errorf("ReadFile(%q) after worktree seed = %q, want no copied lock content", lock, data)
 	}
 
 	writeRefreshSource(t, root, "src/app.ts", "export function after() {}")
@@ -302,17 +307,12 @@ func TestEnsureFreshGraphSeedBusyLockContract(t *testing.T) {
 	t.Setenv("GRAFT_NO_REFRESH", "false")
 	t.Setenv("GRAFT_NO_SEED", "false")
 	_, root := newRefreshGitWorktree(t, "export function parentOnly() {}")
-	cacheDir := filepath.Join(root, "graft", ".cache")
-	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
-		t.Fatalf("MkdirAll(%q) error = %v, want nil", cacheDir, err)
-	}
-	lockPath := filepath.Join(cacheDir, ".sync.lock")
-	if err := os.WriteFile(lockPath, []byte("held"), 0o644); err != nil {
-		t.Fatalf("WriteFile(%q) error = %v, want nil", lockPath, err)
-	}
+	holdGraphLock(t, filepath.Join(root, "graft"))
 	options := RefreshOptions{Source: sourcefiles.Options{Extensions: []string{".ts"}}}
 	want := "another process is still copying the graph into this worktree — retry the query in a moment"
-	if got := EnsureFreshGraph(root, options); got != (RefreshResult{Note: want}) {
+	var got RefreshResult
+	synctest.Test(t, func(t *testing.T) { got = EnsureFreshGraph(root, options) })
+	if got != (RefreshResult{Note: want}) {
 		t.Errorf("EnsureFreshGraph(%q, %#v) with a held seed lock = %#v, want note %q", root, options, got, want)
 	}
 	if _, err := os.Stat(WiringPath(filepath.Join(root, "graft"))); !errors.Is(err, fs.ErrNotExist) {
@@ -513,13 +513,7 @@ func TestEnsureFreshGraphBusyLockContract(t *testing.T) {
 		writeRefreshSource(t, root, "src/app.ts", "export function before() {}")
 		buildAndWriteRefreshGraph(t, root, options.Source)
 		writeRefreshSource(t, root, "src/app.ts", "export function after() {}")
-		lockPath := filepath.Join(outDir, ".cache", ".sync.lock")
-		if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
-			t.Fatalf("MkdirAll(%q) error = %v", filepath.Dir(lockPath), err)
-		}
-		if err := os.WriteFile(lockPath, []byte("held"), 0o644); err != nil {
-			t.Fatalf("WriteFile(%q) error = %v", lockPath, err)
-		}
+		holdGraphLock(t, outDir)
 		result := make(chan RefreshResult, 1)
 		go func() { result <- EnsureFreshGraph(root, options) }()
 		synctest.Wait()
@@ -541,23 +535,76 @@ func TestEnsureFreshGraphReprobesAfterLockContract(t *testing.T) {
 		writeRefreshSource(t, root, "src/app.ts", "export function before() {}")
 		buildAndWriteRefreshGraph(t, root, sourceOptions)
 		writeRefreshSource(t, root, "src/app.ts", "export function after() {}")
-		lockPath := filepath.Join(outDir, ".cache", ".sync.lock")
-		if err := os.WriteFile(lockPath, []byte("held"), 0o644); err != nil {
-			t.Fatalf("WriteFile(%q) error = %v", lockPath, err)
-		}
+		release := holdGraphLock(t, outDir)
 		result := make(chan RefreshResult, 1)
 		go func() { result <- EnsureFreshGraph(root, options) }()
 		synctest.Wait()
 		buildAndWriteRefreshGraph(t, root, sourceOptions)
-		if err := os.Remove(lockPath); err != nil {
-			t.Fatalf("Remove(%q) error = %v", lockPath, err)
-		}
+		release()
 		synctest.Wait()
 		got := <-result
 		if got.Refreshed || got.Note != "" {
 			t.Errorf("EnsureFreshGraph(%q, %#v) after another build = %#v, want a no-op after re-probe", root, options, got)
 		}
 	})
+}
+
+// holdGraphLock takes outDir's graph writer lock for the rest of the test, or
+// until the returned release runs.
+func holdGraphLock(t *testing.T, outDir string) (release func()) {
+	t.Helper()
+	unlock, err := LockGraph(t.Context(), outDir)
+	if err != nil {
+		t.Fatalf("LockGraph(%q) error = %v, want nil", outDir, err)
+	}
+	release = sync.OnceFunc(unlock)
+	t.Cleanup(release)
+	return release
+}
+
+func TestLockGraphExcludesSecondLocker(t *testing.T) {
+	outDir := t.TempDir()
+	release := holdGraphLock(t, outDir)
+	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
+	defer cancel()
+	if second, err := LockGraph(ctx, outDir); !errors.Is(err, context.DeadlineExceeded) {
+		if second != nil {
+			second()
+		}
+		t.Fatalf("LockGraph(%q) while held error = %v, want %v", outDir, err, context.DeadlineExceeded)
+	}
+	if acquired, err := AcquireLock(filepath.Join(outDir, ".cache")); err != nil || acquired {
+		t.Errorf("AcquireLock(%q) while LockGraph is held = (%t, %v), want (false, nil)", outDir, acquired, err)
+	}
+	release()
+	lockPath := filepath.Join(outDir, ".cache", ".sync.lock")
+	if _, err := os.Stat(lockPath); err != nil {
+		t.Errorf("Stat(%q) after release error = %v, want the lock file kept", lockPath, err)
+	}
+	second, err := LockGraph(t.Context(), outDir)
+	if err != nil {
+		t.Fatalf("LockGraph(%q) after release error = %v, want nil", outDir, err)
+	}
+	second()
+	if acquired, err := AcquireLock(filepath.Join(outDir, ".cache")); err != nil || !acquired {
+		t.Errorf("AcquireLock(%q) on an idle lock file = (%t, %v), want (true, nil)", outDir, acquired, err)
+	}
+	ReleaseLock(filepath.Join(outDir, ".cache"))
+}
+
+func TestReleaseLockKeepsAHeldLockFile(t *testing.T) {
+	outDir := t.TempDir()
+	cache := filepath.Join(outDir, ".cache")
+	if acquired, err := AcquireLock(cache); err != nil || !acquired {
+		t.Fatalf("AcquireLock(%q) = (%t, %v), want (true, nil)", cache, acquired, err)
+	}
+	holdGraphLock(t, outDir)
+	ReleaseLock(cache)
+	lockPath := filepath.Join(cache, ".sync.lock")
+	info, err := os.Stat(lockPath)
+	if err != nil || info.Size() != 0 {
+		t.Errorf("Stat(%q) after ReleaseLock under a LockGraph holder = (%v, %v), want an empty kept file", lockPath, info, err)
+	}
 }
 
 func TestAcquireGraphLockReclaimsStaleContract(t *testing.T) {
