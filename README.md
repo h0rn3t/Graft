@@ -1,26 +1,16 @@
 <div align="center">
 
-<img src="assets/graft-hero.png" alt="Graft — open-source context layer for large codebases" width="100%"/>
+<img src="./a328474a-ba6a-42b1-9746-a1358d0a449d.png" alt="Graft" width="320" />
 
-### Turbocharge Claude Code, Cursor, Codex, Gemini & every coding agent: faster, cheaper, with contextual understanding specific to your codebase.
+### Native Go context for Claude Code, Cursor, Codex, Gemini, and every coding agent
 
-<a href="https://trendshift.io/repositories/92209?utm_source=trendshift-badge&utm_medium=badge&utm_campaign=badge-trendshift-92209" target="_blank" rel="noopener noreferrer"><img src="https://trendshift.io/api/badge/repositories/92209/daily?language=Go" alt="trailhq/Graft | Trendshift" width="250" height="55"/></a>
+<p><strong>Build a deterministic map of your codebase locally. Find the right code with less searching, reading, and token spend.</strong></p>
 
 <p>
-  <a href="https://github.com/h0rn3t/Graft"><img src="https://img.shields.io/github/stars/NanoNets/Graft?style=for-the-badge&logo=github&logoColor=white&label=Star%20on%20GitHub&color=FFC83D" /></a>
-  <a href="https://trailhq.com/graft"><img src="https://img.shields.io/badge/website-trailhq.com/graft-E5484D?style=for-the-badge" /></a>
-  <a href="https://discord.gg/zxmKweAA29"><img src="https://img.shields.io/badge/Discord-join-5865F2?style=for-the-badge&logo=discord&logoColor=white" /></a>
-  <a href="https://www.npmjs.com/package/@nanonets/graft"><img src="https://img.shields.io/npm/v/%40nanonets%2Fgraft?style=for-the-badge&logo=npm&logoColor=white&label=npm" /></a>
-  <a href="https://www.npmjs.com/package/@nanonets/graft"><img src="https://img.shields.io/npm/dm/%40nanonets%2Fgraft?style=for-the-badge&logo=npm&logoColor=white&label=downloads" /></a>
-  <a href="https://nodejs.org"><img src="https://img.shields.io/node/v/%40nanonets%2Fgraft?style=for-the-badge&logo=nodedotjs&logoColor=white" /></a>
-  <img src="https://img.shields.io/badge/Go-1.27-00ADD8?style=for-the-badge&logo=go&logoColor=white" />
-  <img src="https://img.shields.io/badge/License-MIT-20C997?style=for-the-badge" />
-  <a href="TELEMETRY.md"><img src="https://img.shields.io/badge/telemetry-anonymous%2C%20opt--out-546FFF?style=for-the-badge" /></a>
-  <a href="https://scorecard.dev/viewer/?uri=github.com/h0rn3t/Graft"><img src="https://img.shields.io/ossf-scorecard/github.com/h0rn3t/Graft?style=for-the-badge&label=openssf%20scorecard" /></a>
-  <a href="https://app.trailhq.com/get-started?step=pick"><img src="https://img.shields.io/badge/Trail%20Brain-try%20it-E5484D?style=for-the-badge&logoColor=white" /></a>
+  <img src="https://img.shields.io/badge/Go-1.27-00ADD8?style=for-the-badge&logo=go&logoColor=white" alt="Go 1.27" />
 </p>
 
-### Up to **4× cheaper** and **3× faster**, with better or no loss of correctness.
+### Up to **4× cheaper** and **3× faster**, with better or no loss of correctness
 
 | Metric | Cold Claude Code | Claude Code with graft |
 |---|---|---|
@@ -37,10 +27,6 @@
 </p>
 
 <p align="center">
-  <a href="https://app.trailhq.com/get-started?step=pick"><img src="https://img.shields.io/badge/Try%20Trail%20Brain%20%E2%86%92-E5484D?style=for-the-badge" alt="Try Trail Brain" height="34"/></a>
-</p>
-
-<p align="center">
   <img src="assets/graft-comparison-demo.gif" alt="Side-by-side comparison of a coding agent working with and without graft" width="820"/>
 </p>
 
@@ -48,7 +34,7 @@
 
 ## Contents
 
-- [Quick start](#quick-start)
+- [Installation and quick start](#installation-and-quick-start)
 - [The problem](#the-problem)
 - [What Graft does](#what-graft-does)
 - [Benchmark](#benchmark)
@@ -57,39 +43,69 @@
 - [Supported languages](#supported-languages)
 - [What's in the graph](#whats-in-the-graph)
 - [What runs where](#what-runs-where)
-- [Agent integration](#agent-integration) — [MCP server](#mcp-server) · [Claude Code](#claude-code)
+- [Agent integration](#agent-integration) — [MCP server](#mcp-server) · [Claude Code](#claude-code) · [Trail Brain](#trail-brain)
 - [CLI](#cli)
 - [Search & orient](#search--orient-graft-grep--graft-map) (`graft grep` / `graft map`)
-- [Monorepos & multi-repo folders](#monorepos--multi-repo-folders)
+- [Monorepos, submodules & multi-repo folders](#monorepos-submodules--multi-repo-folders)
 - [Tested on your popular repos](#tested-on-your-popular-repos)
 - [Development](#development)
-- [Go migration](#go-migration)
+- [Native Go architecture](#native-go-architecture)
 - [License](#license)
 
 ---
 
-## Quick start
+## Installation and quick start
+
+Graft is a native Go application. The recommended installation does not require Node.js.
+
+### Install with Go
+
+Requirements: **Go 1.27 or newer** and a working C toolchain, because the Tree-sitter bindings use cgo. Make sure `$(go env GOPATH)/bin` is on your `PATH`.
 
 ```bash
-npm install -g @nanonets/graft   # install the CLI, once
-graft init                       # build the graph + wire it into Claude Code
+go install github.com/h0rn3t/Graft/cmd/graft@latest
+graft init
 ```
 
-That is the whole setup. `graft init` asks which of your coding agents to wire up, builds `graft/` from your code, and drops a statusline and hooks into `.claude/`, so from the next session on Graft rides along in Claude Code: it injects matching graph pointers into relevant prompts and rebuilds the graph in the background after every turn. No daemon, no re-indexing to remember, nothing to run or maintain by default — the graph is just files.
+`graft init` asks which coding agents to wire, builds the local graph, and adds the selected agent instructions, MCP entry, hooks, and statusline where supported. It requires no API key: the full structural workflow is local and deterministic.
 
-Nothing is written until you pick. Run `graft init --dry-run` to see every file it would touch first, or `graft init --agents claude` to skip the prompt and wire Claude Code alone.
-
-`graft build` adds `graft/` to your `.gitignore` automatically — the graph is a local, regenerable cache (like `node_modules`), not something you commit. What you share is the wiring `init` dropped into `.claude/`; each teammate runs `graft build` to generate their own graph:
+Nothing is written until you choose an agent. Preview the plan with:
 
 ```bash
-git add .claude && git commit -m "wire in graft"
+graft init --dry-run
 ```
 
-Prefer not to install globally? `npx @nanonets/graft init` works the same way.
+You can also wire a specific host without a prompt:
 
-<p align="center">
-  <img src="assets/graft-terminal.png" alt="Two commands — npm install and graft init — then Graft rides along in a Claude Code session, statusline synced" width="820"/>
-</p>
+```bash
+graft init --agents claude
+```
+
+`graft build` adds `graft/` to `.gitignore` automatically. The graph is a regenerable local cache, while the small agent wiring created by `init` is what belongs in version control. For Claude Code, for example:
+
+```bash
+git add .claude .mcp.json .gitignore
+git commit -m "wire in graft"
+```
+
+Each teammate generates their own local graph with `graft build` or `graft init`.
+
+To update a Go installation, run the same `go install ...@latest` command.
+
+### npm distribution (alternative)
+
+If you prefer the prebuilt npm package, it still runs the same native Go binary:
+
+```bash
+npm install -g @nanonets/graft
+graft init
+```
+
+Node.js 20 or newer is required only by this npm launcher. A one-off run is also available:
+
+```bash
+npx -y @nanonets/graft@latest init
+```
 
 ---
 
@@ -114,7 +130,7 @@ Humans onboard to a codebase once. Agents onboard every single time.
 Graft builds a deterministic structural map of your codebase once and writes it into your repo as a regenerable local cache.
 
 - **Symbols and real wiring.** Tree-sitter extracts functions, classes, types, imports, calls, and inheritance; Graft resolves them into an exact file-and-edge graph.
-- **A local cache, not a committed artifact.** `graft build` writes `graft/` and adds it to `.gitignore` — it is regenerable like `node_modules`. What you commit is the small wiring `graft init` adds to your agent configuration.
+- **A local cache, not a committed artifact.** `graft build` writes `graft/` and adds it to `.gitignore` — it can be deleted and regenerated at any time. What you commit is the small wiring `graft init` adds to your agent configuration.
 - **Always fresh, automatically.** Query commands refresh the structural graph against the working tree before answering, so uncommitted edits are included. `graft check` reports the remaining drift without changing files.
 - **No model required.** `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, and `blast` are local and deterministic. Only `graft blast --name` can make an optional one-call LLM request to label the affected areas.
 
@@ -235,33 +251,36 @@ The same graph is serialized to `graft/.graph/wiring.json` and rendered as per-f
 ## What runs where
 
 - **On your machine, no key, no network:** every structural command, including `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, and `blast`.
-- **Optional provider call:** `graft blast --name` may use `GRAFT_API_KEY` (or the supported provider fallbacks) to label affected areas with one cached request. Without a key, Graft names areas after their hub symbols.
-- **Anonymous usage stats** — a daily npm version check and one batched usage ping. The ping carries buckets and fixed labels only: never code, paths, repository names, symbols, queries, or error messages. [`TELEMETRY.md`](TELEMETRY.md) is the complete contract; `graft telemetry debug` prints exactly what would be sent. Turn it off with `graft telemetry disable`, `DO_NOT_TRACK=1`, or the `graft init` prompt.
+- **Optional provider call:** `graft blast --name` may use `GRAFT_API_KEY` (or a supported provider fallback) to label affected areas with one cached request. Without a key, Graft names areas after their hub symbols.
+- **Anonymous usage stats in official npm builds:** version checks and one batched usage ping. The ping carries buckets and fixed labels only: never code, paths, repository names, symbols, queries, or error messages. Source builds without a baked telemetry key are inert. [`TELEMETRY.md`](TELEMETRY.md) is the complete contract; `graft telemetry debug` prints exactly what would be sent. Turn it off with `graft telemetry disable`, `DO_NOT_TRACK=1`, or the `graft init` prompt.
 
-See [`.env.example`](.env.example) for the full list of settings (model, base URL, graph directory).
+See [`.env.example`](.env.example) for local graph, refresh, LLM, brain, and telemetry settings.
 
 ---
 
 ## Agent integration
 
-One command wires Graft into the coding agents you use:
+One native Go command wires Graft into the coding agents you use:
 
 ```bash
-npx @nanonets/graft init
+graft init
 # detects your agents and writes each one's native instruction file;
 # Claude Code additionally gets the live statusline + hooks below
 ```
 
-On a terminal, `init` shows you every agent it knows about — flagging the ones it detected (via their config directories) and listing the exact files each would write — and wires only the ones you select. Claude Code is pre-selected; nothing else is. Selected agents get a marker-fenced Graft section in their shared instruction file — `AGENTS.md` (Codex, OpenCode and other CLIs that read it), `GEMINI.md`, `.github/copilot-instructions.md` — or a wholly-owned rule/skill file for the agents that use one: `.claude/skills/graft/SKILL.md`, `.cursor/rules/graft.mdc`, `.kiro/steering/graft.md`, `.windsurf/rules/graft.md`, `.grok/skills/graft/SKILL.md` for Grok (xAI), `.adal/skills/graft/SKILL.md` for [AdaL](https://adal.sylph.ai). Claude Code is in the second group: `init` writes its own skill file and never touches your `CLAUDE.md`. Re-running only updates Graft's own section (or replaces the owned file) and never touches the rest of your content.
+If Graft is available only through npm, use `npx -y @nanonets/graft@latest init` instead.
+
+On a terminal, `init` shows you every agent it knows about — flagging the ones it detected (via their config directories) and listing the exact files each would write — and wires only the ones you select. Claude Code is pre-selected; nothing else is. Selected agents get a marker-fenced Graft section in their shared instruction file — `AGENTS.md` (generic agents, Codex, Hermes, Antigravity, and other CLIs that read it), `GEMINI.md`, `.github/copilot-instructions.md` — or a wholly-owned rule/skill file for the agents that use one: `.claude/skills/graft/SKILL.md`, `.cursor/rules/graft.mdc`, `.kiro/steering/graft.md`, `.windsurf/rules/graft.md`, `.grok/skills/graft/SKILL.md` for Grok (xAI), `.adal/skills/graft/SKILL.md` for [AdaL](https://adal.sylph.ai). Claude Code is in the second group: `init` writes its own skill file and never touches your `CLAUDE.md`. Re-running only updates Graft's own section (or replaces the owned file) and never touches the rest of your content.
 
 With no TTY to prompt on — CI, a Dockerfile, a piped shell — `init` writes **nothing** and prints the command to run instead. Pass `--agents <ids>` or `--yes` to make a scripted run explicit.
 
 | Flag | Effect |
 |---|---|
-| `--agents <ids...>` | wire only these, no prompt — ids: `agents`, `cursor`, `gemini`, `grok`, `copilot`, `kiro`, `windsurf`, `adal`, `claude` |
+| `--agents <ids...>` | wire only these, no prompt — ids: `agents`, `adal`, `cursor`, `gemini`, `grok`, `hermes`, `antigravity`, `copilot`, `kiro`, `windsurf`, `claude` |
 | `--yes`, `-y` | skip the prompt and wire every **detected** agent |
 | `--dry-run` | print every file `init` would touch, then exit without writing |
 | `--all-agents` | write instruction files for every known agent, detected or not |
+| `--brain <handoff>` | connect a Trail Brain handoff after wiring the selected agents |
 | `--no-agents` | Claude Code wiring only; skip other agents |
 | `--list-agents` | print the known agent ids and exit |
 | `--no-mcp` | skip MCP server registration |
@@ -294,10 +313,16 @@ Both configs are user-level, so they apply to **every** repo you open with Codex
 | `graft_repo_map` | nothing | A first look at an unfamiliar repo: directory clusters, hubs, hotspots. |
 | `graft_check_freshness` | nothing | Whether the local graph has drifted from the code. |
 
-Register it by hand if your agent needs it explicit:
+Register it by hand if your agent needs it explicit and `graft` is on `PATH`:
 
 ```json
-{ "mcpServers": { "graft": { "command": "npx", "args": ["-y", "@nanonets/graft", "mcp"] } } }
+{ "mcpServers": { "graft": { "command": "graft", "args": ["mcp"] } } }
+```
+
+For an npm-only installation, use:
+
+```json
+{ "mcpServers": { "graft": { "command": "npx", "args": ["-y", "@nanonets/graft@latest", "mcp"] } } }
 ```
 
 Where a CLI agent supports user-level `hooks.json`, `init` also installs Graft's post-edit hook — blast-radius warnings and automatic `$0` graph re-sync after edits (skip with `--no-hooks`).
@@ -317,75 +342,103 @@ Where a CLI agent supports user-level `hooks.json`, `init` also installs Graft's
 
 `graft init` is idempotent and never clobbers your existing `.claude/settings.json` — it merges its blocks and leaves the rest alone. A `statusLine` that is not Graft's (anything whose command does not name `graft-statusline.cjs`) is left untouched; re-running `init` refreshes Graft's own helper if it is already installed. Pass `--no-statusline` (or `GRAFT_NO_STATUSLINE=1`) to skip installing one — a project-level `statusLine` would otherwise hide a custom one in `~/.claude/settings.json`.
 
+### Trail Brain
+
+A Trail Brain carries team rules alongside the structural graph, so retrieval can reflect project-specific decisions as well as code wiring. Connect an existing handoff during setup or later:
+
+```bash
+graft init --brain <handoff>
+graft brain connect <handoff>
+graft brain pull
+graft brain status
+graft brain push
+graft brain disconnect
+```
+
+`pull` refreshes the local rule cache. `push` submits the current repository to Trail, waits for the remote build by default, and can open a browser to finish first-time linking; pass `--no-watch` to return after submission. `disconnect` removes the link but leaves the cached rules and their fenced instruction sections in place.
+
 ---
 
 ## CLI
 
 ```bash
-graft build [dir]                    # build graft/ from the code at [dir]: wiring graph + per-file cards
-graft build --extensions .ts .py     # only include these code extensions
-graft build --no-reuse               # re-parse every file instead of replaying unchanged ones from cache
-graft build --follow-submodules      # include initialized submodules; persist the choice for builds + MCP refresh
-graft build --no-follow-submodules   # exclude submodules again and persist that choice (the default)
-graft build --follow-nested-repos    # include nested git clones the index doesn't track; persist the choice
-graft build --no-follow-nested-repos # exclude nested clones again and persist that choice (the default)
+graft build [dir]                    # build the graph and per-file cards
+graft build --extensions .ts .py     # restrict source extensions
+graft build --include-dir <name>     # re-include a normally excluded dot-directory
+graft build --only-dir <path>        # build one repository-relative subtree
+graft build --lsp                    # add best-effort compiler-resolved call edges
+graft build --no-reuse               # re-parse every file instead of replaying the extraction cache
+graft build --follow-submodules      # include initialized submodules and persist the choice
+graft build --no-follow-submodules   # restore the default submodule boundary
+graft build --follow-nested-repos    # include nested git clones not tracked by the superproject
+graft build --no-follow-nested-repos # restore the default nested-repository boundary
+graft build --no-gitignore           # do not add graft/ to .gitignore
+graft build --no-ignore              # do not add graft's re-include entries to .ignore
 
-graft ask "<task>" [dir]             # query the graph — ranked nodes + exact file:line (no LLM, no key)
-graft ask "<task>" --json            # machine-readable result
-graft ask "<task>" --in <scope>      # narrow to one sub-project of a monorepo/multi-repo folder (see below)
+graft ask "<task>" [dir]             # ranked nodes with exact file:line (no LLM, no key)
+graft ask "<task>" --source          # inline source excerpts; add --full for complete definitions
+graft ask "<task>" -n 10 --json      # limit hits and return machine-readable JSON
+graft ask "<task>" --in <scope>      # narrow to one scope in a monorepo or multi-repo folder
 
-graft skeleton <file> [dir]          # every signature in one file, no bodies — the API surface for ~1/10th the tokens (no LLM, no key)
+graft skeleton <file> [dir]          # signatures only: the cheapest view of a file's API
+graft skeleton <file> --json         # machine-readable signatures
+graft callers <symbol> [dir]         # who calls or references a symbol
+graft callers <symbol> --direction out  # what that symbol calls or references
+graft callers <symbol> -d all        # transitive dependencies; -d N sets an exact depth
+graft grep "<regex>" [dir]           # exhaustive search grouped by enclosing symbol
+graft grep "<regex>" --in <path>     # restrict the search to a path prefix
+graft grep "<regex>" -i --fixed      # case-insensitive literal search
+graft map [dir]                      # directory clusters, local hubs, and global hotspots
+graft map --max-dirs N --json        # choose the detail level and return JSON
+graft blast [dir]                    # structural blast radius of the working-tree diff
+graft blast --base origin/main       # compare the merge base with HEAD, as a PR check would
+graft blast --format markdown        # text, markdown, mermaid, or json
+graft blast --name                   # optionally label affected areas with one cached LLM call
+graft blast --no-owners              # skip reviewer suggestions derived from git history
+graft check [dir]                    # exit 1 when the graph is missing or stale; never writes
+graft check --json                   # machine-readable drift report
+graft stats [dir]                    # session usage mix and estimated tokens saved
+graft stats --json
+graft mcp [dir]                      # serve the six graph tools over MCP stdio
 
-graft callers <symbol> [dir]         # who calls/references/imports/implements/extends a symbol (no LLM, no key)
-graft callers <symbol> --direction out  # the reverse: what the symbol itself calls/references (was `graft callees`)
-graft callers <symbol> -d N          # walk transitively out to depth N — full blast radius (was `graft impact`)
+graft init [dir]                     # pick which agents to wire; nothing is written before confirmation
+graft init --dry-run                 # list every file that would be touched
+graft init --agents claude cursor    # wire only these hosts without prompting
+graft init --yes                     # wire every detected host
+graft init --all-agents              # wire every known host
+graft init --list-agents             # print the host ids
+graft init --brain <handoff>         # wire agents and connect a Trail Brain
+graft init --no-mcp                  # skip MCP registration
+graft init --no-hooks                # skip host hook installation
+graft init --no-statusline           # skip the Claude Code statusline
+graft init --no-global               # skip user-level host configuration
+graft init --no-build                # wire files without building the graph
 
-graft grep "<regex>" [dir]           # exhaustive regex search over indexed files, grouped by enclosing symbol (no LLM, no key)
-graft grep "<regex>" --in <path>     # narrow to files at or under this path prefix
-graft grep "<regex>" -i --fixed      # case-insensitive; treat the pattern as a literal string, not a regex
+graft uninstall [dir]                # preview removal; add -y to apply
+graft uninstall -y --keep-cache      # remove wiring but retain graft/ and ignore entries
+graft uninstall -y --no-global       # retain user-level host configuration
 
-graft map [dir]                      # token-budgeted repo orientation — dir clusters, hubs, hotspots (no LLM, no key)
-graft map --max-dirs N               # raise/lower the number of directories shown
+graft brain connect <handoff> [dir]  # attach a brain and pull its rules
+graft brain pull [dir]               # refresh cached rules
+graft brain push [dir]               # submit/build the repository in Trail
+graft brain push --no-watch          # return after submission instead of waiting for the build
+graft brain status [dir] --json      # inspect the attached brain and rule cache
+graft brain disconnect [dir]         # remove the brain link
 
-graft blast [dir]                    # blast radius of a diff: what depends on the lines this change touched (no LLM, no key)
-graft blast --base origin/main       # diff against the merge base with HEAD — what a PR job runs
-graft blast --format markdown        # a PR comment: the areas a change can reach, per-symbol detail collapsed under it
-graft blast --base origin/main --name  # name those areas with one optional cached LLM call
-graft blast --no-owners              # skip "who to tag" — by default git history names the people behind each area
-graft blast --depth all --format json  # the full transitive closure, machine-readable
+graft telemetry status               # show anonymous usage-stat state
+graft telemetry debug                # print the exact pending batch without sending it
+graft telemetry disable              # opt out; enable restores collection
+graft version                        # installed version plus the latest npm release
+graft upgrade                        # update a globally installed npm distribution
 
-graft check [dir]                    # fail (exit 1) if graft/ has drifted from the code (never auto-refreshes — it's the drift report)
-graft check --json                   # print the drift report as JSON
-
-# ask / skeleton / callers / grep / map / blast all refresh the graph first if the working tree moved:
-#   --no-refresh                     # answer from the graph exactly as it is on disk
-#   GRAFT_NO_REFRESH=1               # same, for every command
-#   GRAFT_REFRESH=hash               # hash every file instead of trusting size+mtime
-
-graft init [dir]                     # pick which agents to wire (prompts on a terminal; writes nothing until you choose)
-graft init --dry-run                 # list every file it would touch, then exit
-graft init --agents cursor kiro      # wire only these agents, no prompt (ids: agents, cursor, gemini, grok, copilot, kiro, windsurf, adal, claude)
-graft init --yes                     # no prompt; wire every detected agent
-graft init --no-global               # skip writes outside this repo (~/.codex/ config + hooks)
-graft init --no-statusline           # skip Claude Code statusLine (same as GRAFT_NO_STATUSLINE=1)
-graft init --no-build                # wire the files only; don't build the graph
-graft init --all-agents              # wire every known agent, detected or not
-graft init --list-agents             # list known agent ids and exit
-
-graft uninstall [dir]                # remove every file and config entry graft wrote here (the inverse of init)
-graft uninstall -y                   # actually remove (without -y it prints what it would remove and exits)
-graft uninstall --keep-cache         # wiring only; leave graft/ and the .gitignore entry
-graft uninstall --no-global          # leave out-of-repo files alone (~/.codex, ~/.gemini)
-
-graft version                        # print the installed + latest published npm version
-graft upgrade                        # npm install -g the latest published version
-                                     # a new version is announced automatically (checked once a day);
-                                     # after upgrading, the next session refreshes this repo's wiring itself
-
-# global
-graft --dir <path>                   # use a context dir other than <repo>/graft
-graft --version, -v                  # print the installed version and exit
+# global options
+graft --dir <path> <command>         # use a context directory other than <repo>/graft
+graft --version, -v                  # print the installed version
 ```
+
+`ask`, `skeleton`, `callers`, `grep`, `map`, and `blast` refresh changed source before answering. Use `--no-refresh` or `GRAFT_NO_REFRESH=1` to query the graph exactly as stored; set `GRAFT_REFRESH=hash` to verify files by content instead of size and mtime.
+
+`graft upgrade` updates the npm distribution. Update a Go installation with `go install github.com/h0rn3t/Graft/cmd/graft@latest`.
 
 Method calls resolve through the receiver's type — constructor assignments
 (`self.router = APIRouter()`) and type annotations, not just the call-site
@@ -521,27 +574,52 @@ Two clones of PocketBase at the same commit: one wired with `graft init`, one un
 
 ## Development
 
-The published package is a thin npm launcher around the native Go binary. Go 1.27 is required to build from source.
+The product implementation is Go 1.27. Node.js is needed only for the optional npm packaging and launcher tests.
 
 ```bash
-git clone https://github.com/h0rn3t/Graft.git && cd context-graph-engine
-npm install
-npm run build       # builds bin/graft-<platform>-<arch>
-npm test            # plain-JS launcher, shim, and postinstall tests
+git clone https://github.com/h0rn3t/Graft.git
+cd Graft
 
 go build ./...
 go test ./...
+go run ./cmd/graft build .
 ```
 
-The Go gate is authoritative for product behavior: `go build ./...`, `go vet ./...`, `go test -race ./...`, `golangci-lint run ./...`, `gofmt -l .`, and `go fix -diff ./...`.
+The complete Go release gate is:
+
+```bash
+go build ./...
+go vet ./...
+go test -race ./...
+golangci-lint run ./...
+test -z "$(gofmt -l .)"
+go fix -diff ./...
+```
+
+To verify the optional npm distribution, shims, and postinstall behavior:
+
+```bash
+npm install
+npm run build       # builds bin/graft-<platform>-<arch> from Go
+npm test
+```
 
 ---
 
-## Go migration
+## Native Go architecture
 
-The migration is complete. Go is the only implementation behind the CLI, MCP server, host hooks, statusline, graph extraction, upkeep, and telemetry. The former TypeScript behavior was frozen into Go-owned golden fixtures before removal; `docs/cli-contract.json` is now checked directly against `programSpec` and the Go environment inventory.
+Graft is one native Go application. The same binary implements the public CLI, graph extraction and queries, MCP server, host wiring, hooks, statusline, upkeep, and telemetry.
 
-The package contains only `bin/graft.js`, the platform-native binary, the postinstall script, and package metadata. There is no JavaScript library API, viewer, GitHub App, deep meaning layer, or TypeScript fallback.
+- `cmd/graft` — public command surface and runtime entry points.
+- `internal/graph` — deterministic extraction, resolution, cards, indexing, freshness, and workspace federation.
+- `internal/hosts` — agent configuration, MCP registration, native shims, and init/uninstall behavior.
+- `internal/telemetry` — allowlisted anonymous events and detached delivery.
+- `internal/upkeep` — update checks, wiring reconciliation, and brain-rule refresh.
+- `cmd/graft/testdata/goldens` — Go-owned regression fixtures for retained CLI behavior.
+
+There is no TypeScript backend, JavaScript library API, browser viewer, GitHub App, deep meaning layer, or TypeScript launcher fallback. The optional npm package contains only a small launcher, the host-native Go binary, and packaging scripts.
+
+`docs/cli-contract.json` is the public CLI contract and is checked against both `programSpec` and the Go environment inventory.
 
 ---
 
