@@ -1,9 +1,0 @@
-Usage: graft brain pull [options] [dir]
-
-Re-pull the attached brain's rules and rewrite the agent instruction files
-
-Arguments:
-  dir         target repo directory (default: ".")
-
-Options:
-  -h, --help  display help for command

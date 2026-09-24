@@ -43,7 +43,7 @@
 - [Supported languages](#supported-languages)
 - [What's in the graph](#whats-in-the-graph)
 - [What runs where](#what-runs-where)
-- [Agent integration](#agent-integration) — [MCP server](#mcp-server) · [Claude Code](#claude-code) · [Trail Brain](#trail-brain)
+- [Agent integration](#agent-integration) — [MCP server](#mcp-server) · [Claude Code](#claude-code)
 - [CLI](#cli)
 - [Search & orient](#search--orient-graft-grep--graft-map) (`graft grep` / `graft map`)
 - [Monorepos, submodules & multi-repo folders](#monorepos-submodules--multi-repo-folders)
@@ -132,7 +132,7 @@ Graft builds a deterministic structural map of your codebase once and writes it 
 - **Symbols and real wiring.** Tree-sitter extracts functions, classes, types, imports, calls, and inheritance; Graft resolves them into an exact file-and-edge graph.
 - **A local cache, not a committed artifact.** `graft build` writes `graft/` and adds it to `.gitignore` — it can be deleted and regenerated at any time. What you commit is the small wiring `graft init` adds to your agent configuration.
 - **Always fresh, automatically.** Query commands refresh the structural graph against the working tree before answering, so uncommitted edits are included. `graft check` reports the remaining drift without changing files.
-- **No model required.** `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, and `blast` are local and deterministic. Only `graft blast --name` can make an optional one-call LLM request to label the affected areas.
+- **No model required.** `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, and `blast` are local and deterministic.
 
 <p align="center">
   <picture>
@@ -250,11 +250,9 @@ The same graph is serialized to `graft/.graph/wiring.json` and rendered as per-f
 
 ## What runs where
 
-- **On your machine, no key, no network:** every structural command, including `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, and `blast`.
-- **Optional provider call:** `graft blast --name` may use `GRAFT_API_KEY` (or a supported provider fallback) to label affected areas with one cached request. Without a key, Graft names areas after their hub symbols.
-- **Anonymous usage stats in official npm builds:** version checks and one batched usage ping. The ping carries buckets and fixed labels only: never code, paths, repository names, symbols, queries, or error messages. Source builds without a baked telemetry key are inert. [`TELEMETRY.md`](TELEMETRY.md) is the complete contract; `graft telemetry debug` prints exactly what would be sent. Turn it off with `graft telemetry disable`, `DO_NOT_TRACK=1`, or the `graft init` prompt.
+- **Everything runs on your machine, with no key and no network:** every command, including `graft build`, `check`, `ask`, `grep`, `callers`, `skeleton`, `map`, `blast`, and the MCP server. Graft itself makes no network calls: no LLM provider, no usage telemetry, no update check.
 
-See [`.env.example`](.env.example) for local graph, refresh, LLM, brain, and telemetry settings.
+See [`.env.example`](.env.example) for local graph, refresh, and host-wiring settings.
 
 ---
 
@@ -280,7 +278,6 @@ With no TTY to prompt on — CI, a Dockerfile, a piped shell — `init` writes *
 | `--yes`, `-y` | skip the prompt and wire every **detected** agent |
 | `--dry-run` | print every file `init` would touch, then exit without writing |
 | `--all-agents` | write instruction files for every known agent, detected or not |
-| `--brain <handoff>` | connect a Trail Brain handoff after wiring the selected agents |
 | `--no-agents` | Claude Code wiring only; skip other agents |
 | `--list-agents` | print the known agent ids and exit |
 | `--no-mcp` | skip MCP server registration |
@@ -342,21 +339,6 @@ Where a CLI agent supports user-level `hooks.json`, `init` also installs Graft's
 
 `graft init` is idempotent and never clobbers your existing `.claude/settings.json` — it merges its blocks and leaves the rest alone. A `statusLine` that is not Graft's (anything whose command does not name `graft-statusline.cjs`) is left untouched; re-running `init` refreshes Graft's own helper if it is already installed. Pass `--no-statusline` (or `GRAFT_NO_STATUSLINE=1`) to skip installing one — a project-level `statusLine` would otherwise hide a custom one in `~/.claude/settings.json`.
 
-### Trail Brain
-
-A Trail Brain carries team rules alongside the structural graph, so retrieval can reflect project-specific decisions as well as code wiring. Connect an existing handoff during setup or later:
-
-```bash
-graft init --brain <handoff>
-graft brain connect <handoff>
-graft brain pull
-graft brain status
-graft brain push
-graft brain disconnect
-```
-
-`pull` refreshes the local rule cache. `push` submits the current repository to Trail, waits for the remote build by default, and can open a browser to finish first-time linking; pass `--no-watch` to return after submission. `disconnect` removes the link but leaves the cached rules and their fenced instruction sections in place.
-
 ---
 
 ## CLI
@@ -393,7 +375,6 @@ graft map --max-dirs N --json        # choose the detail level and return JSON
 graft blast [dir]                    # structural blast radius of the working-tree diff
 graft blast --base origin/main       # compare the merge base with HEAD, as a PR check would
 graft blast --format markdown        # text, markdown, mermaid, or json
-graft blast --name                   # optionally label affected areas with one cached LLM call
 graft blast --no-owners              # skip reviewer suggestions derived from git history
 graft check [dir]                    # exit 1 when the graph is missing or stale; never writes
 graft check --json                   # machine-readable drift report
@@ -407,7 +388,6 @@ graft init --agents claude cursor    # wire only these hosts without prompting
 graft init --yes                     # wire every detected host
 graft init --all-agents              # wire every known host
 graft init --list-agents             # print the host ids
-graft init --brain <handoff>         # wire agents and connect a Trail Brain
 graft init --no-mcp                  # skip MCP registration
 graft init --no-hooks                # skip host hook installation
 graft init --no-statusline           # skip the Claude Code statusline
@@ -418,18 +398,7 @@ graft uninstall [dir]                # preview removal; add -y to apply
 graft uninstall -y --keep-cache      # remove wiring but retain graft/ and ignore entries
 graft uninstall -y --no-global       # retain user-level host configuration
 
-graft brain connect <handoff> [dir]  # attach a brain and pull its rules
-graft brain pull [dir]               # refresh cached rules
-graft brain push [dir]               # submit/build the repository in Trail
-graft brain push --no-watch          # return after submission instead of waiting for the build
-graft brain status [dir] --json      # inspect the attached brain and rule cache
-graft brain disconnect [dir]         # remove the brain link
-
-graft telemetry status               # show anonymous usage-stat state
-graft telemetry debug                # print the exact pending batch without sending it
-graft telemetry disable              # opt out; enable restores collection
-graft version                        # installed version plus the latest npm release
-graft upgrade                        # update a globally installed npm distribution
+graft version                        # print the installed version
 
 # global options
 graft --dir <path> <command>         # use a context directory other than <repo>/graft
@@ -438,7 +407,7 @@ graft --version, -v                  # print the installed version
 
 `ask`, `skeleton`, `callers`, `grep`, `map`, and `blast` refresh changed source before answering. Use `--no-refresh` or `GRAFT_NO_REFRESH=1` to query the graph exactly as stored; set `GRAFT_REFRESH=hash` to verify files by content instead of size and mtime.
 
-`graft upgrade` updates the npm distribution. Update a Go installation with `go install github.com/h0rn3t/Graft/cmd/graft@latest`.
+To update, re-run the installation command: `go install github.com/h0rn3t/Graft/cmd/graft@latest`, or `npm i -g @nanonets/graft@latest` for the npm distribution.
 
 Method calls resolve through the receiver's type — constructor assignments
 (`self.router = APIRouter()`) and type annotations, not just the call-site
@@ -608,13 +577,12 @@ npm test
 
 ## Native Go architecture
 
-Graft is one native Go application. The same binary implements the public CLI, graph extraction and queries, MCP server, host wiring, hooks, statusline, upkeep, and telemetry.
+Graft is one native Go application. The same binary implements the public CLI, graph extraction and queries, MCP server, host wiring, hooks, statusline, and upkeep.
 
 - `cmd/graft` — public command surface and runtime entry points.
 - `internal/graph` — deterministic extraction, resolution, cards, indexing, freshness, and workspace federation.
 - `internal/hosts` — agent configuration, MCP registration, native shims, and init/uninstall behavior.
-- `internal/telemetry` — allowlisted anonymous events and detached delivery.
-- `internal/upkeep` — update checks, wiring reconciliation, and brain-rule refresh.
+- `internal/upkeep` — wiring reconciliation when the installed version changes.
 - `cmd/graft/testdata/goldens` — Go-owned regression fixtures for retained CLI behavior.
 
 There is no TypeScript backend, JavaScript library API, browser viewer, GitHub App, deep meaning layer, or TypeScript launcher fallback. The optional npm package contains only a small launcher, the host-native Go binary, and packaging scripts.

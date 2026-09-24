@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"fmt"
@@ -56,16 +55,6 @@ func runBlast(opts callersOptions, stdout, stderr io.Writer) int {
 	}
 
 	report := blast.Radius(*loaded, diff.Files, diff.Basis, depth)
-	if opts.name {
-		note, err := blast.NameReport(context.Background(), *loaded, report, contextDir)
-		if err != nil {
-			writeDiagnostic(stderr, "✗ %v\n", err)
-			return 1
-		}
-		if note != "" {
-			writeDiagnostic(stderr, "• --name: %s\n", note)
-		}
-	}
 	if !opts.noOwners {
 		// With no --base there is no commit range, so the local identity stands in
 		// for the author the suggestions must leave out.

@@ -6,14 +6,10 @@ import (
 	"strings"
 )
 
-// TelemetryRowID marks the picker's usage-stats consent row.
-const TelemetryRowID = "__telemetry"
-
 // PickerRow is one selectable line of the init picker.
 type PickerRow struct {
 	ID        string
 	Label     string
-	Setting   bool
 	Detected  bool
 	Summary   string
 	HasGlobal bool
@@ -41,8 +37,8 @@ const (
 	KeyAbort PickerKey = "abort"
 )
 
-// InitialPickerState checks Claude Code and, when offered, the consent row.
-func InitialPickerState(plans []HostPlan, repo, home string, offerTelemetry bool) PickerState {
+// InitialPickerState checks Claude Code.
+func InitialPickerState(plans []HostPlan, repo, home string) PickerState {
 	state := PickerState{Checked: make(map[string]bool)}
 	for _, plan := range plans {
 		state.Rows = append(state.Rows, PickerRow{
@@ -53,13 +49,6 @@ func InitialPickerState(plans []HostPlan, repo, home string, offerTelemetry bool
 		if plan.ID == "claude" {
 			state.Checked["claude"] = true
 		}
-	}
-	if offerTelemetry {
-		state.Rows = append(state.Rows, PickerRow{
-			ID: TelemetryRowID, Label: "anonymous usage stats", Setting: true, Detected: true,
-			Summary: "no code, no file paths, no queries · TELEMETRY.md",
-		})
-		state.Checked[TelemetryRowID] = true
 	}
 	return state
 }
@@ -132,13 +121,12 @@ func ReducePicker(state PickerState, key PickerKey) PickerState {
 	return next
 }
 
-// toggleAllHosts checks every agent, or clears them when all were checked;
-// setting rows keep whatever the user chose.
+// toggleAllHosts checks every agent, or clears them when all were checked.
 func toggleAllHosts(state PickerState) map[string]bool {
-	allOn := !slices.ContainsFunc(state.Rows, func(row PickerRow) bool { return !row.Setting && !state.Checked[row.ID] })
+	allOn := !slices.ContainsFunc(state.Rows, func(row PickerRow) bool { return !state.Checked[row.ID] })
 	checked := make(map[string]bool)
 	for _, row := range state.Rows {
-		if row.Setting && state.Checked[row.ID] || !row.Setting && !allOn {
+		if !allOn {
 			checked[row.ID] = true
 		}
 	}
@@ -162,12 +150,7 @@ func RenderPicker(state PickerState, tty bool) string {
 		size = max(size, width(label(row)))
 	}
 	lines := []string{"graft init — select what to wire into this repo:", ""}
-	ruled := false
 	for i, row := range state.Rows {
-		if row.Setting && !ruled {
-			lines = append(lines, dim("  "+strings.Repeat("─", size+24)))
-			ruled = true
-		}
 		here := i == state.Cursor
 		box := "[ ]"
 		if state.Checked[row.ID] {
@@ -178,7 +161,7 @@ func RenderPicker(state PickerState, tty bool) string {
 			name, pointer = hot(row.Label), "›"
 		}
 		tag := ""
-		if !row.Detected && !row.Setting {
+		if !row.Detected {
 			tag = dim(" (not detected)")
 		}
 		summary := dim(row.Summary)
@@ -195,19 +178,9 @@ func RenderPicker(state PickerState, tty bool) string {
 func PickedHostIDs(state PickerState) []string {
 	ids := make([]string, 0)
 	for _, row := range state.Rows {
-		if !row.Setting && state.Checked[row.ID] {
+		if state.Checked[row.ID] {
 			ids = append(ids, row.ID)
 		}
 	}
 	return ids
-}
-
-// PickedTelemetry is the consent answer, or false and not offered.
-func PickedTelemetry(state PickerState) (consent, offered bool) {
-	for _, row := range state.Rows {
-		if row.ID == TelemetryRowID {
-			return state.Checked[TelemetryRowID], true
-		}
-	}
-	return false, false
 }

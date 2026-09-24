@@ -2,13 +2,9 @@ package main
 
 import (
 	"bytes"
-	"context"
 	"encoding/json/v2"
-	"errors"
 	"fmt"
 	"io"
-	"net"
-	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,8 +22,6 @@ type goldenRuntime struct {
 	home        string
 	elsewhere   string
 	root        string
-	brainURL    string
-	requests    []goldenRequest
 	normalizeMS bool
 }
 
@@ -158,18 +152,16 @@ func runGoldenSetup(t *testing.T, runtime *goldenRuntime, commands []goldenComma
 
 func (runtime *goldenRuntime) setEnvironment(t *testing.T, env map[string]string) {
 	t.Helper()
-	for _, name := range []string{"CI", "GITHUB_ACTIONS", "CLAUDECODE", "GRAFT_BRAIN_TOKEN", "GRAFT_BRAIN_ID", "GRAFT_DIR", "GRAFT_NO_REFRESH", "GH_TOKEN", "GITHUB_TOKEN", "GRAFT_POSTHOG_KEY", "GRAFT_POSTHOG_HOST"} {
+	for _, name := range []string{"CI", "GITHUB_ACTIONS", "CLAUDECODE", "GRAFT_DIR", "GRAFT_NO_REFRESH", "GH_TOKEN", "GITHUB_TOKEN"} {
 		t.Setenv(name, "")
 	}
 	t.Setenv("HOME", runtime.home)
 	t.Setenv("USERPROFILE", runtime.home)
-	t.Setenv("DO_NOT_TRACK", "1")
 	t.Setenv("COLUMNS", "80")
 	if err := os.Unsetenv("CLAUDECODE"); err != nil {
 		t.Fatalf("os.Unsetenv(CLAUDECODE) error = %v, want nil", err)
 	}
 	t.Setenv("GRAFT_MCP_NPX", "1")
-	t.Setenv("GRAFT_NO_BROWSER", "1")
 	if runtime.bin() != "" {
 		if _, err := os.Stat(runtime.bin()); err == nil {
 			t.Setenv("PATH", runtime.bin()+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -177,11 +169,6 @@ func (runtime *goldenRuntime) setEnvironment(t *testing.T, env map[string]string
 	}
 	for name, value := range env {
 		t.Setenv(name, materializeGolden(value, runtime.base, runtime.repo, runtime.home, runtime.elsewhere))
-	}
-	if runtime.brainURL != "" {
-		if value, ok := env["GRAFT_BRAIN_URL"]; !ok || value == "<BRAIN_URL>" {
-			t.Setenv("GRAFT_BRAIN_URL", runtime.brainURL)
-		}
 	}
 }
 
@@ -196,22 +183,18 @@ func (runtime goldenRuntime) normalize(value string) string {
 	}
 	value = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z`).ReplaceAllString(value, "<ISO>")
 	value = normalizeGoldenText(value, runtime.base, runtime.repo, runtime.home, runtime.elsewhere)
-	if runtime.brainURL != "" {
-		value = strings.ReplaceAll(value, runtime.brainURL, "<BRAIN_URL>")
-	}
 	value = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}`).ReplaceAllString(value, "<UUID>")
 	value = regexp.MustCompile(`"pid":\s*\d+`).ReplaceAllString(value, `"pid":<PID>`)
 	if runtime.normalizeMS {
-		value = regexp.MustCompile(`"(fetchedAt|checkedAt|flushedAt)":\s*(?:<TIME>|\d+)`).ReplaceAllString(value, `"$1":<MS>`)
+		value = regexp.MustCompile(`"checkedAt":\s*(?:<TIME>|\d+)`).ReplaceAllString(value, `"checkedAt":<MS>`)
 	} else {
 		value = regexp.MustCompile(`"checkedAt":<TIME>`).ReplaceAllString(value, `"checkedAt": 4102444800000`)
 	}
-	value = regexp.MustCompile(`"node_major":\s*"\d+",?\s*`).ReplaceAllString(value, "")
 	value = regexp.MustCompile(`const BAKED = ".*";`).ReplaceAllString(value, `const BAKED = "<BAKED>";`)
 	if !runtime.normalizeMS {
 		value = regexp.MustCompile(`"at": "[^"]+"`).ReplaceAllString(value, `"at": "<AT>"`)
 	}
-	return regexp.MustCompile(`graft_port=\d+&graft_state=[A-Za-z0-9_-]+`).ReplaceAllString(value, "graft_port=<PORT>&graft_state=<STATE>")
+	return value
 }
 
 func (runtime goldenRuntime) files(t *testing.T, withModes bool) map[string]string {
@@ -268,7 +251,6 @@ func (runtime *goldenRuntime) runCLI(t *testing.T, golden goldenCase) {
 	runtime.setEnvironment(t, golden.Env)
 	t.Chdir(runtime.repo)
 	applyGoldenMutations(t, runtime.base, runtime.repo, runtime.home, runtime.elsewhere, golden.Mutations)
-	runtime.requests = nil
 	args := make([]string, len(golden.Args))
 	for i, arg := range golden.Args {
 		args[i] = materializeGolden(arg, runtime.base, runtime.repo, runtime.home, runtime.elsewhere)
@@ -293,11 +275,6 @@ func (runtime *goldenRuntime) runCLI(t *testing.T, golden goldenCase) {
 	}
 	if got := runtime.normalize(stderr.String()); got != golden.Stderr {
 		t.Errorf("run(%v) stderr = %q, want %q", args, got, golden.Stderr)
-	}
-	if golden.Requests != nil {
-		if len(runtime.requests) != len(golden.Requests) || !reflect.DeepEqual(runtime.requests, golden.Requests) && len(runtime.requests) > 0 {
-			t.Errorf("run(%v) requests = %#v, want %#v", args, runtime.requests, golden.Requests)
-		}
 	}
 	if golden.CheckFiles {
 		compareGoldenFiles(t, runtime.files(t, hasFileModes(golden.Files)), golden.Files)
@@ -522,66 +499,6 @@ func (writer *mcpReplayWriter) Write(data []byte) (int, error) {
 		if done := writer.waiting[id]; done != nil {
 			close(done)
 		}
-	}
-}
-
-func (runtime *goldenRuntime) startBrainServer(t *testing.T) {
-	t.Helper()
-	server := &goldenBrainServer{requests: &runtime.requests}
-	httpServer := &http.Server{Handler: server}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("net.Listen() error = %v, want nil", err)
-	}
-	go func() {
-		if err := httpServer.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			t.Errorf("http.Server.Serve() error = %v, want nil", err)
-		}
-	}()
-	t.Cleanup(func() {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-		defer cancel()
-		if err := httpServer.Shutdown(ctx); err != nil && !errors.Is(err, context.Canceled) {
-			t.Errorf("http.Server.Shutdown() error = %v, want nil", err)
-		}
-	})
-	runtime.brainURL = "http://" + listener.Addr().String()
-}
-
-type goldenBrainServer struct {
-	requests *[]goldenRequest
-}
-
-func (server *goldenBrainServer) ServeHTTP(writer http.ResponseWriter, request *http.Request) {
-	writer.Header().Set("content-type", "application/json")
-	if request.Header.Get("authorization") != "Bearer tok" {
-		writer.WriteHeader(http.StatusUnauthorized)
-		_, _ = writer.Write([]byte("{}"))
-		return
-	}
-	if request.Method == http.MethodPost {
-		data, err := io.ReadAll(http.MaxBytesReader(writer, request.Body, 1<<20))
-		if err != nil {
-			http.Error(writer, "invalid body", http.StatusBadRequest)
-			return
-		}
-		var body any
-		if err := json.Unmarshal(data, &body); err != nil {
-			http.Error(writer, "invalid body", http.StatusBadRequest)
-			return
-		}
-		*server.requests = append(*server.requests, goldenRequest{URL: request.URL.RequestURI(), Body: body})
-		_, _ = writer.Write([]byte(`{"job_id":"job-1"}`))
-		return
-	}
-	switch request.URL.Path {
-	case "/api/public/brains/B1/rules/anchors":
-		_, _ = writer.Write([]byte(`{"anchors":[{"rule_id":"r1","symbol":"src/store.ts#Store.get","fingerprint":"stale-hash","rule":"Reads never hit the network.","source_url":"https://github.com/acme/widgets/pull/7"},{"rule_id":"r2","symbol":"general","fingerprint":"","rule":"Keep PRs under 400 lines."},{"rule_id":"r3","symbol":"src/a b.ts#x","rule":"Spaces sort before commas."},{"rule_id":"r4","symbol":"","rule":"dropped: no symbol"}]}`))
-	case "/api/public/brains/B1/repo":
-		_, _ = writer.Write([]byte(`{"repo":{"slug":"Acme/Widgets","status":"completed","rule_count":3,"commit_count":4,"thread_count":0},"brain_name":"Widgets","build":{"found_so_far":3,"filed_so_far":3}}`))
-	default:
-		writer.WriteHeader(http.StatusNotFound)
-		_, _ = writer.Write([]byte("{}"))
 	}
 }
 

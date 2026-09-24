@@ -20,7 +20,6 @@ import (
 	"github.com/h0rn3t/Graft/internal/hosts"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
 	"github.com/h0rn3t/Graft/internal/savings"
-	"github.com/h0rn3t/Graft/internal/telemetry"
 	"github.com/h0rn3t/Graft/internal/upkeep"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -135,10 +134,6 @@ func runMCP(opts callersOptions, stdin io.Reader, stdout, stderr io.Writer) int 
 	for _, line := range lines {
 		writeDiagnostic(stderr, "%s\n", line)
 	}
-	// Flushed from a detached child at boot, so a user who never runs the CLI
-	// still gets their events out. The first-run notice stays for the CLI: this
-	// stderr goes to an editor log nobody reads.
-	telemetry.MaybeFlushInBackground(homeDir(), time.Now())
 	server := newMCPServerWith(opts, root, contextDir, version, mcpInstructionsFrom(lines))
 	if err := server.Run(context.Background(), &mcpTransport{reader: stdin, writer: stdout}); err != nil && !errors.Is(err, io.EOF) {
 		writeDiagnostic(stderr, "✗ %v\n", err)
@@ -170,7 +165,6 @@ func newMCPServerWith(opts callersOptions, root, contextDir, version, instructio
 			func(_ context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				args := mcpToolArguments(request.Params.Arguments)
 				result := mcpCall(root, contextDir, opts.contextDir, request.Params.Name, args)
-				trackMCPQuery(root, request.Params.Name)
 				return mcpSDKResult(result), nil
 			},
 		)
@@ -214,7 +208,6 @@ func newMCPServerWith(opts callersOptions, root, contextDir, version, instructio
 				}
 				args := mcpToolArguments(call.Params.Arguments)
 				result := mcpCall(root, contextDir, opts.contextDir, call.Params.Name, args)
-				trackMCPQuery(root, call.Params.Name)
 				return mcpSDKResult(result), nil
 			default:
 				return next(ctx, method, request)
@@ -235,25 +228,9 @@ func mcpInstructionsFrom(lines []string) string {
 	return strings.Join(lines, "\n") + "\n\n" + mcpInstructionsText
 }
 
-// mcpToolCommand maps canonical tool names to the command a query event reports.
-var mcpToolCommand = map[string]string{
-	"graft_find_code": "ask", "graft_find_all": "grep", "graft_trace_calls": "callers",
-	"graft_file_api": "skeleton", "graft_repo_map": "map", "graft_check_freshness": "check",
-}
-
-// trackMCPQuery queues one `query` event per tool call. An alias or unknown
-// name reports no command, and no hit: a tool error is not "no answer".
-func trackMCPQuery(root, name string) {
-	properties := []telemetry.Property{{Key: "surface", Value: "mcp"}}
-	if command, ok := mcpToolCommand[name]; ok {
-		properties = []telemetry.Property{{Key: "command", Value: command}, properties[0]}
-	}
-	telemetry.Track("query", properties, telemetry.Context{Repo: root, Host: "mcp", Home: homeDir(), Version: currentVersion()})
-}
-
 // mcpUpkeepLines runs the boot-time upkeep and returns the lines worth showing.
-// The stamp and the rule cache live under GRAFT_DIR or <root>/graft, as the
-// TypeScript cacheDir resolves them, whatever --dir the server was given.
+// The stamp lives under GRAFT_DIR or <root>/graft, as the TypeScript cacheDir
+// resolves it, whatever --dir the server was given.
 func mcpUpkeepLines(root, _, current string) []string {
 	now := time.Now()
 	home := homeDir()
@@ -266,11 +243,6 @@ func mcpUpkeepLines(root, _, current string) []string {
 		},
 	); note != "" {
 		lines = append(lines, note)
-	}
-	upkeep.MaybeRefreshBrainRules(root, "", now)
-	if home != "" {
-		upkeep.MaybeRefreshInBackground(home, now)
-		lines = append(lines, upkeep.StartupLines(current, home)...)
 	}
 	return lines
 }

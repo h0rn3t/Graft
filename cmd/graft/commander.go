@@ -113,7 +113,7 @@ func newCommand(usage string, options []string) *commandSpec {
 // programSpec is the whole command tree, mirroring docs/cli-contract.json.
 func programSpec() *commandSpec {
 	program := &commandSpec{name: "graft", group: true}
-	for _, flags := range []string{"-v, --version", "--dir <path>", "--provider <name>", "--model <id>", "--api-key <key>", "--base-url <url>"} {
+	for _, flags := range []string{"-v, --version", "--dir <path>"} {
 		program.options = append(program.options, parseOptionSpec(flags))
 	}
 	add := func(parent *commandSpec, usage string, options ...string) *commandSpec {
@@ -123,16 +123,10 @@ func programSpec() *commandSpec {
 		parent.commands = append(parent.commands, command)
 		return command
 	}
-	add(program, "graft _brain-refresh [options] [dir]").hidden = true
-	add(program, "graft _update-check [options]").hidden = true
-	add(program, "graft _telemetry-flush [options]").hidden = true
 	add(program, "graft _hook [options] <sub>").hidden = true
 	add(program, "graft _statusline [options]").hidden = true
 	add(program, "graft _sync-run [options] <dir>").hidden = true
-	add(program, "graft _install [options]").hidden = true
-	add(program, "graft telemetry [options] [action]")
 	add(program, "graft version [options]")
-	add(program, "graft upgrade [options]")
 	add(program, "graft build [options] [dir]", "-e, --extensions <exts...>", "--no-reuse", "--lsp",
 		"--follow-submodules", "--no-follow-submodules", "--follow-nested-repos", "--no-follow-nested-repos",
 		"--include-dir <name>", "--only-dir <path>", "--no-gitignore", "--no-ignore")
@@ -142,24 +136,17 @@ func programSpec() *commandSpec {
 	add(program, "graft stats [options] [dir]", "--json")
 	add(program, "graft mcp [options] [dir]")
 	add(program, "graft callers [options] <symbol> [dir]", "--direction <in|out>", "-d, --depth <n>", "--in <path>", "--json", "--no-refresh")
-	add(program, "graft blast [options] [dir]", "--base <ref>", "-d, --depth <n>", "--format <fmt>", "--name",
+	add(program, "graft blast [options] [dir]", "--base <ref>", "-d, --depth <n>", "--format <fmt>",
 		"--no-owners", "--pr-author <who...>", "--no-refresh")
 	add(program, "graft grep [options] <pattern> [dir]", "-i, --ignore-case", "--fixed", "--in <path>", "--json", "--no-refresh")
 	add(program, "graft map [options] [dir]", "--max-dirs <n>", "--json", "--no-refresh")
 	add(program, "graft init [options] [dir]", "--no-build", "--agents <ids...>", "--all-agents", "--no-agents", "--list-agents", "--no-mcp",
-		"--no-hooks", "--no-statusline", "--dry-run", "-y, --yes", "--no-global", "--brain <handoff>")
+		"--no-hooks", "--no-statusline", "--dry-run", "-y, --yes", "--no-global")
 	add(program, "graft uninstall [options] [dir]", "-y, --yes", "--keep-cache", "--no-global")
-	brain := add(program, "graft brain [options] [command]")
-	brain.group = true
-	add(brain, "graft brain connect [options] <handoff> [dir]")
-	add(brain, "graft brain pull [options] [dir]")
-	add(brain, "graft brain push [options] [dir]", "--no-approve", "--no-watch")
-	add(brain, "graft brain status [options] [dir]", "--json")
-	add(brain, "graft brain disconnect [options] [dir]")
 	return program
 }
 
-// path is the command's name from the program down, e.g. "brain connect".
+// path is the command's name from the program down.
 func (command *commandSpec) path() string {
 	if command.parent == nil || command.parent.parent == nil {
 		return command.name

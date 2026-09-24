@@ -32,11 +32,8 @@ func (depth Depth) MarshalJSON() ([]byte, error) {
 // LabelSource is where a cluster's label came from.
 type LabelSource string
 
-// Label sources, best first.
-const (
-	LabelNamed  LabelSource = "named"
-	LabelSymbol LabelSource = "symbol"
-)
+// LabelSymbol labels a cluster after its symbols or directory.
+const LabelSymbol LabelSource = "symbol"
 
 // TestSignal says whether a diff brought the tests of an area along.
 type TestSignal string

@@ -8,11 +8,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
-	"github.com/h0rn3t/Graft/internal/upkeep"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -63,13 +61,8 @@ func TestMCPServerSpeaksOfficialSDK(t *testing.T) {
 	}
 }
 
-func TestMCPStartupUpkeepIncludesCachedVersionNudge(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	latest := "99.0.0"
-	if err := upkeep.WriteUpdateCache(home, upkeep.UpdateCache{Latest: &latest, CheckedAt: time.Now().UnixMilli()}); err != nil {
-		t.Fatalf("WriteUpdateCache(%q) error = %v, want nil", home, err)
-	}
+func TestMCPServerInfoReportsGraftVersion(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"version":"7.8.9"}`), 0o644); err != nil {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", filepath.Join(root, "package.json"), err)
@@ -87,14 +80,8 @@ func TestMCPStartupUpkeepIncludesCachedVersionNudge(t *testing.T) {
 		t.Fatalf("Client.Connect() error = %v", err)
 	}
 	t.Cleanup(func() { _ = session.Close() })
-	if !strings.Contains(session.InitializeResult().Instructions, "99.0.0 available") {
-		t.Errorf("InitializeResult().Instructions = %q, want cached update nudge", session.InitializeResult().Instructions)
-	}
 	if got := session.InitializeResult().ServerInfo.Version; got == "7.8.9" {
 		t.Errorf("InitializeResult().ServerInfo.Version = %q, want running Graft version, not indexed project version", got)
-	}
-	if strings.Contains(session.InitializeResult().Instructions, "graft 7.8.9") {
-		t.Errorf("InitializeResult().Instructions = %q, want running Graft version in update nudge", session.InitializeResult().Instructions)
 	}
 }
 
@@ -103,8 +90,6 @@ func TestMCPStartupReconcilesGeminiWiringContract(t *testing.T) {
 	contextDir := filepath.Join(root, ".graft-context")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("GRAFT_BRAIN_ID", "")
-	t.Setenv("GRAFT_BRAIN_TOKEN", "")
 	t.Setenv("GRAFT_MCP_NPX", "1")
 	geminiPath := filepath.Join(root, "GEMINI.md")
 	const userText = "# User notes\n\n<!-- graft:start -->\nold instructions\n<!-- graft:end -->\n\nKeep this.\n"

@@ -13,9 +13,6 @@ Options:
   -d, --depth <n>       hops to walk over incoming edges, or "all" for the full
                         closure (default 2)
   --format <fmt>        text (default) | markdown | mermaid | json
-  --name                name the affected areas with one cached LLM call (needs
-                        GRAFT_API_KEY); without it, areas are named after their
-                        hub symbol
   --no-owners           do not suggest who to tag (by default, git history names
                         the people behind each affected area)
   --pr-author <who...>  GitHub login, git name or email of the PR author, so

@@ -1,9 +1,0 @@
-Usage: graft _brain-refresh [options] [dir]
-
-internal: re-pull the attached brain's rules and rewrite the agent files
-
-Arguments:
-  dir         target repo directory (default: ".")
-
-Options:
-  -h, --help  display help for command

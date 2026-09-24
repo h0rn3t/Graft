@@ -17,7 +17,6 @@ import (
 	"github.com/h0rn3t/Graft/internal/hosts"
 	"github.com/h0rn3t/Graft/internal/savings"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
-	"github.com/h0rn3t/Graft/internal/telemetry"
 	"github.com/h0rn3t/Graft/internal/upkeep"
 )
 
@@ -538,9 +537,6 @@ func hookSessionStartLines(root string) []string {
 	); note != "" {
 		lines = append(lines, note)
 	}
-	if home != "" {
-		lines = append(lines, upkeep.StartupLines(currentVersion(), home)...)
-	}
 	return lines
 }
 
@@ -550,7 +546,6 @@ func runHook(event string, stdin io.Reader, stdout, stderr io.Writer) {
 
 	switch event {
 	case "session-start":
-		flushClosedHookSessions(root, time.Now(), hookHomeDir(), "claude-code")
 		lines := hookSessionStartLines(root)
 		index, err := os.ReadFile(filepath.Join(hookContextDir(root), "INDEX.md"))
 		if err == nil {
@@ -577,7 +572,8 @@ func runHook(event string, stdin io.Reader, stdout, stderr io.Writer) {
 	case "cursor-mcp":
 		handleHookCursorMCP(input, root)
 	case "cursor-session-end":
-		summarizeHookSession(root, hookSessionID(input), hookHomeDir(), "cursor")
+		// Cursor configs written by graft init still call this event; it has
+		// nothing to do now that session summaries are gone.
 	case "stop":
 		handleHookStop(input, root)
 	case "post-edit-sync":
@@ -606,11 +602,4 @@ func runHookStatusline(stdin io.Reader, stdout io.Writer) {
 		}
 	}
 	_, _ = io.WriteString(stdout, strings.Join(renderHookStatusline(resolveHookStats(root), &session, contextPercent), "\n"))
-}
-
-func runHookInstall() {
-	home := hookHomeDir()
-	if telemetry.TrackInstallIfNew(telemetry.Context{Home: home, Version: currentVersion()}, os.Getenv("npm_config_global") == "true") {
-		telemetry.FlushInBackground(home)
-	}
 }

@@ -24,6 +24,4 @@ Options:
                      default)
   --no-global        skip writes outside this repo (the ~/.codex/ config +
                      hooks)
-  --brain <handoff>  attach a Trail brain: <brainId>:<token> (or a bare brain id
-                     with GRAFT_BRAIN_TOKEN set)
   -h, --help         display help for command

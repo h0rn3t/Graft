@@ -107,7 +107,6 @@ func TestHookStopRunsOneSyncAndReleasesLock(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("GRAFT_DIR", "")
 	t.Setenv("GRAFT_NO_REFRESH", "1")
-	t.Setenv("DO_NOT_TRACK", "1")
 	source := filepath.Join(root, "main.go")
 	if err := os.WriteFile(source, []byte("package main\n\nfunc main() {}\n"), 0o644); err != nil {
 		t.Fatalf("os.WriteFile(source) error = %v, want nil", err)

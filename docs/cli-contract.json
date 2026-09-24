@@ -1,64 +1,16 @@
 {
   "$comment": "Public contract of the native Go `graft` CLI. `options` are commander's flag columns verbatim; `cmd/graft/commander_contract_test.go` keeps the command tree and environment table in sync with Go source. `<R>` = repo root, `<C>` = context dir (--dir, else GRAFT_DIR for build, else <R>/graft), `<K>` = repo cache resolveContextDir(<R>)/.cache (honours GRAFT_DIR, ignores --dir), `~` = home. Every command's stdout carries results only; diagnostics, progress and wiring reports go to stderr. Commander parse errors (unknown command/option, missing argument) print `error: …` on stderr and exit 1; an uncaught action error prints its message on stderr and exits 1.",
   "version": 1,
-  "globalOptions": [
-    "--dir <path>",
-    "--provider <name>",
-    "--model <id>",
-    "--api-key <key>",
-    "--base-url <url>"
-  ],
-  "hooks": {
-    "preAction": {
-      "skippedFor": ["version", "upgrade", "_update-check", "_brain-refresh", "mcp"],
-      "effects": [
-        "home: ~/.graft/update-check.json refreshed when missing or older than 24h, via a detached `_update-check` child",
-        "stderr: one upgrade nudge when the cached latest version is newer",
-        "stderr: first-run telemetry notice once; home: ~/.graft/telemetry.json noticeShownAt",
-        "home: first_run event queued in ~/.graft/telemetry-queue.ndjson, firstRunAt in ~/.graft/telemetry.json",
-        "process: detached `_telemetry-flush` when the queue is non-empty and the last flush is over 24h old; flushedAt patched"
-      ],
-      "gates": "Telemetry steps are no-ops, in order, without a baked or GRAFT_POSTHOG_KEY key, under DO_NOT_TRACK (not empty/0), under CI (CI not empty/0/false, or GITHUB_ACTIONS, GITLAB_CI, BUILDKITE, CIRCLECI, TEAMCITY_VERSION, JENKINS_URL, TF_BUILD, BUILD_NUMBER present), or after `graft telemetry disable`."
-    },
-    "postAction": {
-      "commands": ["ask", "grep", "callers", "skeleton", "map", "check", "blast"],
-      "effects": [
-        "home: one `query` event appended to ~/.graft/telemetry-queue.ndjson (capped at 256KB); installId minted in ~/.graft/telemetry.json",
-        "repo: <K>/telemetry-repo-id.json, which creates graft/.cache/ even in an unbuilt directory"
-      ],
-      "note": "Not reached by a command that calls process.exit, so failures are not counted."
-    }
-  },
+  "globalOptions": ["--dir <path>"],
   "commands": [
-    {
-      "name": "telemetry",
-      "usage": "graft telemetry [options] [action]",
-      "options": [],
-      "backend": "go",
-      "stdout": "status (default): state and contract lines; enable/disable: one confirmation line; debug: the exact pending batch",
-      "exit": { "0": "status, enable, disable, debug", "1": "unknown action: `✗ unknown action \"<a>\" — expected status, enable, disable, or debug` on stderr" },
-      "effects": [
-        "home: enable/disable patch ~/.graft/telemetry.json without a gate check; disable also stamps noticeShownAt",
-        "status/debug read the queue only"
-      ]
-    },
     {
       "name": "version",
       "usage": "graft version [options]",
       "options": [],
       "backend": "go",
-      "stdout": "`graft <current>` then `latest on npm: …` or `latest: unreachable (offline?)`",
-      "exit": { "0": "always, including an unreachable registry" },
-      "effects": ["process: `npm view @nanonets/graft version` with a 2s timeout"]
-    },
-    {
-      "name": "upgrade",
-      "usage": "graft upgrade [options]",
-      "options": [],
-      "backend": "go",
-      "stdout": "`graft <old> → <new>`, the npx guidance, or `✗ npm install -g @nanonets/graft@latest failed[: <message>]`",
-      "exit": { "0": "upgraded, or running under npx (no-op)", "1": "npm install ran and failed" },
-      "effects": ["process: `npm install -g @nanonets/graft@latest` with inherited stdio, then `npm root -g` (fallback `npm view`)"]
+      "stdout": "`graft <current>`",
+      "exit": { "0": "always" },
+      "effects": ["none"]
     },
     {
       "name": "build",
@@ -91,7 +43,6 @@
         "repo: /graft/ appended to <R>/.gitignore unless --no-gitignore or GRAFT_NO_GITIGNORE; `!graft/`, `graft/.cache/`, `graft/.graph/` appended to <R>/.ignore unless --no-ignore or GRAFT_NO_IGNORE; both skipped when <C> is outside <R>",
         "repo: per-file cards <C>/<path minus extension>.md (or <C>/_root/…), stale cards and empty directories removed, <C>/INDEX.md",
         "process: --lsp spawns an installed language server (rust-analyzer, clangd, gopls, pyright-langserver, typescript-language-server)",
-        "home: build_completed / build_failed telemetry events",
         "workspace root (no own .git and ≥2 git children, or an existing workspace.json): each child gets its own .graft/config.json and <child>/graft build, then the parent <C> is removed and rewritten with workspace.json and the .gitignore entry"
       ]
     },
@@ -102,7 +53,7 @@
       "backend": "go",
       "stdout": "formatted ranked hits, or the result JSON with --json",
       "exit": { "0": "answered, including zero hits", "1": "`✗ <message>` for engine errors such as an unknown --in prefix" },
-      "effects": ["refresh: see queryRefresh", "reads <K>/brain-rules.json and <R>/.graft/config.json for rule attachment"]
+      "effects": ["refresh: see queryRefresh"]
     },
     {
       "name": "skeleton",
@@ -120,7 +71,7 @@
       "backend": "go",
       "stdout": "`graft check: NO GRAPH` block, or the graph-only wiring report; --json prints `{graph}` with graph null when missing",
       "exit": { "0": "the graph is clean", "1": "the graph is missing or stale" },
-      "effects": ["none beyond telemetry: the source is re-extracted in memory; no refresh"]
+      "effects": ["none: the source is re-extracted in memory; no refresh"]
     },
     {
       "name": "stats",
@@ -139,8 +90,8 @@
       "stdout": "newline-delimited JSON-RPC only",
       "exit": { "0": "stdin closed" },
       "effects": [
-        "startup upkeep: reconcileWiring re-runs init for the stamped hosts/options when <K>/wiring-stamp.json names another version, then rewrites the stamp; stale brain rules spawn `_brain-refresh`; update check and telemetry flush spawn (no first-run notice)",
-        "per tools/call: queryRefresh and one `query` telemetry event"
+        "startup upkeep: reconcileWiring re-runs init for the stamped hosts/options when <K>/wiring-stamp.json names another version, then rewrites the stamp",
+        "per tools/call: queryRefresh"
       ]
     },
     {
@@ -155,14 +106,13 @@
     {
       "name": "blast",
       "usage": "graft blast [options] [dir]",
-      "options": ["--base <ref>", "-d, --depth <n>", "--format <fmt>", "--name", "--no-owners", "--pr-author <who...>", "--no-refresh"],
+      "options": ["--base <ref>", "-d, --depth <n>", "--format <fmt>", "--no-owners", "--pr-author <who...>", "--no-refresh"],
       "backend": "go",
       "stdout": "text (default), markdown, mermaid or JSON blast radius",
       "exit": { "0": "reported", "1": "invalid option value, missing graph, or git failure" },
       "effects": [
         "refresh: see queryRefresh",
-        "process: git diff / rev-parse and git log for owners unless --no-owners",
-        "--name: reads/writes <C>/.cache/areas.json and makes one LLM call when a key is configured"
+        "process: git diff / rev-parse and git log for owners unless --no-owners"
       ]
     },
     {
@@ -186,14 +136,13 @@
     {
       "name": "init",
       "usage": "graft init [options] [dir]",
-      "options": ["--no-build", "--agents <ids...>", "--all-agents", "--no-agents", "--list-agents", "--no-mcp", "--no-hooks", "--no-statusline", "--dry-run", "-y, --yes", "--no-global", "--brain <handoff>"],
+      "options": ["--no-build", "--agents <ids...>", "--all-agents", "--no-agents", "--list-agents", "--no-mcp", "--no-hooks", "--no-statusline", "--dry-run", "-y, --yes", "--no-global"],
       "backend": "go",
       "stdout": "--list-agents only: one host id per line",
       "stderr": "per-file `✓`/`·`/`⚠`/`-` lines, the dry-run plan, the non-interactive help, and the epilogue",
-      "exit": { "0": "wired, dry run, listed, cancelled, or non-interactive help", "1": "`✗ --brain: <error>` or `✗ unknown agent id(s): <ids> — valid: <ids>`, both before any write" },
+      "exit": { "0": "wired, dry run, listed, cancelled, or non-interactive help", "1": "`✗ unknown agent id(s): <ids> — valid: <ids>`, before any write" },
       "effects": [
         "none: --list-agents, --dry-run, and a non-TTY run without --agents/--yes/--all-agents/--no-agents",
-        "home: a TTY picker answer patches ~/.graft/telemetry.json enabled + noticeShownAt (ungated)",
         "repo+home: hosts not selected are retracted first (graph cache kept)",
         "repo (claude): .claude/settings.json (statusLine omitted under --no-statusline or GRAFT_NO_STATUSLINE), .claude/helpers/graft-statusline.cjs and graft-hooks.cjs (0755, statusline shim written even with --no-statusline), .claude/skills/graft/SKILL.md, .mcp.json mcpServers.graft",
         "home (claude, unless --no-global): ~/.claude/helpers/graft-hooks.cjs, ~/.claude/settings.json hooks, ~/.claude.json mcpServers.graft",
@@ -205,8 +154,7 @@
         "home (antigravity, unless --no-global; not affected by --no-hooks): ~/.gemini/skills/graft/SKILL.md",
         "repo: <K>/wiring-stamp.json with version, host ids and global/mcp/hooks/statusline options",
         "process: `graft build .` child (300s timeout) when no graph exists and --no-build is absent; `graft --version` probe for the MCP launch command unless GRAFT_MCP_NPX is set",
-        "workspace root: the parent first, then every workspace child gets the same wiring",
-        "--brain: connectBrain after wiring (see brain connect); init_completed telemetry"
+        "workspace root: the parent first, then every workspace child gets the same wiring"
       ]
     },
     {
@@ -218,63 +166,11 @@
       "exit": { "0": "always; unparseable files are reported and left as-is" },
       "effects": [
         "none without -y (still probes `graft --version`)",
-        "-y: owned instruction files deleted with empty parents pruned, fenced sections (including the brain block) removed, MCP keys and TOML tables removed, the Claude repo layer removed",
+        "-y: owned instruction files deleted with empty parents pruned, fenced sections (including the legacy brain block) removed, MCP keys and TOML tables removed, the Claude repo layer removed",
         "-y, unless --no-global: ~/.claude* entries, Codex hooks, the Antigravity skill",
         "-y, unless --keep-cache: <R>/graft (hardcoded, ignores --dir/GRAFT_DIR) and the graft lines in .gitignore/.ignore",
         "never removed: .cursor/hooks.json, .cursor/hooks/graft-hooks.cjs, <R>/.graft/config.json, the /.graft/ gitignore line, ~/.graft/*"
       ]
-    },
-    {
-      "name": "brain connect",
-      "usage": "graft brain connect [options] <handoff> [dir]",
-      "options": [],
-      "backend": "go",
-      "stderr": "`✓ pulled <n> rule(s) from <id>` plus written files, the no-rules guidance, or `⚠ <warning>`",
-      "exit": { "0": "attached, including a fail-soft fetch warning", "1": "unparseable handoff" },
-      "effects": [
-        "repo: brain link in <R>/.graft/config.json and /.graft/ in .gitignore",
-        "network: GET <brain url>/api/public/brains/<id>/rules/anchors (5s timeout)",
-        "repo: <K>/brain-rules.json; `<!-- graft:brain:start -->` block upserted into detected section-host files (may create AGENTS.md, GEMINI.md, .github/copilot-instructions.md)"
-      ]
-    },
-    {
-      "name": "brain pull",
-      "usage": "graft brain pull [options] [dir]",
-      "options": [],
-      "backend": "go",
-      "exit": { "0": "pulled, or no brain attached", "1": "fetch warning" },
-      "effects": ["same as brain connect; a GRAFT_BRAIN_ID + GRAFT_BRAIN_TOKEN environment link is persisted to disk"]
-    },
-    {
-      "name": "brain push",
-      "usage": "graft brain push [options] [dir]",
-      "options": ["--no-approve", "--no-watch"],
-      "backend": "go",
-      "exit": { "0": "sent (and completed, building, unreachable or still building when watched)", "1": "no GitHub origin, signup not completed, wrong repository, digest or push error, or a failed build" },
-      "effects": [
-        "process: git history reads, `gh auth token` when neither GH_TOKEN nor GITHUB_TOKEN is set",
-        "network: api.github.com repo/PR/branch-protection/issue reads; GET and POST <brain url>/…/brains/<id>/repo; build polling unless --no-watch",
-        "unlinked repo: loopback signup server on 127.0.0.1:<random>, browser opened unless GRAFT_NO_BROWSER or no TTY, link written on success; brain_signup_* telemetry"
-      ]
-    },
-    {
-      "name": "brain status",
-      "usage": "graft brain status [options] [dir]",
-      "options": ["--json"],
-      "backend": "go",
-      "stdout": "--json: `{brainId, cached, fetchedAt, anchored, stale}`",
-      "stderr": "human status lines",
-      "exit": { "0": "always" },
-      "effects": ["read only"]
-    },
-    {
-      "name": "brain disconnect",
-      "usage": "graft brain disconnect [options] [dir]",
-      "options": [],
-      "backend": "go",
-      "stderr": "`✓ detached the brain from <R>`",
-      "exit": { "0": "always" },
-      "effects": ["repo: rewrites <R>/.graft/config.json without the brain key and re-ensures the /.graft/ gitignore entry; the rules cache and brain blocks stay"]
     },
     {
       "name": "_hook",
@@ -283,7 +179,7 @@
       "options": [],
       "backend": "go",
       "exit": { "0": "handled; malformed payloads and query failures are non-blocking" },
-      "effects": ["session state, graph dirty/refresh state, detached sync, and bucketed telemetry"]
+      "effects": ["session state, graph dirty/refresh state, and detached sync"]
     },
     {
       "name": "_statusline",
@@ -303,42 +199,6 @@
       "backend": "go",
       "exit": { "0": "always; build failures clear syncing state and release the lock" },
       "effects": ["repo: detached structural rebuild after a dirty stop hook"]
-    },
-    {
-      "name": "_install",
-      "usage": "graft _install [options]",
-      "hidden": true,
-      "options": [],
-      "backend": "go",
-      "exit": { "0": "always; install never fails" },
-      "effects": ["home: once-per-version install telemetry and a detached flush"]
-    },
-    {
-      "name": "_update-check",
-      "usage": "graft _update-check [options]",
-      "hidden": true,
-      "options": [],
-      "backend": "go",
-      "exit": { "0": "always" },
-      "effects": ["process: npm view; home: ~/.graft/update-check.json"]
-    },
-    {
-      "name": "_telemetry-flush",
-      "usage": "graft _telemetry-flush [options]",
-      "hidden": true,
-      "options": [],
-      "backend": "go",
-      "exit": { "0": "always" },
-      "effects": ["network: POST https://events.nanonets.com/batch/ (GRAFT_POSTHOG_HOST); the queue is drained through a transient .<pid>.sending file and requeued on 5xx or network failure"]
-    },
-    {
-      "name": "_brain-refresh",
-      "usage": "graft _brain-refresh [options] [dir]",
-      "hidden": true,
-      "options": [],
-      "backend": "go",
-      "exit": { "0": "always; errors are swallowed" },
-      "effects": ["same as brain pull"]
     }
   ],
   "queryRefresh": {
@@ -352,47 +212,16 @@
     ]
   },
   "environment": {
-    "BUILD_NUMBER": { "scope": "cli", "effect": "telemetry off when present" },
-    "BUILDKITE": { "scope": "cli", "effect": "telemetry off when present" },
-    "CI": { "scope": "cli", "effect": "telemetry off unless empty, 0, or false" },
-    "CLAUDECODE": { "scope": "cli", "effect": "presence marks the telemetry surface as claude-code" },
     "CLAUDE_CONFIG_DIR": { "scope": "hook", "effect": "Claude user config directory" },
     "CLAUDE_PROJECT_DIR": { "scope": "hook", "effect": "repository root seen by native hooks and statusline" },
-    "CIRCLECI": { "scope": "cli", "effect": "telemetry off when present" },
-    "DO_NOT_TRACK": { "scope": "cli", "effect": "telemetry off unless empty or 0" },
-    "GH_TOKEN": { "scope": "cli", "effect": "GitHub token for brain push" },
-    "GITHUB_ACTIONS": { "scope": "cli", "effect": "telemetry off when present" },
-    "GITHUB_TOKEN": { "scope": "cli", "effect": "GitHub token for brain push" },
-    "GITLAB_CI": { "scope": "cli", "effect": "telemetry off when present" },
-    "GRAFT_API_KEY": { "scope": "llm", "effect": "provider key for forced naming calls" },
-    "GRAFT_BASE_URL": { "scope": "llm", "effect": "OpenAI-compatible endpoint" },
-    "GRAFT_BRAIN_ID": { "scope": "cli", "effect": "environment brain link id" },
-    "GRAFT_BRAIN_TOKEN": { "scope": "cli", "effect": "brain token for a bare-id handoff or environment link" },
-    "GRAFT_BRAIN_URL": { "scope": "cli", "effect": "brain API base" },
     "GRAFT_DIR": { "scope": "cli", "effect": "context directory override for build, state and hooks" },
-    "GRAFT_LLM_RETRIES": { "scope": "llm", "effect": "LLM transport retry count" },
     "GRAFT_MCP_NPX": { "scope": "cli", "effect": "force the npx MCP launch form in host configs" },
-    "GRAFT_MODEL": { "scope": "llm", "effect": "model id" },
-    "GRAFT_NO_BROWSER": { "scope": "cli", "effect": "never open a browser for brain signup" },
     "GRAFT_NO_GITIGNORE": { "scope": "cli", "effect": "skip the graft .gitignore entry" },
     "GRAFT_NO_IGNORE": { "scope": "cli", "effect": "skip the .ignore re-admit entries" },
     "GRAFT_NO_REFRESH": { "scope": "cli", "effect": "disable pre-query refresh" },
     "GRAFT_NO_SEED": { "scope": "cli", "effect": "disable worktree graph seeding" },
     "GRAFT_NO_STATUSLINE": { "scope": "cli", "effect": "omit the Claude statusLine block" },
-    "GRAFT_OPENROUTER_MODEL": { "scope": "llm", "effect": "legacy OpenRouter model id" },
-    "GRAFT_POSTHOG_HOST": { "scope": "cli", "effect": "telemetry endpoint override" },
-    "GRAFT_POSTHOG_KEY": { "scope": "cli", "effect": "telemetry key override" },
-    "GRAFT_PROVIDER": { "scope": "llm", "effect": "provider wire format" },
-    "GRAFT_REFRESH": { "scope": "cli", "effect": "`hash` confirms every file by content" },
-    "JENKINS_URL": { "scope": "cli", "effect": "telemetry off when present" },
-    "OPENROUTER_API_KEY": { "scope": "llm", "effect": "legacy OpenRouter key fallback" },
-    "OPENROUTER_BASE_URL": { "scope": "llm", "effect": "legacy OpenRouter endpoint" },
-    "ORCAROUTER_API_KEY": { "scope": "llm", "effect": "OrcaRouter key" },
-    "ORCAROUTER_BASE_URL": { "scope": "llm", "effect": "OrcaRouter endpoint" },
-    "ORCAROUTER_MODEL": { "scope": "llm", "effect": "OrcaRouter model id" },
-    "TEAMCITY_VERSION": { "scope": "cli", "effect": "telemetry off when present" },
-    "TF_BUILD": { "scope": "cli", "effect": "telemetry off when present" },
-    "npm_config_global": { "scope": "hook", "effect": "marks the npm install event as global" }
+    "GRAFT_REFRESH": { "scope": "cli", "effect": "`hash` confirms every file by content" }
   },
   "hookRuntime": "Claude, Codex and Cursor hooks and the Claude statusline use plain-JS shims that locate the installed package and spawn its native graft binary with `_hook <sub>` or `_statusline`."
 }

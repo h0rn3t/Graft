@@ -7,21 +7,10 @@ Options:
   -v, --version                     output the version number
   --dir <path>                      context graph directory (default:
                                     <repo>/graft)
-  --provider <name>                 LLM wire format: openai | anthropic |
-                                    litellm | orcarouter (env GRAFT_PROVIDER)
-  --model <id>                      model id for the LLM pass (env GRAFT_MODEL)
-  --api-key <key>                   provider API key (env GRAFT_API_KEY)
-  --base-url <url>                  OpenAI-compatible endpoint URL (env
-                                    GRAFT_BASE_URL)
   -h, --help                        display help for command
 
 Commands:
-  telemetry [action]                Show, inspect, or turn off the anonymous
-                                    usage stats (see TELEMETRY.md)
-  version                           Print the installed version and the latest
-                                    published on npm
-  upgrade                           Upgrade the globally installed graft to the
-                                    latest version on npm
+  version                           Print the installed version
   build [options] [dir]             Build graft/ from your code — wiring graph +
                                     per-file cards ($0, no key)
   ask [options] <query> [dir]       Query the graft/ graph — returns ranked
@@ -59,6 +48,4 @@ Commands:
                                     Claude Code)
   uninstall [options] [dir]         Remove every file and config entry graft has
                                     written to this repo (the inverse of init)
-  brain                             The Trail brain attached to this repo: the
-                                    rules mined from its own history
   help [command]                    display help for command

@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// TestMain points HOME at a scratch directory, so the startup upkeep and
-// telemetry that every command runs never read or write the real ~/.graft.
+// TestMain points HOME at a scratch directory, so the startup upkeep that
+// commands run never reads or writes the real home directory.
 func TestMain(m *testing.M) {
 	home, err := os.MkdirTemp("", "graft-cmd-home-")
 	if err != nil {

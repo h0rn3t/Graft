@@ -162,15 +162,9 @@ func goEnvironmentReads(t *testing.T) []string {
 							}
 						}
 					}
-					if helper, ok := node.Fun.(*ast.Ident); ok && (helper.Name == "envTruthy" || helper.Name == "firstEnv") {
+					if helper, ok := node.Fun.(*ast.Ident); ok && helper.Name == "envTruthy" {
 						for _, arg := range node.Args {
 							ast.Inspect(arg, addString)
-						}
-					}
-				case *ast.ValueSpec:
-					for index, name := range node.Names {
-						if name.Name == "CIEnvVars" && index < len(node.Values) {
-							ast.Inspect(node.Values[index], addString)
 						}
 					}
 				}

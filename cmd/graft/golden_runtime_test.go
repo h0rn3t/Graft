@@ -61,19 +61,6 @@ func TestUpkeepGoldensMatchGo(t *testing.T) {
 	runGoldenMCP(t, &runtime, golden)
 }
 
-func TestBrainTelemetryGoldensMatchGo(t *testing.T) {
-	names := goldenNames(t, "brain-telemetry")
-	first := loadGolden(t, names[0])
-	runtime := newGoldenRuntime(t, first)
-	runtime.startBrainServer(t)
-	for _, name := range names {
-		t.Run(name, func(t *testing.T) {
-			golden := loadGolden(t, name)
-			runtime.runCLI(t, golden)
-		})
-	}
-}
-
 func TestHookGoldensMatchGo(t *testing.T) {
 	for _, name := range goldenNames(t, "hooks") {
 		t.Run(name, func(t *testing.T) {

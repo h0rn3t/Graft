@@ -128,7 +128,6 @@ type AskResult struct {
 	CoverageStrong *float64            `json:"coverageStrong,omitempty"`
 	Note           string              `json:"note,omitempty"`
 	Saved          *AskSavings         `json:"saved,omitempty"`
-	Rules          []AppliedRule       `json:"rules,omitempty"`
 	Ranking        *AskRankingMetadata `json:"-"`
 }
 

@@ -18,9 +18,11 @@ type Markers struct {
 var (
 	// GraftMarkers fence the instruction block.
 	GraftMarkers = Markers{Start: "<!-- graft:start -->", End: "<!-- graft:end -->"}
-	// BrainMarkers fence a brain's rules, kept separate from the instructions.
+	// BrainMarkers fence the rules block that the removed Trail Brain
+	// integration used to write. Graft never writes it any more; uninstall
+	// still strips it so earlier users can clean up their files.
 	BrainMarkers = Markers{Start: "<!-- graft:brain:start -->", End: "<!-- graft:brain:end -->"}
-	// AllMarkers lists every region graft may own in a user file.
+	// AllMarkers lists every region graft may own, or once owned, in a user file.
 	AllMarkers = []Markers{GraftMarkers, BrainMarkers}
 )
 

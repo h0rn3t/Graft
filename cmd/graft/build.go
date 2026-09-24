@@ -8,17 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
-	"time"
 
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
-	"github.com/h0rn3t/Graft/internal/telemetry"
 )
 
 func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
-	started := time.Now()
 	workspacePrefix := workspaceBuildPrefix(opts)
 	root, contextDir, err := resolvePaths(opts, buildPathRules, stderr)
 	if err != nil {
@@ -72,8 +68,6 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 	}
 	if rootErr, ok := buildRootError(root); ok && opts.workspaceChildName == "" {
 		// The TypeScript CLI's top-level handler prints the thrown message alone.
-		telemetry.Track("build_failed", []telemetry.Property{{Key: "stage", Value: "graph"}, {Key: "code", Value: telemetry.ErrorCode(rootErr)}},
-			telemetry.Context{Repo: root, Home: homeDir(), Version: currentVersion()})
 		writeDiagnostic(stderr, "%s\n", rootErr)
 		return 1
 	}
@@ -86,9 +80,6 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		if opts.workspaceChildName == "" {
 			writeDiagnostic(stderr, "\n")
 		}
-		// Only the stage and a code enum; the message stays on this machine.
-		telemetry.Track("build_failed", []telemetry.Property{{Key: "stage", Value: "graph"}, {Key: "code", Value: telemetry.ErrorCode(err)}},
-			telemetry.Context{Repo: root, Home: homeDir(), Version: currentVersion()})
 		writeDiagnostic(stderr, "✗ %sgraph build failed: %v\n", workspacePrefix, err)
 		return 1
 	}
@@ -177,13 +168,6 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 	if _, err := fmt.Fprintf(stdout, "  → %s\n", contextDir); err != nil {
 		return 1
 	}
-	telemetry.Track("build_completed", []telemetry.Property{
-		{Key: "files_bucket", Value: telemetry.FilesBucket(len(built.Fingerprints))},
-		{Key: "langs", Value: telemetry.LangsValue(built.Graph.Meta.Languages)},
-		{Key: "mode", Value: "fast"},
-		{Key: "duration_bucket", Value: telemetry.DurationBucket(time.Since(started))},
-		{Key: "incremental", Value: strconv.FormatBool(built.Reused > 0)},
-	}, telemetry.Context{Repo: root, Home: homeDir(), Version: currentVersion()})
 	if cwd, err := os.Getwd(); err == nil {
 		rel, err := filepath.Rel(cwd, contextDir)
 		if err == nil {

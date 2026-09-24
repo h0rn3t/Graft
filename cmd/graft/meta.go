@@ -13,27 +13,9 @@ import (
 	"github.com/h0rn3t/Graft/internal/climeta"
 )
 
-// runVersion prints the installed version and the latest one on npm. An
-// unreachable registry is reported, never an error.
+// runVersion prints the installed version.
 func runVersion(stdout io.Writer) int {
-	report := climeta.FormatVersionReport(currentVersion(), climeta.GetNpmViewVersion(climeta.PackageName, 0))
-	if _, err := io.WriteString(stdout, report+"\n"); err != nil {
-		return 1
-	}
-	return 0
-}
-
-// runUpgrade installs the latest package globally unless graft runs under npx.
-func runUpgrade(stdout, stderr io.Writer) int {
-	result, err := climeta.RunUpgrade(executableURL())
-	if err != nil {
-		writeDiagnostic(stderr, "%v\n", err)
-		return 1
-	}
-	if _, err := io.WriteString(stdout, climeta.FormatUpgradeReport(result)+"\n"); err != nil {
-		return 1
-	}
-	if result.Ran && !result.OK {
+	if _, err := io.WriteString(stdout, "graft "+currentVersion()+"\n"); err != nil {
 		return 1
 	}
 	return 0

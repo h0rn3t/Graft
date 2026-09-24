@@ -2,7 +2,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -12,13 +11,10 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/h0rn3t/Graft/internal/brain"
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
-	"github.com/h0rn3t/Graft/internal/telemetry"
-	"github.com/h0rn3t/Graft/internal/upkeep"
+	"github.com/h0rn3t/Graft/internal/savings"
 )
 
 type callersOptions struct {
@@ -51,7 +47,6 @@ type callersOptions struct {
 	workspaceChildName string
 	base               *string
 	format             string
-	name               bool
 	noOwners           bool
 	prAuthors          []string
 }
@@ -107,7 +102,6 @@ func run(args []string, stdout, stderr io.Writer) int {
 }
 
 func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	queryNote.repo, queryNote.hit = "", ""
 	parsed, err := parseCommandLine(programSpec(), args)
 	var help *helpRequest
 	var failure *cliError
@@ -133,36 +127,12 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer) int 
 		writeDiagnostic(stderr, "%v\n", err)
 		return 1
 	}
-	command := parsed.command.name
-	pendingAction = func() { preAction(command, stderr) }
-	status := dispatchWithInput(parsed, stdin, stdout, stderr)
-	postAction(command, status)
-	return status
+	return dispatchWithInput(parsed, stdin, stdout, stderr)
 }
 
 func dispatchWithInput(parsed invocation, stdin io.Reader, stdout, stderr io.Writer) int {
 	args := parsed.args
 	switch parsed.command.path() {
-	case "_brain-refresh":
-		// Spawned detached by upkeep: nothing here is user-visible, and a failure
-		// leaves the cached rules serving until the next session tries again.
-		dir := "."
-		if len(args) > 0 {
-			dir = args[0]
-		}
-		if repo, err := filepath.Abs(dir); err == nil {
-			_, _, _ = brain.Pull(context.Background(), repo, homeDir(), nil, time.Now())
-		}
-		return 0
-	case "_update-check":
-		if home := homeDir(); home != "" {
-			upkeep.RefreshUpdateCache(home, time.Now())
-		}
-		return 0
-	case "_telemetry-flush":
-		actionStarted()
-		telemetry.RunFlush(homeDir())
-		return 0
 	case "_hook":
 		if len(args) == 0 {
 			return 1
@@ -178,24 +148,14 @@ func dispatchWithInput(parsed invocation, stdin io.Reader, stdout, stderr io.Wri
 		}
 		runHookSync(args[0], stdout, stderr)
 		return 0
-	case "_install":
-		runHookInstall()
-		return 0
 	case "version":
 		return runVersion(stdout)
-	case "upgrade":
-		return runUpgrade(stdout, stderr)
-	case "telemetry":
-		return runTelemetry(parsed.flags, stdout, stderr)
 	case "init":
 		return runInit(parsed.flags, stdout, stderr)
 	case "uninstall":
 		return runUninstall(parsed.flags, stderr)
-	case "brain connect", "brain pull", "brain push", "brain status", "brain disconnect":
-		return runBrain(parsed.command.name, parsed.flags, stdout, stderr)
 	}
 	opts := queryOptions(parsed)
-	actionStarted()
 	switch opts.command {
 	case "build":
 		return runBuild(opts, stdout, stderr)
@@ -253,7 +213,6 @@ func queryOptions(parsed invocation) callersOptions {
 		extensions:  flags.values["--extensions"],
 		includeDirs: flags.values["--include-dir"],
 		format:      value("--format"),
-		name:        flags.bools["--name"],
 		noOwners:    flags.bools["--no-owners"],
 		prAuthors:   flags.values["--pr-author"],
 	}
@@ -349,6 +308,37 @@ func runCallers(opts callersOptions, stdout, stderr io.Writer) int {
 		return writeJSON(stdout, stderr, opts.query, *loaded, results, direction)
 	}
 	return writeHuman(stdout, root, *loaded, results, direction, depth)
+}
+
+func homeDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return home
+}
+
+// noteQuery prices the session's input-token rate for repo. Every retrieval
+// command funnels through here, so the rate is set before a formatter needs it.
+func noteQuery(repo string) {
+	savings.SetInputRate(savings.SessionInputRate(repo))
+}
+
+// noteQueryRoot calls noteQuery with the root a query command answers from,
+// resolved like the TypeScript queryRoot: an explicit dir as given, else the
+// nearest indexed ancestor, else the working directory.
+func noteQueryRoot(opts callersOptions) {
+	root := opts.root
+	if root == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return
+		}
+		root = nearestGraftRoot(cwd, opts.contextDir)
+	}
+	if absolute, err := filepath.Abs(root); err == nil {
+		noteQuery(absolute)
+	}
 }
 
 // pathRules says how a command finds its repository and graph, as the

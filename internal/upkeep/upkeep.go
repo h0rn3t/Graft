@@ -1,124 +1,12 @@
-// Package upkeep contains the fail-soft startup cache used by the MCP server.
+// Package upkeep keeps a repository's agent wiring current at startup,
+// failing soft so a hook or MCP server never breaks on derived state.
 package upkeep
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
-	"strings"
-	"time"
-
-	"github.com/h0rn3t/Graft/internal/climeta"
-	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
-
-// UpdateTTL is the period for which a registry answer remains current.
-const UpdateTTL = 24 * time.Hour
-
-// UpdateCache stores the latest version observed on npm and the last attempt time.
-type UpdateCache struct {
-	Latest    *string `json:"latest"`
-	CheckedAt int64   `json:"checkedAt"`
-}
-
-// ReadUpdateCache reads the machine-global update cache. Invalid or missing data
-// is treated as a cache miss so startup never fails because of derived state.
-func ReadUpdateCache(home string) (*UpdateCache, bool) {
-	data, err := os.ReadFile(updateCachePath(home))
-	if err != nil {
-		return nil, false
-	}
-	var cache UpdateCache
-	if err := json.Unmarshal(data, &cache); err != nil || cache.CheckedAt <= 0 {
-		return nil, false
-	}
-	return &cache, true
-}
-
-// WriteUpdateCache atomically replaces the machine-global update cache, in the
-// TypeScript writer's layout: pretty-printed, no trailing newline.
-func WriteUpdateCache(home string, cache UpdateCache) error {
-	object := jsonjs.NewObject()
-	object.Set("latest", nil)
-	if cache.Latest != nil {
-		object.Set("latest", *cache.Latest)
-	}
-	object.Set("checkedAt", float64(cache.CheckedAt))
-	return writeAtomicFile(updateCachePath(home), []byte(jsonjs.Stringify(object, 2)), "update")
-}
-
-// NeedsRefresh reports whether the registry answer is missing or expired.
-func NeedsRefresh(cache *UpdateCache, now time.Time) bool {
-	return cache == nil || now.UnixMilli()-cache.CheckedAt >= UpdateTTL.Milliseconds()
-}
-
-// FormatUpdateNudge returns the user-facing update line when latest is newer.
-func FormatUpdateNudge(current, latest string) string {
-	if latest == "" || compareVersions(latest, current) <= 0 {
-		return ""
-	}
-	return fmt.Sprintf("⬆ graft %s → %s available: run `npm i -g @nanonets/graft@latest` (restart your agent after).", current, latest)
-}
-
-// StartupLines reads cached upkeep facts without waiting on the network.
-func StartupLines(current, home string) []string {
-	cache, ok := ReadUpdateCache(home)
-	if !ok || cache == nil || cache.Latest == nil {
-		return nil
-	}
-	if line := FormatUpdateNudge(current, *cache.Latest); line != "" {
-		return []string{line}
-	}
-	return nil
-}
-
-// RefreshUpdateCache performs one bounded npm version lookup and stores its result.
-func RefreshUpdateCache(home string, now time.Time) UpdateCache {
-	result := climeta.GetNpmViewVersion("", 2*time.Second)
-	cache := UpdateCache{CheckedAt: now.UnixMilli()}
-	if result.OK && result.Version != "" {
-		cache.Latest = &result.Version
-	}
-	_ = WriteUpdateCache(home, cache)
-	return cache
-}
-
-// MaybeRefreshInBackground records an attempt and starts a detached update check.
-// It returns false when the cache is fresh or the current process cannot be detached.
-func MaybeRefreshInBackground(home string, now time.Time) bool {
-	executable, err := os.Executable()
-	if err != nil || strings.HasSuffix(strings.TrimSuffix(filepath.Base(executable), ".exe"), ".test") {
-		return false
-	}
-	cache, _ := ReadUpdateCache(home)
-	if !NeedsRefresh(cache, now) {
-		return false
-	}
-	seed := UpdateCache{CheckedAt: now.UnixMilli()}
-	if cache != nil {
-		seed.Latest = cache.Latest
-	}
-	if err := WriteUpdateCache(home, seed); err != nil {
-		return false
-	}
-	command := exec.Command(executable, "_update-check")
-	command.Stdin = strings.NewReader("")
-	command.Stdout = io.Discard
-	command.Stderr = io.Discard
-	if err := command.Start(); err != nil {
-		return false
-	}
-	_ = command.Process.Release()
-	return true
-}
-
-func updateCachePath(home string) string {
-	return filepath.Join(home, ".graft", "update-check.json")
-}
 
 // writeAtomicFile replaces path with data through a temporary file and a rename.
 func writeAtomicFile(path string, data []byte, name string) error {
@@ -147,33 +35,4 @@ func writeAtomicFile(path string, data []byte, name string) error {
 		return fmt.Errorf("replace %s cache: %w", name, err)
 	}
 	return nil
-}
-
-func compareVersions(left, right string) int {
-	left = strings.SplitN(left, "-", 2)[0]
-	right = strings.SplitN(right, "-", 2)[0]
-	leftParts := strings.Split(left, ".")
-	rightParts := strings.Split(right, ".")
-	for index := 0; index < max(len(leftParts), len(rightParts)); index++ {
-		leftValue := versionPart(leftParts, index)
-		rightValue := versionPart(rightParts, index)
-		if leftValue < rightValue {
-			return -1
-		}
-		if leftValue > rightValue {
-			return 1
-		}
-	}
-	return 0
-}
-
-func versionPart(parts []string, index int) int {
-	if index >= len(parts) {
-		return 0
-	}
-	value, err := strconv.Atoi(parts[index])
-	if err != nil {
-		return 0
-	}
-	return value
 }

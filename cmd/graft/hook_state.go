@@ -26,7 +26,6 @@ type sessionState struct {
 	ReportedTurns     *int              `json:"reportedTurns,omitempty"`
 	LastTallyUUID     *string           `json:"lastTallyUuid,omitempty"`
 	Host              *string           `json:"host,omitempty"`
-	Summarized        *bool             `json:"summarized,omitempty"`
 }
 
 func hookContextDir(root string) string {

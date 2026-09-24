@@ -26,7 +26,7 @@ func TestBuildPersistsWalkOptionsAndKeepsUnrelatedConfig(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(configPath, []byte(`{"brain":{"brainId":"b","token":"secret"},"followSubmodules":true}`), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte(`{"custom":{"keep":true},"followSubmodules":true}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	args := []string{"build", root, "--include-dir", "vendor", "--no-follow-submodules", "--follow-nested-repos"}
@@ -48,8 +48,8 @@ func TestBuildPersistsWalkOptionsAndKeepsUnrelatedConfig(t *testing.T) {
 	if dirs, ok := got["includeDirs"].([]any); !ok || len(dirs) != 1 || dirs[0] != "vendor" {
 		t.Errorf("run(%v) config = %s, want includeDirs [vendor]", args, data)
 	}
-	if _, ok := got["brain"]; !ok {
-		t.Errorf("run(%v) config = %s, want existing brain", args, data)
+	if _, ok := got["custom"]; !ok {
+		t.Errorf("run(%v) config = %s, want existing custom key", args, data)
 	}
 	loaded, err := graph.Read(graph.WiringPath(filepath.Join(root, "graft")))
 	if err != nil {

@@ -20,13 +20,11 @@ type initOptions struct {
 	build, mcp, hooks, statusline, global bool
 	allAgents, noAgents, dryRun, yes      bool
 	agents                                []string
-	brain                                 string
 	contextDir                            string
 }
 
 func runInit(parsed parsedFlags, stdout, stderr io.Writer) int {
 	dir := parsed.dir()
-	actionStarted()
 	if parsed.bools["--list-agents"] {
 		for _, id := range append(hosts.HostIDs(), "claude") {
 			if _, err := fmt.Fprintln(stdout, id); err != nil {
@@ -42,14 +40,7 @@ func runInit(parsed parsedFlags, stdout, stderr io.Writer) int {
 		dryRun: parsed.bools["--dry-run"], yes: parsed.bools["--yes"],
 		agents: parsed.values["--agents"],
 	}
-	opts.brain, _ = parsed.value("--brain")
 	opts.contextDir, _ = parsed.value("--dir")
-	if opts.brain != "" {
-		if _, err := parseBrainHandoff(opts.brain); err != nil {
-			writeDiagnostic(stderr, "✗ --brain: %v\n", err)
-			return 1
-		}
-	}
 	repo, err := filepath.Abs(dir)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
@@ -81,7 +72,6 @@ func initRepo(repo string, env hosts.Env, opts initOptions, stderr io.Writer) in
 		}
 	}
 	var ids []string
-	var consent *bool
 	switch {
 	case opts.agents != nil:
 		ids = opts.agents
@@ -94,18 +84,15 @@ func initRepo(repo string, env hosts.Env, opts initOptions, stderr io.Writer) in
 	case opts.yes || opts.dryRun:
 		ids = detected
 	case isTerminal(os.Stdin) && isTerminal(os.Stderr):
-		picked, answer, ok := runPicker(plan, repo, env.Home, telemetryOffered(), stderr)
+		picked, ok := runPicker(plan, repo, env.Home, stderr)
 		if !ok {
 			writeDiagnostic(stderr, "· cancelled — nothing written\n")
 			return 0
 		}
-		ids, consent = picked, answer
+		ids = picked
 	default:
 		writeDiagnostic(stderr, "%s\n", hosts.FormatNonInteractiveHelp(detected))
 		return 0
-	}
-	if consent != nil {
-		recordTelemetryConsent(*consent)
 	}
 
 	children, _ := graph.WorkspaceBuildChildren(repo, opts.contextDir)
@@ -139,14 +126,8 @@ func initRepo(repo string, env hosts.Env, opts initOptions, stderr io.Writer) in
 			return 1
 		}
 	}
-	if opts.brain != "" {
-		if status := connectBrainAfterInit(repo, opts.brain, ids, env.Home, stderr); status != 0 {
-			return status
-		}
-	}
 	nodes, edges, built := epilogueGraphs(repo, children, opts.contextDir)
 	writeDiagnostic(stderr, "\n%s\n", hosts.FormatInitEpilogue(built, nodes, edges, tty))
-	trackInitCompleted(repo, ids, consent)
 	return 0
 }
 
@@ -284,11 +265,11 @@ func graphContextDir(repo, override string) string {
 
 // runPicker drives the interactive agent picker on stderr, reading keys from
 // stdin in raw mode. It returns false when the user cancelled.
-func runPicker(plan []hosts.HostPlan, repo, home string, offerTelemetry bool, stderr io.Writer) ([]string, *bool, bool) {
-	state := hosts.InitialPickerState(plan, repo, home, offerTelemetry)
+func runPicker(plan []hosts.HostPlan, repo, home string, stderr io.Writer) ([]string, bool) {
+	state := hosts.InitialPickerState(plan, repo, home)
 	restore, err := makeRaw(os.Stdin)
 	if err != nil {
-		return nil, nil, false
+		return nil, false
 	}
 	defer restore()
 	drawn := 0
@@ -321,18 +302,13 @@ func runPicker(plan []hosts.HostPlan, repo, home string, offerTelemetry bool, st
 	}
 	draw()
 	if state.Aborted {
-		return nil, nil, false
+		return nil, false
 	}
-	var consent *bool
-	if answer, offered := hosts.PickedTelemetry(state); offered {
-		consent = &answer
-	}
-	return hosts.PickedHostIDs(state), consent, true
+	return hosts.PickedHostIDs(state), true
 }
 
 func runUninstall(parsed parsedFlags, stderr io.Writer) int {
 	dir := parsed.dir()
-	actionStarted()
 	repo, err := filepath.Abs(dir)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)

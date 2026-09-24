@@ -61,11 +61,6 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 	if opts.source {
 		inlineAskSource(root, *loaded, &result, opts.full)
 		result.Saved = askSavings(*loaded, result.Hits)
-		pointers := make([]string, 0, len(result.Hits))
-		for _, hit := range result.Hits {
-			pointers = append(pointers, hit.Pointer)
-		}
-		result.Rules = graph.ApplyBrainRules(pointers, readAskBrainRules(root), loaded)
 	}
 	if opts.jsonOutput {
 		return writeAskJSON(stdout, stderr, result)
@@ -457,47 +452,6 @@ func missingAskChildren(root string, children []string) string {
 	return strings.Join(missing, ", ")
 }
 
-func readAskBrainRules(root string) []graph.BrainRule {
-	linked := os.Getenv("GRAFT_BRAIN_ID") != "" && os.Getenv("GRAFT_BRAIN_TOKEN") != ""
-	if !linked {
-		data, err := os.ReadFile(filepath.Join(root, ".graft", "config.json"))
-		if err != nil {
-			return nil
-		}
-		var config struct {
-			Brain *struct {
-				BrainID string `json:"brainId"`
-				Token   string `json:"token"`
-			} `json:"brain"`
-		}
-		if err := json.Unmarshal(data, &config); err != nil || config.Brain == nil {
-			return nil
-		}
-		linked = config.Brain.BrainID != "" && config.Brain.Token != ""
-	}
-	if !linked {
-		return nil
-	}
-
-	contextDir := os.Getenv("GRAFT_DIR")
-	if contextDir == "" {
-		contextDir = filepath.Join(root, "graft")
-	} else if !filepath.IsAbs(contextDir) {
-		contextDir = filepath.Join(root, contextDir)
-	}
-	data, err := os.ReadFile(filepath.Join(contextDir, ".cache", "brain-rules.json"))
-	if err != nil {
-		return nil
-	}
-	var cache struct {
-		Rules []graph.BrainRule `json:"rules"`
-	}
-	if err := json.Unmarshal(data, &cache); err != nil {
-		return nil
-	}
-	return cache.Rules
-}
-
 func readAskIndex(path string) *graph.AskIndex {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -579,7 +533,6 @@ func askLimit(raw string) float64 {
 }
 
 func writeAskJSON(stdout, stderr io.Writer, result graph.AskResult) int {
-	noteHit(len(result.Hits) > 0)
 	data, err := jsonjs.Marshal(result, "  ")
 	if err != nil {
 		writeDiagnostic(stderr, "✗ failed to encode ask result: %v\n", err)
@@ -592,7 +545,6 @@ func writeAskJSON(stdout, stderr io.Writer, result graph.AskResult) int {
 }
 
 func writeAskHuman(stdout io.Writer, result graph.AskResult) int {
-	noteHit(len(result.Hits) > 0)
 	_, err := io.WriteString(stdout, formatAskText(result))
 	return writeAskError(err)
 }
@@ -640,21 +592,6 @@ func formatAskText(result graph.AskResult) string {
 			lines = append(lines, "")
 		}
 		lines = append(lines, askScopeFooterLines(result)...)
-	}
-	if len(result.Rules) > 0 {
-		lines = append(lines, "", "rules that govern these symbols")
-		for _, rule := range result.Rules {
-			stale := ""
-			if rule.Stale {
-				stale = " (STALE — the code changed since this was decided)"
-			}
-			lines = append(lines, "- "+rule.Rule+stale)
-			pointer := rule.Pointer
-			if rule.SourceURL != "" {
-				pointer += " · " + rule.SourceURL
-			}
-			lines = append(lines, "  "+pointer)
-		}
 	}
 	body := jsonjs.TrimEnd(strings.Join(lines, "\n"))
 	if savings := askSavingsLine(result, body); savings != "" {

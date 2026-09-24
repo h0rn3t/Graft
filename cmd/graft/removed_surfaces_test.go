@@ -20,6 +20,17 @@ func TestRemovedCLIInputs(t *testing.T) {
 		{name: "viz command", args: []string{"viz"}, want: "error: unknown command 'viz'\n"},
 		{name: "export viz", args: []string{"blast", "--export-viz", "out"}, want: "error: unknown option '--export-viz'\n"},
 		{name: "viz title", args: []string{"blast", "--title", "PR"}, want: "error: unknown option '--title'\n"},
+		{name: "brain command", args: []string{"brain", "status"}, want: "error: unknown command 'brain'\n"},
+		{name: "brain refresh", args: []string{"_brain-refresh"}, want: "error: unknown command '_brain-refresh'\n"},
+		{name: "init brain", args: []string{"init", "--brain", "B1:tok"}, want: "error: unknown option '--brain'\n"},
+		{name: "telemetry command", args: []string{"telemetry"}, want: "error: unknown command 'telemetry'\n"},
+		{name: "telemetry flush", args: []string{"_telemetry-flush"}, want: "error: unknown command '_telemetry-flush'\n"},
+		{name: "install event", args: []string{"_install"}, want: "error: unknown command '_install'\n(Did you mean uninstall?)\n"},
+		{name: "upgrade command", args: []string{"upgrade"}, want: "error: unknown command 'upgrade'\n"},
+		{name: "update check", args: []string{"_update-check"}, want: "error: unknown command '_update-check'\n"},
+		{name: "blast naming", args: []string{"blast", "--name"}, want: "error: unknown option '--name'\n(Did you mean --base?)\n"},
+		{name: "llm provider", args: []string{"--provider", "openai", "ask", "x"}, want: "error: unknown option '--provider'\n"},
+		{name: "llm api key", args: []string{"--api-key", "k", "ask", "x"}, want: "error: unknown option '--api-key'\n"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -44,7 +55,10 @@ func TestRemovedCLIInputsAreAbsentFromHelp(t *testing.T) {
 	}{
 		{args: []string{"build", "--help"}, absent: []string{"--deep", "--concurrency", "--allow-partial"}},
 		{args: []string{"blast", "--help"}, absent: []string{"--export-viz", "--title"}},
-		{args: []string{"--help"}, absent: []string{"viz [options]"}},
+		{args: []string{"--help"}, absent: []string{"viz [options]", "brain", "telemetry", "upgrade", "--provider", "--model", "--api-key", "--base-url"}},
+		{args: []string{"init", "--help"}, absent: []string{"--brain"}},
+		{args: []string{"blast", "--help"}, absent: []string{"--name", "GRAFT_API_KEY"}},
+		{args: []string{"version", "--help"}, absent: []string{"npm"}},
 	}
 	for _, tt := range tests {
 		var stdout, stderr bytes.Buffer
@@ -57,7 +71,10 @@ func TestRemovedCLIInputsAreAbsentFromHelp(t *testing.T) {
 			}
 		}
 	}
-	if _, err := os.Stat("help/viz.txt"); !os.IsNotExist(err) {
-		t.Errorf("os.Stat(help/viz.txt) error = %v, want absent", err)
+	for _, name := range []string{"viz", "brain", "telemetry", "upgrade", "_update-check", "_telemetry-flush", "_brain-refresh"} {
+		path := "help/" + name + ".txt"
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Errorf("os.Stat(%s) error = %v, want absent", path, err)
+		}
 	}
 }

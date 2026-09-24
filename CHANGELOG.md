@@ -4,9 +4,19 @@
 
 ### Breaking
 
-- **Go is the only implementation.** The CLI, MCP server, graph extraction, host hooks, statusline, upkeep, and telemetry now run entirely through the native Go binary. The TypeScript backend, JavaScript library exports, GitHub App, browser viewer, and TypeScript launcher fallback were removed.
-- **Deep meaning and visualization are gone.** `graft build --deep`, `-j/--concurrency`, `--allow-partial`, `graft viz`, and `graft blast --export-viz`/`--title` are rejected as unknown input. Structural `graft build` and `graft blast --name` remain.
+- **Go is the only implementation.** The CLI, MCP server, graph extraction, host hooks, statusline, and upkeep now run entirely through the native Go binary. The TypeScript backend, JavaScript library exports, GitHub App, browser viewer, and TypeScript launcher fallback were removed.
+- **Deep meaning and visualization are gone.** `graft build --deep`, `-j/--concurrency`, `--allow-partial`, `graft viz`, and `graft blast --export-viz`/`--title` are rejected as unknown input. Structural `graft build` and `graft blast` remain.
 - **Language support is narrower.** Kotlin, Swift, PHP, R, Ruby, and the former breadth-tier languages were removed. The native extractor supports Go, Python, TypeScript, JavaScript, Java, Rust, PostgreSQL, C, and C++.
+
+### Removed
+
+Graft is now fully local: every external service integration is gone, and the removed commands and flags are rejected as unknown input.
+
+- **Trail Brain:** `graft brain connect|pull|push|status|disconnect`, `graft init --brain`, the hidden `_brain-refresh` command, brain rules in `graft ask --source` output, and the `GRAFT_BRAIN_ID`, `GRAFT_BRAIN_TOKEN`, `GRAFT_BRAIN_URL` and `GRAFT_NO_BROWSER` variables. `graft uninstall` still strips the legacy `<!-- graft:brain:start -->` blocks from instruction files.
+- **LLM naming:** `graft blast --name`, its `areas.json` naming cache, the global `--provider`, `--model`, `--api-key` and `--base-url` options, and the `GRAFT_PROVIDER`, `GRAFT_API_KEY`, `GRAFT_MODEL`, `GRAFT_BASE_URL`, `GRAFT_LLM_RETRIES`, `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, `GRAFT_OPENROUTER_MODEL`, `ORCAROUTER_API_KEY`, `ORCAROUTER_BASE_URL` and `ORCAROUTER_MODEL` variables. `graft blast` areas keep their symbol names.
+- **Telemetry:** `graft telemetry`, the hidden `_telemetry-flush` and `_install` commands, the first-run notice, the `graft init` usage-stats row, session summaries, `TELEMETRY.md`, and the `DO_NOT_TRACK`, `GRAFT_POSTHOG_KEY` and `GRAFT_POSTHOG_HOST` variables.
+- **Update checks:** `graft upgrade`, the hidden `_update-check` command, `~/.graft/update-check.json`, and the "graft X → Y available" nudge on the CLI, MCP startup and hooks. `graft version` prints the installed version only.
+- **Blast workflows:** the `blast.yml` and `blast-cache.yml` GitHub workflows and the `graft-blast` composite action. The `graft blast` command stays.
 
 ### Changed
 
