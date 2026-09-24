@@ -9,7 +9,6 @@ import (
 
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
-	"github.com/h0rn3t/Graft/internal/savings"
 )
 
 func runGrep(opts callersOptions, stdout, stderr io.Writer) int {
@@ -141,11 +140,7 @@ func formatGrepResult(result graph.GrepResult) string {
 		}
 		output.WriteByte('\n')
 	}
-	body := strings.TrimRight(output.String(), "\n") + "\n"
-	if result.Saved == nil {
-		return body
-	}
-	return savings.With(body, result.Saved.Files, result.Saved.BaselineChars)
+	return strings.TrimRight(output.String(), "\n") + "\n"
 }
 
 // fitGrepResult keeps the top-ranked hits whose rendered groups fit in budget

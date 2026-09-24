@@ -19,7 +19,6 @@ import (
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/hosts"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
-	"github.com/h0rn3t/Graft/internal/savings"
 	"github.com/h0rn3t/Graft/internal/upkeep"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -29,6 +28,18 @@ type mcpToolDefinition struct {
 	Name        string         `json:"name"`
 	Description string         `json:"description"`
 	InputSchema map[string]any `json:"inputSchema"`
+	// AlwaysLoad asks Claude Code to keep the tool in context from the first
+	// turn instead of behind a tool search, since the search step is what
+	// makes a model settle for the grep it already has.
+	AlwaysLoad bool `json:"-"`
+}
+
+func (definition mcpToolDefinition) tool() *mcp.Tool {
+	tool := &mcp.Tool{Name: definition.Name, Description: definition.Description, InputSchema: definition.InputSchema}
+	if definition.AlwaysLoad {
+		tool.Meta = mcp.Meta{"anthropic/alwaysLoad": true}
+	}
+	return tool
 }
 
 var mcpAliases = map[string]string{
@@ -43,14 +54,18 @@ var mcpAliases = map[string]string{
 var mcpTools = []mcpToolDefinition{
 	{
 		Name:        "graft_find_code",
-		Description: "Query the repo context graph in plain words. Returns ranked nodes with exact file:line spans and the relevant source inlined — usually the full answer, no file reads needed.",
+		Description: "Query the repo context graph in plain words — use it instead of grep plus file reads to learn how or where something works. Returns ranked nodes with exact file:line spans and the relevant source inlined — usually the full answer, no file reads needed.",
+		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"query": map[string]any{"type": "string", "description": "what you want to understand, in plain words"},
-				"limit": map[string]any{"type": "number", "description": "max results (default 5)"},
-				"full":  map[string]any{"type": "boolean", "description": "inline whole definition spans instead of the default ≤8-line crux excerpts"},
-				"in":    map[string]any{"type": "string", "description": "narrow to nodes under this path prefix, filtered before scoring (segment-aware, like scopeOf)"},
+				"query":  map[string]any{"type": "string", "description": "what you want to understand, in plain words"},
+				"limit":  map[string]any{"type": "number", "description": "max ranked matches before edit context (default 5)"},
+				"full":   map[string]any{"type": "boolean", "description": "inline whole definition spans within budget instead of default ≤8-line source excerpts"},
+				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "total response budget in estimated tokens (UTF-16 length / 4), default 2000"},
+				"intent": map[string]any{"type": "string", "enum": []string{"lookup", "edit"}, "description": "edit includes bounded direct callers, dependencies and related tests"},
+				"seen":   map[string]any{"type": "array", "maxItems": 256, "items": map[string]any{"type": "string"}, "description": "opt in to content references: [] returns refs; pass prior refs to omit unchanged source; omit this field to restore ordinary source"},
+				"in":     map[string]any{"type": "string", "description": "narrow to nodes under this path prefix, filtered before scoring (segment-aware, like scopeOf)"},
 			},
 			"required": []string{"query"},
 		},
@@ -58,6 +73,7 @@ var mcpTools = []mcpToolDefinition{
 	{
 		Name:        "graft_file_api",
 		Description: "Signatures-only view of one file — every definition's signature + line span, ~10× cheaper than reading the file ($0, no LLM).",
+		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type":       "object",
 			"properties": map[string]any{"file": map[string]any{"type": "string", "description": "repo-relative path (or unique basename) of the file"}},
@@ -72,6 +88,7 @@ var mcpTools = []mcpToolDefinition{
 	{
 		Name:        "graft_trace_calls",
 		Description: "Structural edges for a symbol, over call/reference/import/implements/extends ($0, no LLM). Defaults to direct callers (who depends on it). Set direction:\"out\" for callees (what it calls); set depth>1 (or depth:\"all\" for the full closure) to walk transitively for the full blast radius — every source that breaks if it changes. Run before a multi-file refactor to find ALL affected files.",
+		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -85,7 +102,8 @@ var mcpTools = []mcpToolDefinition{
 	},
 	{
 		Name:        "graft_find_all",
-		Description: "Regex search over the graph's indexed files, hits grouped by innermost enclosing symbol and ranked by incoming-edge count (coupling) — which hit matters, not just where it is.",
+		Description: "Use instead of grep or rg on this repo's code: regex search over the graph's indexed files, hits grouped by innermost enclosing symbol and ranked by incoming-edge count (coupling) — which hit matters, not just where it is.",
+		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -108,8 +126,8 @@ var mcpTools = []mcpToolDefinition{
 }
 
 const mcpInstructionsText = `This repo is indexed by graft: a prebuilt graph of every symbol, its file:line
-span, and who calls what. Prefer these tools over grep/read — one call usually
-replaces several file reads.
+span, and who calls what. Use these tools instead of grep, rg, find or reading
+source files to locate and understand code — one call usually replaces several.
 
 **If these tools are deferred (names shown, schemas withheld), load them all in ONE lookup:** ToolSearch "select:mcp__graft__graft_find_code,mcp__graft__graft_find_all,mcp__graft__graft_trace_calls,mcp__graft__graft_file_api,mcp__graft__graft_repo_map" — one round trip for the whole session. Never load them one at a time.
 
@@ -150,6 +168,7 @@ func newMCPServer(ctx context.Context, opts callersOptions, root, contextDir str
 }
 
 func newMCPServerWith(opts callersOptions, root, contextDir, version, instructions string) *mcp.Server {
+	cache := new(queryCache)
 	server := mcp.NewServer(
 		&mcp.Implementation{Name: "graft", Version: version},
 		&mcp.ServerOptions{
@@ -159,14 +178,10 @@ func newMCPServerWith(opts callersOptions, root, contextDir, version, instructio
 	)
 	for _, definition := range mcpTools {
 		server.AddTool(
-			&mcp.Tool{
-				Name:        definition.Name,
-				Description: definition.Description,
-				InputSchema: definition.InputSchema,
-			},
+			definition.tool(),
 			func(ctx context.Context, request *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
 				args := mcpToolArguments(request.Params.Arguments)
-				result := mcpCall(ctx, root, contextDir, opts.contextDir, request.Params.Name, args)
+				result := mcpCallWithCache(ctx, root, contextDir, opts.contextDir, request.Params.Name, args, cache)
 				return mcpSDKResult(result), nil
 			},
 		)
@@ -196,11 +211,7 @@ func newMCPServerWith(opts callersOptions, root, contextDir, version, instructio
 				}
 				tools := make([]*mcp.Tool, 0, len(mcpTools))
 				for _, definition := range mcpTools {
-					tools = append(tools, &mcp.Tool{
-						Name:        definition.Name,
-						Description: definition.Description,
-						InputSchema: definition.InputSchema,
-					})
+					tools = append(tools, definition.tool())
 				}
 				return &mcp.ListToolsResult{Tools: tools}, nil
 			case "tools/call":
@@ -209,7 +220,7 @@ func newMCPServerWith(opts callersOptions, root, contextDir, version, instructio
 					return next(ctx, method, request)
 				}
 				args := mcpToolArguments(call.Params.Arguments)
-				result := mcpCall(ctx, root, contextDir, opts.contextDir, call.Params.Name, args)
+				result := mcpCallWithCache(ctx, root, contextDir, opts.contextDir, call.Params.Name, args, cache)
 				return mcpSDKResult(result), nil
 			default:
 				return next(ctx, method, request)
@@ -497,21 +508,29 @@ type mcpResult struct {
 	thrown bool
 }
 
-// mcpCall answers one tools/call. The SDK runs calls concurrently, so it
-// shares no mutable state with other calls; ctx is cancelled when the client
-// cancels the request, and is checked between the refresh and the query.
-func mcpCall(ctx context.Context, root, contextDir, dirOverride, requestedName string, args map[string]any) (result mcpResult) {
+// mcpCall answers one tools/call without retaining query snapshots.
+// The server uses mcpCallWithCache with its own synchronized cache.
+func mcpCall(ctx context.Context, root, contextDir, dirOverride, requestedName string, args map[string]any) mcpResult {
+	return mcpCallWithCache(ctx, root, contextDir, dirOverride, requestedName, args, nil)
+}
+
+func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, requestedName string, args map[string]any, cache *queryCache) (result mcpResult) {
 	name := mcpAliases[requestedName]
 	if name == "" {
 		name = requestedName
 	}
 	known := name == "graft_find_code" || name == "graft_file_api" || name == "graft_check_freshness" ||
 		name == "graft_trace_calls" || name == "graft_find_all" || name == "graft_repo_map"
-	// Price this session's tokens once per call, so the savings line can carry
-	// dollars. The rate is an atomic and every call prices the same root.
-	savings.SetInputRate(savings.SessionInputRate(root))
 	if !known {
 		return mcpResult{text: "unknown tool: " + requestedName, isError: true}
+	}
+	var askOpts callersOptions
+	if name == "graft_find_code" {
+		var err error
+		askOpts, err = mcpAskOptions(args)
+		if err != nil {
+			return mcpResult{text: err.Error(), isError: true}
+		}
 	}
 	if ctx.Err() != nil {
 		return mcpResult{text: context.Cause(ctx).Error(), isError: true, thrown: true}
@@ -535,11 +554,15 @@ func mcpCall(ctx context.Context, root, contextDir, dirOverride, requestedName s
 			refresh = graph.EnsureFreshGraph(root, options)
 		}
 		if note := graph.RefreshNote(refresh); note != "" {
-			defer func() {
-				if !result.thrown {
-					result.text = note + "\n" + result.text
-				}
-			}()
+			if name == "graft_find_code" {
+				askOpts.queryNote = note
+			} else {
+				defer func() {
+					if !result.thrown {
+						result.text = note + "\n" + result.text
+					}
+				}()
+			}
 		}
 	}
 	if ctx.Err() != nil {
@@ -562,7 +585,10 @@ func mcpCall(ctx context.Context, root, contextDir, dirOverride, requestedName s
 		// Typed options, never argv: a query such as "--dir=/x" stays a query.
 		return mcpRunCommand(runAsk, callersOptions{
 			command: "ask", query: query, root: root, rootSet: true, contextDir: dirOverride,
-			limit: strconv.Itoa(limit), source: true, full: args["full"] == true, in: mcpString(args["in"]), noRefresh: true,
+			budget: askOpts.budget, intent: askOpts.intent, seen: askOpts.seen, references: askOpts.references,
+			queryNote: askOpts.queryNote,
+			limit:     strconv.Itoa(limit), source: true, full: args["full"] == true, in: mcpString(args["in"]), noRefresh: true,
+			queryCache: cache,
 		})
 	case "graft_file_api":
 		file := mcpString(args["file"])
@@ -696,7 +722,7 @@ func mcpTraceCalls(root, contextDir, symbol string, args map[string]any) mcpResu
 		body.WriteByte('\n')
 	}
 	text := strings.TrimRight(body.String(), "\n")
-	return mcpResult{text: mcpWithSavings(text, callersSavings(*loaded, results)), isError: false}
+	return mcpResult{text: text, isError: false}
 }
 
 func mcpWorkspaceTraceCalls(root, contextDir, symbol string, args map[string]any) mcpResult {
@@ -746,13 +772,6 @@ func mcpDepthValue(value any) int {
 		return 1
 	}
 	return depth
-}
-
-func mcpWithSavings(body string, saved *savedOutput) string {
-	if saved == nil {
-		return body
-	}
-	return savings.With(body, saved.Files, saved.BaselineChars)
 }
 
 func mcpGraphAvailable(contextDir string) bool {

@@ -11,7 +11,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "[graft] tokens saved ≈ 1,747 (95%) — this output ≈ 84 tok vs reading the 1 file(s) it covers whole ≈ 1,831 tok (estimate). At the end of your reply, tell the user the total graft tokens saved this turn — sum each such line across your graft calls — e.g. \"🌱 graft saved ~N tokens this turn\".\n\ngraft skeleton — internal/graph/lang_sql.go\n- L11-L15  struct sqlToken  sqlToken\n- L17-L108  function lexSQL  func lexSQL(source string) ([]sqlToken, error)\n- L110-L134  function sqlName  func sqlName(tokens []sqlToken, at int) (string, int)\n- L136-L252  function extractSQL  func extractSQL(rel, source string) (extractResult, error)\n",
+  "stdout": "graft skeleton — internal/graph/lang_sql.go\n- L11-L15  struct sqlToken  sqlToken\n- L17-L108  function lexSQL  func lexSQL(source string) ([]sqlToken, error)\n- L110-L134  function sqlName  func sqlName(tokens []sqlToken, at int) (string, int)\n- L136-L252  function extractSQL  func extractSQL(rel, source string) (extractResult, error)\n",
   "stderr": "",
   "files": {}
 }

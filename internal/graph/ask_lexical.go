@@ -25,9 +25,10 @@ const (
 )
 
 var (
-	askWantsTestsPattern = regexp.MustCompile(`(?i)\b(tests?|specs?|coverage|assert(?:ion)?s?|fixtures?|mocks?)\b`)
-	askTestPathPattern   = regexp.MustCompile(`(?i)(^|/)(tests?|__tests__|spec)/|(_test|\.test|\.spec)\.[a-z]+$|(^|/)(test_[^/]+|conftest)\.py$`)
-	askSpanStartPattern  = regexp.MustCompile(`^L(\d+)-L\d+$`)
+	askWantsTestsPattern = regexp.MustCompile(`(?i)\b(tests?|testdata|specs?|coverage|assert(?:ion)?s?|fixtures?|mocks?|generated|vendor(?:ed)?)\b`)
+	askTestPathPattern   = regexp.MustCompile(`(?i)(^|/)(tests?|__tests__|spec|testdata|fixtures?|__fixtures__|generated|__generated__|vendor)(/|$)` +
+		`|(_test|\.(?:test|spec|gen|generated|pb))\.[a-z]+$|(^|/)(test_[^/]+|conftest)\.py$|(^|/)zz_generated[._]`)
+	askSpanStartPattern = regexp.MustCompile(`^L(\d+)-L\d+$`)
 )
 
 // askScores is a string→number Map that iterates in insertion order.
@@ -912,7 +913,7 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 	graphRank := !opts.NoGraphRank
 	compare := localeCompare()
 	q := askUniqueTerms(query)
-	wantsTests := askWantsTestsPattern.MatchString(query)
+	wantsTests := askWantsTestsPattern.MatchString(query) || askTestPathPattern.MatchString(prefix)
 	testFactor := func(path string) float64 {
 		if !wantsTests && askTestPathPattern.MatchString(path) {
 			return askTestPenalty

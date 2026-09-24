@@ -27,7 +27,7 @@
   "stderr": "",
   "files": {
     "repo/ask-stub.cjs": "process.stdout.write(\"{\\\"query\\\":\\\"auth verification\\\",\\\"mode\\\":\\\"lexical\\\",\\\"coverage\\\":1,\\\"coverageStrong\\\":1,\\\"hits\\\":[{\\\"kind\\\":\\\"symbol\\\",\\\"title\\\":\\\"verify\\\",\\\"pointer\\\":\\\"src/auth.ts:L1-L4\\\",\\\"snippet\\\":\\\"function verify() {}\\\",\\\"score\\\":1}]}\");\n",
-    "repo/graft/.cache/session/prompt.json": "{\n  \"lastQuery\": \"how does auth verification work\",\n  \"perAgentQuery\": {},\n  \"graftReads\": 0,\n  \"sourceReads\": 0,\n  \"savedTokens\": 0,\n  \"injectedPointers\": [\n    \"src/auth.ts:L1-L4\"\n  ],\n  \"nudges\": 0\n}",
+    "repo/graft/.cache/session/prompt.json": "{\n  \"lastQuery\": \"how does auth verification work\",\n  \"perAgentQuery\": {},\n  \"graftReads\": 0,\n  \"sourceReads\": 0,\n  \"savedTokens\": 0,\n  \"injectedPointers\": [\n    \"src/auth.ts:L1-L4\"\n  ],\n  \"injectedRevisions\": [\n    \"b5f04847ded8d2fab5760b3eae327beead29031ce99239f2a47df054cdeee3af\"\n  ],\n  \"nudges\": 0\n}",
     "repo/graft/.cache/session/prompt.json.lock": ""
   },
   "checkFiles": true

@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "[graft] tokens saved ≈ 79 (42%) — this output ≈ 110 tok vs reading the 1 file(s) it covers whole ≈ 189 tok (estimate). At the end of your reply, tell the user the total graft tokens saved this turn — sum each such line across your graft calls — e.g. \"🌱 graft saved ~N tokens this turn\".\n\ngraft skeleton — packages/ui/src/view.ts\n- L2-L2  function renderStore0  function renderStore0()\n- L4-L4  function renderStore1  function renderStore1()\n- L6-L6  function renderStore2  function renderStore2()\n- L8-L8  function renderStore3  function renderStore3()\n- L10-L10  function renderStore4  function renderStore4()\n- L12-L12  function renderStore5  function renderStore5()\n- L14-L14  function renderStore6  function renderStore6()\n",
+  "stdout": "graft skeleton — packages/ui/src/view.ts\n- L2-L2  function renderStore0  function renderStore0()\n- L4-L4  function renderStore1  function renderStore1()\n- L6-L6  function renderStore2  function renderStore2()\n- L8-L8  function renderStore3  function renderStore3()\n- L10-L10  function renderStore4  function renderStore4()\n- L12-L12  function renderStore5  function renderStore5()\n- L14-L14  function renderStore6  function renderStore6()\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

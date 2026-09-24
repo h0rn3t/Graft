@@ -12,7 +12,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "[graft] tokens saved ≈ 5,882 (98%) — this output ≈ 143 tok vs reading the 2 file(s) it covers whole ≈ 6,025 tok (estimate). At the end of your reply, tell the user the total graft tokens saved this turn — sum each such line across your graft calls — e.g. \"🌱 graft saved ~N tokens this turn\".\n\n\"filterByOnlyDirs\" — 4 hits in 4 symbols across 2 files (searched 90 indexed files)\n\nfilterByOnlyDirs · function · src/graph/source-files.ts:L52-L62 · 2 in-edges\n  L52: export function filterByOnlyDirs(\n\nlistSourceFiles · function · src/graph/source-files.ts:L64-L85 · 2 in-edges\n  L76: return filterByOnlyDirs(\n\nbuildGraph · function · src/graph/build.ts:L151-L410 · 1 in-edges\n  L165: const repoFiles = filterByOnlyDirs(walked, root, onlyDirs);\n\nsrc/graph/build.ts (module level) · 0 in-edges\n  L35: import { filterByOnlyDirs, listSourceStats } from \"./source-files.js\";\n",
+  "stdout": "\"filterByOnlyDirs\" — 4 hits in 4 symbols across 2 files (searched 90 indexed files)\n\nfilterByOnlyDirs · function · src/graph/source-files.ts:L52-L62 · 2 in-edges\n  L52: export function filterByOnlyDirs(\n\nlistSourceFiles · function · src/graph/source-files.ts:L64-L85 · 2 in-edges\n  L76: return filterByOnlyDirs(\n\nbuildGraph · function · src/graph/build.ts:L151-L410 · 1 in-edges\n  L165: const repoFiles = filterByOnlyDirs(walked, root, onlyDirs);\n\nsrc/graph/build.ts (module level) · 0 in-edges\n  L35: import { filterByOnlyDirs, listSourceStats } from \"./source-files.js\";\n",
   "stderr": "",
   "files": {}
 }

@@ -21,9 +21,12 @@ built for it rather than re-running the same one.
 ### 1 · `graft ask "<question>" --source`: locate + understand (the default)
 Ranked retrieval over the graph, routed automatically between prose nodes and
 the wiring graph, returning the top hits with exact `file:line`.
-- `--source` inlines the code at each hit, the ≤8-line **crux** of each
-  definition, so the result usually is the code you need, no follow-up file read. Add
-  `--full` only when the crux is too small to act on.
+- `--source` inlines up to 8 source lines per hit, keeping the signature and
+  query-relevant lines. Add `--full` when the excerpt is too small to act on.
+- `--budget N` bounds the whole response (default 2000 estimated tokens;
+  UTF-16 length / 4, not model-specific billing). Truncation is explicit.
+- `--intent edit` adds bounded direct callers, dependencies, and related tests.
+  Use `callers` separately when complete impact analysis is required.
 - `--in <path>` narrows to a subtree before ranking; `-n N` caps results (default 8).
 - **Use it when** the question is conceptual or locational: "how does auth
   work", "where is rate-limiting handled", "what assembles the request pipeline".
@@ -125,26 +128,19 @@ you already know where you're working, narrow with `graft ask "<task>" --in <sco
   (a branch switch or unpulled move). Don't read the missing file — `graft grep`
   the symbol to find where it lives now, or run `graft build` to refresh.
 
-## Report what graft saved, every turn
-Each retrieval tool **opens** its output with a `[graft] tokens saved ≈ N` line:
-the estimated tokens that call saved versus reading the files it covers whole.
-Whenever you used any graft tool in a turn, close your reply with a one-line
-tally summing those numbers across every graft call you made, e.g.
-`🌱 graft saved ~12,400 tokens this turn (3 calls)`. A call with no such line
-(tiny files, where the pointers cost as much as the source) saved nothing, so
-skip it. This is the per-turn figure; the statusline carries the running
-session total.
+## Statistics and repeated context
 
-Once a turn has been billed, each line also states what that call was worth in
-dollars, at the rate this session is actually paying for input tokens — include
-that total alongside the tokens, e.g. `🌱 graft saved ~12,400 tokens (~$0.04)
-this turn`. When a line carries no dollar figure, report tokens alone rather
-than pricing them yourself.
+Retrieval answers omit recurring savings reports. Use `graft stats` explicitly
+for recorded session estimates; whole-file baselines are not measured billing
+savings. JSON retrieval keeps the source-size baseline.
 
-Run graft commands unclipped, without piping them through `head`, `tail`, or
-`sed -n`. Every tool is already capped and states what it dropped; clipping it
-costs you hits you asked for, and it silently drops the savings line the
-statusline's running total is parsed from.
+MCP `graft_find_code` accepts `budget` and `intent`. To avoid repeating source,
+send `seen: []` to receive content references, then pass those references on
+later calls. Unchanged entries retain their locations but omit source. After
+context compaction, omit `seen` to request the source again. Share references
+only within the same agent context.
+
+Keep freshness, coverage, and truncation notices when consuming tool output.
 
 ## When graft isn't enough
 - Span truncated ("+N more lines"): open the file at that exact range.

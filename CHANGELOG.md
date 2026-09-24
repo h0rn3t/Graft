@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Ranked retrieval prefers production code over fixture, generated, and vendored copies, with explicit category and path queries retaining access.
+- `ask --budget` and MCP `budget` bound the complete response in estimated tokens (default 2000); compact excerpts select up to eight source lines. `--intent edit` adds bounded direct callers, dependencies, and related tests.
+- Retrieval no longer repeats savings banners. JSON source-size metadata and explicit session statistics remain available.
+- Hooks track source revisions per agent and reset on session-start/compaction. MCP callers can opt into reusable content references through `seen`.
+- The MCP server reuses decoded graph/index snapshots while retaining freshness checks and invalidation on file changes.
+- **Claude Code sees graft's search tools from the first turn.** `graft_find_code`, `graft_find_all`, `graft_trace_calls` and `graft_file_api` carry `_meta["anthropic/alwaysLoad"]`, so they are not deferred behind a tool search, a step that led the model to use the grep it already had. `graft_repo_map` and `graft_check_freshness` stay deferred.
+- **A raw code search gets a pointer to its graft equivalent.** When a Claude Code session runs a recursive `grep`, `git grep`, `rg`, `ag` or `ack`, or the Grep tool, over code in an indexed repo, the PostToolUse hook adds the matching call, for example `graft_find_all {"pattern":"Foo|Bar","in":"internal/graph"}`. The pattern is translated from basic regex syntax where needed. This happens at most three times per session. Searches that filter piped output, read one file, reach outside the repo, or search `graft/` get no note. The hook is already installed, so existing setups pick this up without running `graft init` again.
+- The MCP server instructions and the `graft_find_code` and `graft_find_all` descriptions now say plainly that the tools replace grep, rg, find and file reads for this repo's code.
+
 ## 0.1.1 - 2026-09-24
 
 ### Fixed

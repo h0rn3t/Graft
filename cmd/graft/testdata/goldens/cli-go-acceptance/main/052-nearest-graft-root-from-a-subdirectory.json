@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "[graft] tokens saved ≈ 26 (46%) — this output ≈ 31 tok vs reading the 2 file(s) it covers whole ≈ 57 tok (estimate). At the end of your reply, tell the user the total graft tokens saved this turn — sum each such line across your graft calls — e.g. \"🌱 graft saved ~N tokens this turn\".\n\nnormalize · function · py/util.py:L1-L2\n  calls ← handle (py/service.py:L4-L5)\n      5: return normalize(self.prefix(text))\n",
+  "stdout": "normalize · function · py/util.py:L1-L2\n  calls ← handle (py/service.py:L4-L5)\n      5: return normalize(self.prefix(text))\n",
   "stderr": "[graft] no graft/ here — answering from <REPO>/graft\n",
   "files": {},
   "checkFiles": false

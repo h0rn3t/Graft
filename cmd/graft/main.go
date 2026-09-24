@@ -32,6 +32,13 @@ type callersOptions struct {
 	fixed              bool
 	maxDirs            string
 	limit              string
+	budget             string
+	intent             string
+	seen               []string
+	references         bool
+	queryNote          string
+	budgetOverhead     string
+	queryCache         *queryCache
 	direction          string
 	depth              string
 	source             bool
@@ -219,6 +226,8 @@ func queryOptions(parsed invocation) callersOptions {
 		fixed:       flags.bools["--fixed"],
 		maxDirs:     value("--max-dirs"),
 		limit:       value("--limit"),
+		budget:      value("--budget"),
+		intent:      value("--intent"),
 		direction:   value("--direction"),
 		depth:       value("--depth"),
 		source:      flags.bools["--source"],
@@ -548,7 +557,7 @@ func writeHuman(w io.Writer, root string, wiring graph.GraphV1, results []caller
 		}
 		body.WriteByte('\n')
 	}
-	text := mcpWithSavings(strings.TrimRight(body.String(), "\n")+"\n", callersSavings(wiring, results))
+	text := strings.TrimRight(body.String(), "\n") + "\n"
 	if _, err := io.WriteString(w, text); err != nil {
 		return 1
 	}

@@ -364,6 +364,8 @@ graft build --no-ignore              # do not add graft's re-include entries to 
 
 graft ask "<task>" [dir]             # ranked nodes with exact file:line (no LLM, no key)
 graft ask "<task>" --source          # inline source excerpts; add --full for complete definitions
+graft ask "<task>" --source --budget 2000  # cap the whole response in estimated tokens
+graft ask "<task>" --intent edit     # primary code plus direct callers, dependencies and tests
 graft ask "<task>" -n 10 --json      # limit hits and return machine-readable JSON
 graft ask "<task>" --in <scope>      # narrow to one scope in a monorepo or multi-repo folder
 
@@ -409,6 +411,24 @@ graft version                        # print the installed version
 graft --dir <path> <command>         # use a context directory other than <repo>/graft
 graft --version, -v                  # print the installed version
 ```
+
+`ask` prefers production code over fixture, generated, and vendored copies;
+explicit category queries or `--in` paths still retrieve those copies.
+Source excerpts keep up to eight lines, including query matches with exact
+line numbers. `--full` expands definitions within the shared `--budget`
+(default 2000, range 128–64000 estimated tokens, measured as UTF-16 length / 4).
+The result limit applies to ranked matches; edit intent can add up to six
+directly related symbols. JSON metadata counts toward this budget too.
+Truncation is reported; increase
+the budget or narrow the scope to inspect omitted logic before editing.
+
+MCP `graft_find_code` exposes the same `budget` and `intent` options. Optional
+`seen: []` returns content references; passing previous references suppresses
+unchanged source for that agent. Omit `seen` after context compaction to receive
+source again. The MCP server caches decoded graph/index snapshots while still
+checking source freshness before queries. Retrieval does not print recurring
+savings banners; `graft stats` retains recorded estimates, not billing claims.
+
 
 `ask`, `skeleton`, `callers`, `grep`, `map`, and `blast` refresh changed source before answering. Use `--no-refresh` or `GRAFT_NO_REFRESH=1` to query the graph exactly as stored; set `GRAFT_REFRESH=hash` to verify files by content instead of size and mtime.
 

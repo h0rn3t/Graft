@@ -1,8 +1,8 @@
 package main
 
 import (
+	"crypto/sha256"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,8 +22,7 @@ const (
 		"  • graft map: orientation for an unfamiliar repo, directory clusters, hubs, hotspots. map alone is the answer; don't then skeleton every subsystem it names.\n" +
 		"  In a monorepo, add --in <path>/ to ask/grep/callers to scope to one sub-project; hits are labeled [scope/].\n" +
 		"  Already know the file or symbol to change? Go straight to it: graft grep \"<symbol>\", read the span, edit. Save ask for when you don't yet know where the code lives.\n" +
-		"  Refactor, rename, or multi-file change? Run graft callers <sym> --depth all FIRST to map every connected file; editing the primary file and stopping is the classic miss (platform siblings, a new file to extract).\n" +
-		"Each tool opens its output with a \"[graft] tokens saved ≈ N\" line, sometimes with its dollar value; when you used graft this turn, close your reply with a one-line tally of the total saved, dollars included when given (e.g. 🌱 graft saved ~12k tokens (~$0.04) this turn, 3 calls). Never price tokens yourself; never pipe graft through head/tail — it is already capped, and clipping drops that line.\n"
+		"  Refactor, rename, or multi-file change? Run graft callers <sym> --depth all FIRST to map every connected file; editing the primary file and stopping is the classic miss (platform siblings, a new file to extract).\n"
 )
 
 type hookFreshness struct {
@@ -180,14 +179,7 @@ func formatHookRetrieval(result *graph.AskResult, cap int) string {
 	if cap <= 0 {
 		return ""
 	}
-	body := hookRetrievalBody(result.Hits[:cap])
-	saved := hookRetrievalTokensSaved(*result, cap)
-	if saved <= 0 {
-		return body
-	}
-	base := savings.Tokens(result.Saved.BaselineChars)
-	percent := int(math.Round(float64(saved) / float64(base) * 100))
-	return fmt.Sprintf("%s\n[graft] tokens saved ≈ %s (%d%%); this pack ≈ %s tok vs reading the %d file(s) whole ≈ %s tok (estimate).", body, savings.Group(saved), percent, savings.Group(savings.Tokens(savings.Length(body))), result.Saved.Files, savings.Group(base))
+	return hookRetrievalBody(result.Hits[:cap])
 }
 
 func hookWeakMatchNudge(session *sessionState, strong float64) string {
@@ -198,7 +190,7 @@ func hookWeakMatchNudge(session *sessionState, strong float64) string {
 	return fmt.Sprintf("[graft] no strong match for this prompt (name-field match %.2f) — the graph has more than this probe found. Run `graft ask \"<your task>\" --source` before grepping.", strong)
 }
 
-func relevantHookRetrieval(result *graph.AskResult, session *sessionState, cap int) string {
+func relevantHookRetrieval(result *graph.AskResult, session *sessionState, cap int, agent string) string {
 	if result == nil || len(result.Hits) == 0 {
 		return ""
 	}
@@ -216,15 +208,21 @@ func relevantHookRetrieval(result *graph.AskResult, session *sessionState, cap i
 		}
 	}
 
-	seen := make(map[string]struct{}, len(session.InjectedPointers))
-	for _, pointer := range session.InjectedPointers {
-		seen[pointer] = struct{}{}
+	seen := make(map[string]struct{}, len(session.InjectedRevisions))
+	for _, revision := range session.InjectedRevisions {
+		seen[revision] = struct{}{}
 	}
 	fresh := make([]graph.AskHit, 0, len(result.Hits))
+	var revisions []string
 	for _, hit := range result.Hits {
-		if _, ok := seen[hit.Pointer]; !ok {
-			fresh = append(fresh, hit)
+		content := fmt.Sprintf("%q", []string{agent, hit.Pointer, hit.Title, hit.SourceHash, hit.Code, hit.Snippet})
+		revision := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
+		if _, ok := seen[revision]; ok {
+			continue
 		}
+		seen[revision] = struct{}{}
+		fresh = append(fresh, hit)
+		revisions = append(revisions, revision)
 	}
 	filtered := *result
 	filtered.Hits = fresh
@@ -238,9 +236,14 @@ func relevantHookRetrieval(result *graph.AskResult, session *sessionState, cap i
 	for _, hit := range fresh[:cap] {
 		session.InjectedPointers = append(session.InjectedPointers, hit.Pointer)
 	}
+	session.InjectedRevisions = append(session.InjectedRevisions, revisions[:cap]...)
 	if len(session.InjectedPointers) > 40 {
 		session.InjectedPointers = session.InjectedPointers[len(session.InjectedPointers)-40:]
 	}
+	if len(session.InjectedRevisions) > 40 {
+		session.InjectedRevisions = session.InjectedRevisions[len(session.InjectedRevisions)-40:]
+	}
+	session.SavedTokens += hookRetrievalTokensSaved(filtered, cap)
 	return text
 }
 

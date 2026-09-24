@@ -104,7 +104,7 @@ func federateCallers(root, contextDir, symbol string, direction graph.Direction,
 				lines = append(lines, fmt.Sprintf("  %s %s %s%s", hit.Relation, arrow, label, depthLabel))
 			}
 		}
-		blocks = append(blocks, mcpWithSavings(strings.Join(lines, "\n"), callersSavings(child.Graph, results)))
+		blocks = append(blocks, strings.Join(lines, "\n"))
 	}
 	coverage := mcpWorkspaceCoverage(workspace)
 	if !found {

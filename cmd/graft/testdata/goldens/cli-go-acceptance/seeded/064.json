@@ -11,7 +11,7 @@
   },
   "inputs": {},
   "status": 0,
-  "stdout": "[graft] tokens saved ≈ 3,026 (99%) — this output ≈ 46 tok vs reading the 1 file(s) it covers whole ≈ 3,072 tok (estimate). At the end of your reply, tell the user the total graft tokens saved this turn — sum each such line across your graft calls — e.g. \"🌱 graft saved ~N tokens this turn\".\n\nmapDroppedNote · function · internal/graph/map.go:L428-L437\n  calls ← FormatRepoMap (internal/graph/map.go:L369-L399)\n      378: if note := mapDroppedNote(scope.Dropped); note != \"\" {\n",
+  "stdout": "mapDroppedNote · function · internal/graph/map.go:L428-L437\n  calls ← FormatRepoMap (internal/graph/map.go:L369-L399)\n      378: if note := mapDroppedNote(scope.Dropped); note != \"\" {\n",
   "stderr": "",
   "files": {}
 }

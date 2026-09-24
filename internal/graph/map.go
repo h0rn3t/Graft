@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-
-	"github.com/h0rn3t/Graft/internal/savings"
 )
 
 const (
@@ -376,8 +374,7 @@ func FormatRepoMap(repoMap RepoMap) string {
 		hotspots = append(hotspots, fmt.Sprintf("%s · %s · %s:%s · %d←", hub.Name, hub.Kind, hub.Path, hub.Span, hub.InDegree))
 	}
 	lines = append(lines, "hotspots: "+strings.Join(hotspots, "  "))
-	body := strings.Join(lines, "\n")
-	return mapWithSavings(body, repoMap.Saved) + "\n"
+	return strings.Join(lines, "\n") + "\n"
 }
 
 func formatMapDirLine(dir DirEntry) string {
@@ -442,11 +439,4 @@ func mapSavings(nodes []NodeV1, paths []string) *MapSavings {
 		return nil
 	}
 	return saved
-}
-
-func mapWithSavings(body string, saved *MapSavings) string {
-	if saved == nil {
-		return body
-	}
-	return savings.With(body, saved.Files, saved.BaselineChars)
 }

@@ -49,7 +49,7 @@
     {
       "name": "ask",
       "usage": "graft ask [options] <query> [dir]",
-      "options": ["-n, --limit <n>", "--source", "--full", "--in <path>", "--json", "--no-graph-rank", "--no-refresh"],
+      "options": ["-n, --limit <n>", "--source", "--full", "--budget <tokens>", "--intent <lookup|edit>", "--in <path>", "--json", "--no-graph-rank", "--no-refresh"],
       "backend": "go",
       "stdout": "formatted ranked hits, or the result JSON with --json",
       "exit": { "0": "answered, including zero hits", "1": "`✗ <message>` for engine errors such as an unknown --in prefix" },

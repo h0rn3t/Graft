@@ -137,8 +137,8 @@ func TestHookRetrievalFormatting(t *testing.T) {
 	}
 	if got := stripHookANSI(formatHookRetrieval(saved, 5)); hookANSIPattern.MatchString(got) {
 		t.Errorf("formatHookRetrieval(saved) = %q, want plain text", got)
-	} else if !strings.Contains(got, "tokens saved ≈ ") || !regexp.MustCompile(`\([0-9]+%\)`).MatchString(got) {
-		t.Errorf("formatHookRetrieval(saved) = %q, want savings line with percentage", got)
+	} else if strings.Contains(got, "tokens saved") || strings.Contains(got, "this pack") {
+		t.Errorf("formatHookRetrieval(saved) = %q, want retrieval without a savings banner", got)
 	}
 	if got := formatHookRetrieval(&graph.AskResult{}, 5); got != "" {
 		t.Errorf("formatHookRetrieval(no hits) = %q, want empty", got)
@@ -161,7 +161,7 @@ func TestHookRelevantRetrievalGate(t *testing.T) {
 	}
 
 	session := fresh()
-	if got := relevantHookRetrieval(&graph.AskResult{Mode: "structural", Hits: base().Hits}, session, 3); got == "" {
+	if got := relevantHookRetrieval(&graph.AskResult{Mode: "structural", Hits: base().Hits}, session, 3, ""); got == "" {
 		t.Fatal("relevantHookRetrieval(structural) = empty, want retrieval")
 	}
 
@@ -169,7 +169,7 @@ func TestHookRelevantRetrievalGate(t *testing.T) {
 	strong := base()
 	strong.Coverage = new(0.2)
 	strong.CoverageStrong = new(0.45)
-	if got := relevantHookRetrieval(&strong, session, 3); !strings.Contains(got, "verify") {
+	if got := relevantHookRetrieval(&strong, session, 3, ""); !strings.Contains(got, "verify") {
 		t.Errorf("relevantHookRetrieval(strong name) = %q, want verify", got)
 	}
 
@@ -177,7 +177,7 @@ func TestHookRelevantRetrievalGate(t *testing.T) {
 	weak := base()
 	weak.Coverage = new(0.1649)
 	weak.CoverageStrong = new(0.0329)
-	got := relevantHookRetrieval(&weak, session, 3)
+	got := relevantHookRetrieval(&weak, session, 3, "")
 	if !strings.Contains(got, "no strong match") || !strings.Contains(got, "0.03") {
 		t.Errorf("relevantHookRetrieval(weak) = %q, want measured nudge", got)
 	}
@@ -189,11 +189,11 @@ func TestHookRelevantRetrievalGate(t *testing.T) {
 	weak.Coverage = new(0.1)
 	weak.CoverageStrong = new(0.0)
 	for range 2 {
-		if got := relevantHookRetrieval(&weak, session, 3); got == "" {
+		if got := relevantHookRetrieval(&weak, session, 3, ""); got == "" {
 			t.Fatal("relevantHookRetrieval(weak nudge) = empty before cap")
 		}
 	}
-	if got := relevantHookRetrieval(&weak, session, 3); got != "" {
+	if got := relevantHookRetrieval(&weak, session, 3, ""); got != "" {
 		t.Errorf("relevantHookRetrieval(weak nudge) = %q after cap, want empty", got)
 	}
 	if session.Nudges != 2 {
@@ -202,20 +202,20 @@ func TestHookRelevantRetrievalGate(t *testing.T) {
 
 	session = fresh()
 	result := base()
-	if relevantHookRetrieval(&result, session, 3) == "" {
+	if relevantHookRetrieval(&result, session, 3, "") == "" {
 		t.Fatal("relevantHookRetrieval(first prompt) = empty, want retrieval")
 	}
 	if !slices.Equal(session.InjectedPointers, []string{"src/pkce.ts:L1-L4", "src/pkce.ts:L6-L9"}) {
 		t.Errorf("relevantHookRetrieval(first prompt) pointers = %v", session.InjectedPointers)
 	}
-	if got := relevantHookRetrieval(&result, session, 3); got != "" {
+	if got := relevantHookRetrieval(&result, session, 3, ""); got != "" {
 		t.Errorf("relevantHookRetrieval(repeated prompt) = %q, want empty", got)
 	}
 	result.Hits = []graph.AskHit{
 		{Title: "verify", Pointer: "src/pkce.ts:L1-L4"},
 		{Title: "exchange", Pointer: "src/client.ts:L2-L8"},
 	}
-	got = relevantHookRetrieval(&result, session, 3)
+	got = relevantHookRetrieval(&result, session, 3, "")
 	if !strings.Contains(got, "exchange") || strings.Contains(got, "verify") {
 		t.Errorf("relevantHookRetrieval(one fresh hit) = %q, want only exchange", got)
 	}

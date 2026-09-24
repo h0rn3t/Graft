@@ -7,7 +7,6 @@ import (
 
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
-	"github.com/h0rn3t/Graft/internal/savings"
 )
 
 func runSkeleton(opts callersOptions, stdout, stderr io.Writer) int {
@@ -66,9 +65,6 @@ func writeSkeletonHuman(stdout io.Writer, result graph.SkeletonResult) int {
 		lines = append(lines, line)
 	}
 	body := head + "\n" + strings.Join(lines, "\n")
-	if result.Saved != nil {
-		body = savings.With(body, result.Saved.Files, result.Saved.BaselineChars)
-	}
 	_, err := io.WriteString(stdout, body+"\n")
 	if err != nil {
 		return 1

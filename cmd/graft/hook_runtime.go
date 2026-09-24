@@ -192,7 +192,7 @@ func classifyAndScoreHookUse(toolName, command string, payload any) hookToolUse 
 	return hookToolUse{Kind: kind, SavedTokens: saved}
 }
 
-func handleHookToolUse(input hookInput, root string) {
+func handleHookToolUse(input hookInput, root string, stdout io.Writer) {
 	toolInput := input.object("tool_input")
 	command, _ := toolInput["command"].(string)
 	payload := input["tool_response"]
@@ -202,6 +202,9 @@ func handleHookToolUse(input hookInput, root string) {
 	use := classifyAndScoreHookUse(input.string("tool_name"), command, payload)
 	use.Host = "claude-code"
 	_ = recordHookToolUse(root, hookSessionID(input), use)
+	if note := hookSearchNudge(input, root); note != "" {
+		emitHookContext(stdout, "PostToolUse", note)
+	}
 }
 
 func handleHookCursorPostTool(input hookInput, root string) {
@@ -525,6 +528,8 @@ func askHookGraph(ctx context.Context, root, contextDir, prompt, scope string) (
 	if err != nil {
 		return graph.AskResult{}, false
 	}
+	setAskSourceHashes(*loaded, result.Hits)
+	inlineAskHits(root, askCruxByPointer(*loaded), result.Hits, false, prompt)
 	select {
 	case <-ctx.Done():
 		return graph.AskResult{}, false
@@ -548,13 +553,17 @@ func handleHookPrompt(ctx context.Context, input hookInput, root string, stdout,
 		return
 	}
 	agent, _ := input.object("agent")["name"].(string)
+	agentContext := "name:" + agent
+	if id := input.string("agent_id"); id != "" {
+		agentContext = "id:" + id
+	}
 	text := ""
 	remember := func(session *sessionState) bool {
 		session.LastQuery = &prompt
 		if agent != "" {
 			session.PerAgentQuery[agent] = prompt
 		}
-		text = relevantHookRetrieval(&result, session, 3)
+		text = relevantHookRetrieval(&result, session, 3, agentContext)
 		return true
 	}
 	id := hookSessionID(input)
@@ -593,6 +602,17 @@ func runHook(ctx context.Context, event string, stdin io.Reader, stdout, stderr 
 
 	switch event {
 	case "session-start":
+		id := hookSessionID(input)
+		if _, err := os.Stat(hookSessionPath(root, id)); err == nil {
+			_ = updateHookSession(root, id, func(session *sessionState) bool {
+				if len(session.InjectedPointers) == 0 && len(session.InjectedRevisions) == 0 {
+					return false
+				}
+				session.InjectedPointers = nil
+				session.InjectedRevisions = nil
+				return true
+			})
+		}
 		lines := hookSessionStartLines(ctx, root)
 		index, err := os.ReadFile(filepath.Join(hookContextDir(root), "INDEX.md"))
 		if err == nil {
@@ -613,7 +633,7 @@ func runHook(ctx context.Context, event string, stdin io.Reader, stdout, stderr 
 		defer cancel()
 		handleHookPostEdit(ctx, input, root, stdout, stderr)
 	case "tool-savings":
-		handleHookToolUse(input, root)
+		handleHookToolUse(input, root, stdout)
 	case "cursor-post-tool":
 		handleHookCursorPostTool(input, root)
 	case "cursor-mcp":

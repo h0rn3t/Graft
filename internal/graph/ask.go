@@ -87,6 +87,11 @@ type AskHit struct {
 	// Scope names the ranking scope of a multi-scope hit; the root is "".
 	Scope *string `json:"scope,omitempty"`
 	Code  string  `json:"code,omitempty"`
+	// SourceHash tracks revisions without exposing internal graph metadata.
+	SourceHash string `json:"-"`
+	// ContentRef identifies source delivered to callers using opt-in deduplication.
+	ContentRef string `json:"contentRef,omitempty"`
+	Unchanged  bool   `json:"unchanged,omitempty"`
 	// ScopeAfterCode serializes scope after code: a workspace hit gains its
 	// scope by object spread, which appends a key the child hit lacked.
 	ScopeAfterCode bool `json:"-"`
@@ -100,15 +105,17 @@ func (hit AskHit) MarshalJSON() ([]byte, error) {
 		return jsonjs.Marshal(plain(hit), "")
 	}
 	return jsonjs.Marshal(struct {
-		Kind     string   `json:"kind"`
-		Title    string   `json:"title"`
-		Pointer  string   `json:"pointer"`
-		Snippet  string   `json:"snippet"`
-		Relation Relation `json:"relation,omitempty"`
-		Score    float64  `json:"score"`
-		Code     string   `json:"code,omitempty"`
-		Scope    *string  `json:"scope,omitempty"`
-	}{hit.Kind, hit.Title, hit.Pointer, hit.Snippet, hit.Relation, hit.Score, hit.Code, hit.Scope}, "")
+		Kind       string   `json:"kind"`
+		Title      string   `json:"title"`
+		Pointer    string   `json:"pointer"`
+		Snippet    string   `json:"snippet"`
+		Relation   Relation `json:"relation,omitempty"`
+		Score      float64  `json:"score"`
+		Code       string   `json:"code,omitempty"`
+		Scope      *string  `json:"scope,omitempty"`
+		ContentRef string   `json:"contentRef,omitempty"`
+		Unchanged  bool     `json:"unchanged,omitempty"`
+	}{hit.Kind, hit.Title, hit.Pointer, hit.Snippet, hit.Relation, hit.Score, hit.Code, hit.Scope, hit.ContentRef, hit.Unchanged}, "")
 }
 
 // AskSavings records the whole-file baseline for returned hits.

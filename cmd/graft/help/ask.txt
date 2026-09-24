@@ -9,11 +9,12 @@ Arguments:
                    index)
 
 Options:
-  -n, --limit <n>  max results (default: "8")
+  -n, --limit <n>  max ranked matches before edit context (default: "8")
   --source         inline the source at each file:line hit (retriever mode — the
                    pack IS the answer, no need to re-open files)
-  --full           with --source: inline whole definition spans instead of the
-                   default ≤8-line crux excerpts
+  --full           inline whole definitions within budget (implies --source)
+  --budget <tokens>  total estimated-token budget, 128–64000 (default: "2000")
+  --intent <lookup|edit>  include direct callers, dependencies and tests for edit
   --in <path>      narrow to nodes under this path prefix, filtered before
                    scoring (segment-aware, like scopeOf)
   --json           output the result as JSON

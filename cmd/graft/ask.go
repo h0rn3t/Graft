@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"fmt"
@@ -14,14 +15,19 @@ import (
 
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
-	"github.com/h0rn3t/Graft/internal/savings"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
-
-const maxAskSpanLines = 80
 
 var askPointerPattern = regexp.MustCompile(`^(.*):L(\d+)-L(\d+)$`)
 
 func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
+	if _, err := validateAskOptions(opts); err != nil {
+		writeDiagnostic(stderr, "%v\n", err)
+		return 1
+	}
+	if opts.intent == "edit" || opts.full {
+		opts.source = true
+	}
 	root, contextDir, err := resolvePaths(opts, enginePathRules, stderr)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
@@ -31,11 +37,16 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 	limit := askLimit(opts.limit)
 	// The refresh and the workspace check read --dir only, as in TypeScript.
 	queryDir := graphDir(root, opts, false)
-	refreshBeforeQuery(root, queryDir, opts, stderr)
+	var refresh bytes.Buffer
+	refreshBeforeQuery(root, queryDir, opts, &refresh)
+	opts.budgetOverhead = refresh.String()
+	if _, err := io.WriteString(stderr, opts.budgetOverhead); err != nil {
+		return 1
+	}
 	if children, ok := graph.ReadWorkspaceChildren(queryDir); ok {
 		return runWorkspaceAsk(root, queryDir, children, opts, limit, stdout, stderr)
 	}
-	loaded, err := graph.Read(graph.WiringPath(contextDir))
+	loaded, index, err := opts.queryCache.load(contextDir)
 	if err != nil {
 		result := graph.AskResult{
 			Query: opts.query,
@@ -43,29 +54,27 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 			Hits:  make([]graph.AskHit, 0),
 			Note:  "no matching nodes — try different words, or `graft build` if graft/ is empty",
 		}
-		if opts.jsonOutput {
-			return writeAskJSON(stdout, stderr, result)
-		}
-		return writeAskHuman(stdout, result)
+		return writeAskResult(opts, result, stdout, stderr)
 	}
 	result, err := graph.Ask(*loaded, opts.query, graph.AskOptions{
 		Limit:       &limit,
 		In:          opts.in,
 		NoGraphRank: opts.noGraphRank,
-		Index:       readAskIndex(filepath.Join(contextDir, ".cache", "ask-index.json")),
+		Index:       index,
 	})
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
+	if opts.intent == "edit" {
+		addAskEditContext(*loaded, &result)
+	}
 	if opts.source {
-		inlineAskHits(root, askCruxByPointer(*loaded), result.Hits, opts.full)
+		setAskSourceHashes(*loaded, result.Hits)
+		inlineAskHits(root, askCruxByPointer(*loaded), result.Hits, opts.full, opts.query)
 		result.Saved = askSavings(*loaded, result.Hits)
 	}
-	if opts.jsonOutput {
-		return writeAskJSON(stdout, stderr, result)
-	}
-	return writeAskHuman(stdout, result)
+	return writeAskResult(opts, result, stdout, stderr)
 }
 
 func runWorkspaceAsk(root, contextDir string, children []string, opts callersOptions, limit float64, stdout, stderr io.Writer) int {
@@ -106,7 +115,7 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 	fileFirst := false
 	for _, child := range children {
 		childContext := filepath.Join(root, child, "graft")
-		loaded, err := graph.Read(graph.WiringPath(childContext))
+		loaded, index, err := opts.queryCache.load(childContext)
 		if err != nil {
 			continue
 		}
@@ -118,7 +127,7 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 			Limit:                  new(max(limit*4, 20)),
 			In:                     childIn,
 			NoGraphRank:            opts.noGraphRank,
-			Index:                  readAskIndex(filepath.Join(childContext, ".cache", "ask-index.json")),
+			Index:                  index,
 			FileFirst:              &fileFirst,
 			FileComplement:         true,
 			IncludeRankingMetadata: true,
@@ -127,11 +136,12 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 			continue
 		}
 		if opts.source {
+			setAskSourceHashes(*loaded, childResult.Hits)
 			// Each child inlines its own spans, crux included, before fusion.
 			childRoot := filepath.Join(root, child)
 			cruxByPointer := askCruxByPointer(*loaded)
-			inlineAskHits(childRoot, cruxByPointer, childResult.Hits, opts.full)
-			inlineAskRanking(childRoot, cruxByPointer, childResult.Ranking, opts.full)
+			inlineAskHits(childRoot, cruxByPointer, childResult.Hits, opts.full, opts.query)
+			inlineAskRanking(childRoot, cruxByPointer, childResult.Ranking, opts.full, opts.query)
 		}
 		ranking := childResult.Ranking
 		groups := make([]workspaceGroup, 0)
@@ -338,10 +348,10 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 			result.Note = coverage
 		}
 	}
-	if opts.jsonOutput {
-		return writeAskJSON(stdout, stderr, result)
+	if opts.intent == "edit" {
+		addWorkspaceEditContext(root, opts, &result)
 	}
-	return writeAskHuman(stdout, result)
+	return writeAskResult(opts, result, stdout, stderr)
 }
 
 func askWorkspaceCoverage(result graph.AskResult, ranking *graph.AskRankingMetadata) (float64, float64) {
@@ -550,7 +560,7 @@ func writeAskHuman(stdout io.Writer, result graph.AskResult) int {
 	return writeAskError(err)
 }
 
-// formatAskText renders an ask result exactly as the TypeScript formatAsk does.
+// formatAskText renders ranked source context without recurring statistics.
 func formatAskText(result graph.AskResult) string {
 	head := `graft ask — "` + result.Query + `"  (` + result.Mode + ")"
 	note := askNoteBlock(result.Note)
@@ -572,6 +582,12 @@ func formatAskText(result graph.AskResult) string {
 				line += " — " + hit.Snippet
 			}
 			lines = append(lines, line)
+			if hit.ContentRef != "" {
+				lines = append(lines, "   ref: "+hit.ContentRef)
+			}
+			if hit.Unchanged {
+				lines = append(lines, "   unchanged; source already supplied")
+			}
 			if hit.Code != "" {
 				lines = append(lines, "", "```", hit.Code, "```", "")
 			}
@@ -584,6 +600,12 @@ func formatAskText(result graph.AskResult) string {
 			}
 			lines = append(lines, fmt.Sprintf("%d. %s%s  [%s]", index+1, label, hit.Title, hit.Kind))
 			lines = append(lines, "   "+hit.Pointer)
+			if hit.ContentRef != "" {
+				lines = append(lines, "   ref: "+hit.ContentRef)
+			}
+			if hit.Unchanged {
+				lines = append(lines, "   unchanged; source already supplied")
+			}
 			if hit.Snippet != "" {
 				lines = append(lines, "   "+hit.Snippet)
 			}
@@ -595,9 +617,6 @@ func formatAskText(result graph.AskResult) string {
 		lines = append(lines, askScopeFooterLines(result)...)
 	}
 	body := jsonjs.TrimEnd(strings.Join(lines, "\n"))
-	if savings := askSavingsLine(result, body); savings != "" {
-		body = savings + "\n\n" + body
-	}
 	return body + askEscalationNudge(result) + "\n"
 }
 
@@ -685,37 +704,37 @@ func askCruxByPointer(wiring graph.GraphV1) map[string]string {
 
 // inlineAskRanking inlines source into a child's internal ranking queues too,
 // as the TypeScript ask does before a workspace parent fuses them.
-func inlineAskRanking(root string, cruxByPointer map[string]string, ranking *graph.AskRankingMetadata, full bool) {
+func inlineAskRanking(root string, cruxByPointer map[string]string, ranking *graph.AskRankingMetadata, full bool, query ...string) {
 	if ranking == nil {
 		return
 	}
 	for index := range ranking.Groups {
-		inlineAskHits(root, cruxByPointer, ranking.Groups[index].Hits, full)
-		inlineAskHits(root, cruxByPointer, ranking.Groups[index].BaselineHits, full)
+		inlineAskHits(root, cruxByPointer, ranking.Groups[index].Hits, full, query...)
+		inlineAskHits(root, cruxByPointer, ranking.Groups[index].BaselineHits, full, query...)
 	}
 	for index := range ranking.Baseline {
 		hits := []graph.AskHit{ranking.Baseline[index].Hit}
-		inlineAskHits(root, cruxByPointer, hits, full)
+		inlineAskHits(root, cruxByPointer, hits, full, query...)
 		ranking.Baseline[index].Hit = hits[0]
 	}
 }
 
-func inlineAskHits(root string, cruxByPointer map[string]string, hits []graph.AskHit, full bool) {
+func inlineAskHits(root string, cruxByPointer map[string]string, hits []graph.AskHit, full bool, query ...string) {
 	for index := range hits {
 		hit := &hits[index]
 		path, from, to, ok := parseAskPointer(hit.Pointer)
 		if !ok {
 			continue
 		}
+		code, hash, exists := sliceAskSpan(filepath.Join(root, filepath.FromSlash(path)), from, to, path, full, query...)
+		if !exists {
+			continue
+		}
+		hit.Code, hit.SourceHash = code, hash
 		if !full {
 			if crux, exists := cruxByPointer[hit.Pointer]; exists {
 				hit.Code = crux + "\n… (crux — full definition at " + hit.Pointer + "; rerun with --full)"
-				continue
 			}
-		}
-		code, exists := sliceAskSpan(filepath.Join(root, filepath.FromSlash(path)), from, to, path, full)
-		if exists {
-			hit.Code = code
 		}
 	}
 }
@@ -733,21 +752,23 @@ func parseAskPointer(pointer string) (string, int, int, bool) {
 	return match[1], from, to, true
 }
 
-func sliceAskSpan(path string, from, to int, relativePath string, full bool) (string, bool) {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return "", false
+func sliceAskSpan(path string, from, to int, relativePath string, full bool, query ...string) (string, string, bool) {
+	data, readable, err := sourcefiles.Read(path)
+	if err != nil || !readable {
+		return "", "", false
 	}
-	lines := strings.Split(strings.ToValidUTF8(string(data), "�"), "\n")
+	lines := strings.Split(data, "\n")
 	end := min(to, len(lines))
 	if from > end {
-		return "", false
+		return "", "", false
 	}
 	selected := lines[from-1 : end]
-	if len(selected) > maxAskSpanLines {
-		selected = append(selected[:maxAskSpanLines], fmt.Sprintf("… (+%d more lines; open %s:L%d-L%d)", len(selected)-maxAskSpanLines, relativePath, from, end))
+	body := strings.Join(selected, "\n")
+	hash := sourcefiles.Hash(body)
+	if !full {
+		return compactAskSource(selected, from, strings.Join(query, " "), fmt.Sprintf("%s:L%d-L%d", relativePath, from, end)), hash, true
 	}
-	return strings.Join(selected, "\n"), true
+	return body, hash, true
 }
 
 func askSavings(wiring graph.GraphV1, hits []graph.AskHit) *graph.AskSavings {
@@ -783,11 +804,4 @@ func askSavings(wiring graph.GraphV1, hits []graph.AskHit) *graph.AskSavings {
 		return nil
 	}
 	return saved
-}
-
-func askSavingsLine(result graph.AskResult, body string) string {
-	if result.Saved == nil {
-		return ""
-	}
-	return savings.AskLine(body, result.Saved.Files, result.Saved.BaselineChars)
 }

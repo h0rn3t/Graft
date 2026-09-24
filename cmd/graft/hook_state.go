@@ -25,7 +25,9 @@ type sessionState struct {
 	SourceReads       int               `json:"sourceReads"`
 	SavedTokens       int               `json:"savedTokens"`
 	InjectedPointers  []string          `json:"injectedPointers"`
+	InjectedRevisions []string          `json:"injectedRevisions,omitempty"`
 	Nudges            int               `json:"nudges"`
+	SearchNudges      int               `json:"searchNudges,omitzero"`
 	TurnUsedGraft     *bool             `json:"turnUsedGraft,omitempty"`
 	InputCostMicros   *int              `json:"inputCostMicros,omitempty"`
 	InputTokensBilled *int              `json:"inputTokensBilled,omitempty"`

@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "[graft] tokens saved ≈ 6 (13%) — this output ≈ 41 tok vs reading the 1 file(s) it covers whole ≈ 47 tok (estimate). At the end of your reply, tell the user the total graft tokens saved this turn — sum each such line across your graft calls — e.g. \"🌱 graft saved ~N tokens this turn\".\n\ngrow · method · pkg/queue/queue.go:L9-L9\n  calls ← Push (pkg/queue/queue.go:L7-L7)\n      7: func (q *Queue) Push(v int) { q.items = append(q.items, v); q.grow() }\n",
+  "stdout": "grow · method · pkg/queue/queue.go:L9-L9\n  calls ← Push (pkg/queue/queue.go:L7-L7)\n      7: func (q *Queue) Push(v int) { q.items = append(q.items, v); q.grow() }\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

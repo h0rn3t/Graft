@@ -130,7 +130,7 @@ func programSpec() *commandSpec {
 	add(program, "graft build [options] [dir]", "-e, --extensions <exts...>", "--no-reuse", "--lsp",
 		"--follow-submodules", "--no-follow-submodules", "--follow-nested-repos", "--no-follow-nested-repos",
 		"--include-dir <name>", "--only-dir <path>", "--no-gitignore", "--no-ignore")
-	add(program, "graft ask [options] <query> [dir]", "-n, --limit <n>", "--source", "--full", "--in <path>", "--json", "--no-graph-rank", "--no-refresh")
+	add(program, "graft ask [options] <query> [dir]", "-n, --limit <n>", "--source", "--full", "--budget <tokens>", "--intent <lookup|edit>", "--in <path>", "--json", "--no-graph-rank", "--no-refresh")
 	add(program, "graft skeleton [options] <file> [dir]", "--json", "--no-refresh")
 	add(program, "graft check [options] [dir]", "-e, --extensions <exts...>", "--json")
 	add(program, "graft stats [options] [dir]", "--json")
