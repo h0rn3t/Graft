@@ -316,11 +316,7 @@ Register it by hand if your agent needs it explicit and `graft` is on `PATH`:
 { "mcpServers": { "graft": { "command": "graft", "args": ["mcp"] } } }
 ```
 
-For an npm-only installation, use:
-
-```json
-{ "mcpServers": { "graft": { "command": "npx", "args": ["-y", "@nanonets/graft@latest", "mcp"] } } }
-```
+When `graft` is not on PATH, `init` writes the absolute path of the running binary instead; set `GRAFT_MCP_COMMAND` to choose the command explicitly. Graft never writes a launch command that downloads a package.
 
 Where a CLI agent supports user-level `hooks.json`, `init` also installs Graft's post-edit hook — blast-radius warnings and automatic `$0` graph re-sync after edits (skip with `--no-hooks`).
 

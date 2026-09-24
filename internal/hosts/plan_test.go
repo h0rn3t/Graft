@@ -71,7 +71,7 @@ func TestMergeGraftSettingsRemovesLegacyAllowEntry(t *testing.T) {
 
 func TestPlanMatchesTheWritesAnApplyMakes(t *testing.T) {
 	repo, home := machine(t)
-	env := Env{Home: home, BakedDir: "/pkg", Launch: npxLaunch}
+	env := Env{Home: home, BakedDir: "/pkg", Launch: binLaunch}
 	before := listFiles(t, repo, home)
 	plans := PlanInit(repo, home, env.Launch, nil)
 	if after := listFiles(t, repo, home); !slices.Equal(after, before) {
@@ -105,7 +105,7 @@ func TestPlanMatchesTheWritesAnApplyMakes(t *testing.T) {
 // home while repo-level targets, Cursor's hooks included, are still written.
 func TestNoGlobalKeepsHomeUntouched(t *testing.T) {
 	repo, home := machine(t)
-	env := Env{Home: home, BakedDir: "/pkg", Launch: npxLaunch}
+	env := Env{Home: home, BakedDir: "/pkg", Launch: binLaunch}
 	before := listFiles(t, home)
 	if _, err := RunClaudeInit(repo, env, true, false); err != nil {
 		t.Fatal(err)

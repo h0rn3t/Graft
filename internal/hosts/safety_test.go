@@ -432,7 +432,7 @@ func TestRetractFindsConfigsOfUninstalledTools(t *testing.T) {
 }
 
 func TestServerEntryNeverDownloads(t *testing.T) {
-	t.Setenv("GRAFT_MCP_NPX", "")
+	t.Setenv("GRAFT_MCP_COMMAND", "")
 	t.Setenv("PATH", t.TempDir())
 	launch := ServerEntry().resolved()
 	if !filepath.IsAbs(launch.Command) || !slices.Equal(launch.Args, []string{"mcp"}) {

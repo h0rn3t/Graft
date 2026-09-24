@@ -29,7 +29,7 @@
   "inputs": {},
   "status": 0,
   "stdout": "",
-  "stderr": "kiro:\n  ⚠ removed: <REPO>/.kiro/settings/mcp.json — not valid JSON, left untouched (remove the graft entry by hand)\n\n⚠ 1 file(s) could not be parsed and were left as-is — see above.\n",
+  "stderr": "kiro:\n  ⚠ removed: <REPO>/.kiro/settings/mcp.json — not valid JSON, left untouched (remove the graft entry by hand)\n\n⚠ 1 file(s) could not be parsed or removed and were left as-is — see above.\n",
   "files": {
     "home/.claude.json [644]": "{\n  \"numStartups\": 3,\n  \"mcpServers\": {\n    \"mine\": {\n      \"command\": \"mine\"\n    }\n  }\n}\n",
     "home/.codex/config.toml [644]": "[mcp_servers.other]\ncommand = \"other\"\n",

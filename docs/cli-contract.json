@@ -153,7 +153,7 @@
         "repo (hooks, unless --no-hooks; not affected by --no-global): .cursor/hooks/graft-hooks.cjs, .cursor/hooks.json",
         "home (antigravity, unless --no-global; not affected by --no-hooks): ~/.gemini/skills/graft/SKILL.md",
         "repo: <K>/wiring-stamp.json with version, host ids and global/mcp/hooks/statusline options",
-        "process: `graft build .` child (300s timeout) when no graph exists and --no-build is absent; `graft --version` probe for the MCP launch command unless GRAFT_MCP_NPX is set",
+        "process: `graft build .` child (300s timeout) when no graph exists and --no-build is absent; `graft --version` probe for the MCP launch command unless GRAFT_MCP_COMMAND is set",
         "workspace root: the parent first, then every workspace child gets the same wiring"
       ]
     },
@@ -215,7 +215,7 @@
     "CLAUDE_CONFIG_DIR": { "scope": "hook", "effect": "Claude user config directory" },
     "CLAUDE_PROJECT_DIR": { "scope": "hook", "effect": "repository root seen by native hooks and statusline" },
     "GRAFT_DIR": { "scope": "cli", "effect": "context directory override for build, state and hooks" },
-    "GRAFT_MCP_NPX": { "scope": "cli", "effect": "force the npx MCP launch form in host configs" },
+    "GRAFT_MCP_COMMAND": { "scope": "cli", "effect": "command written into host MCP configs instead of the probed local graft" },
     "GRAFT_NO_GITIGNORE": { "scope": "cli", "effect": "skip the graft .gitignore entry" },
     "GRAFT_NO_IGNORE": { "scope": "cli", "effect": "skip the .ignore re-admit entries" },
     "GRAFT_NO_REFRESH": { "scope": "cli", "effect": "disable pre-query refresh" },

@@ -136,7 +136,11 @@ func initRepo(repo string, env hosts.Env, opts initOptions, stderr io.Writer) in
 func wireTarget(repo string, ids []string, plan []hosts.HostPlan, env hosts.Env, opts initOptions, stderr io.Writer) error {
 	wantStatusline := hosts.StatuslineWanted(opts.statusline)
 	for _, retraction := range hosts.Changed(hosts.Retract(repo, env, hosts.RetractOptions{Apply: true, Global: opts.global, Exclude: ids})) {
-		if retraction.Action != hosts.RetractUnparseable {
+		switch retraction.Action {
+		case hosts.RetractUnparseable:
+		case hosts.RetractFailed:
+			writeDiagnostic(stderr, "⚠ could not remove %s (%s): %v\n", retraction.Path, retraction.What, retraction.Err)
+		default:
 			writeDiagnostic(stderr, "- removed %s (%s) — agent not selected\n", retraction.Path, retraction.What)
 		}
 	}
@@ -335,12 +339,12 @@ func runUninstall(parsed parsedFlags, stderr io.Writer) int {
 	writeDiagnostic(stderr, "%s\n", hosts.FormatRetractions(done, true))
 	bad := 0
 	for _, retraction := range hosts.Changed(done) {
-		if retraction.Action == hosts.RetractUnparseable {
+		if retraction.Action == hosts.RetractUnparseable || retraction.Action == hosts.RetractFailed {
 			bad++
 		}
 	}
 	if bad > 0 {
-		writeDiagnostic(stderr, "\n⚠ %d file(s) could not be parsed and were left as-is — see above.\n", bad)
+		writeDiagnostic(stderr, "\n⚠ %d file(s) could not be parsed or removed and were left as-is — see above.\n", bad)
 	} else {
 		writeDiagnostic(stderr, "\n✓ graft fully removed. `graft init` re-wires from scratch.\n")
 	}

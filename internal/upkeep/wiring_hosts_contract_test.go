@@ -116,7 +116,7 @@ func TestRewriteWiringContract(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			root := t.TempDir()
 			home := t.TempDir()
-			t.Setenv("GRAFT_MCP_NPX", "1")
+			t.Setenv("GRAFT_MCP_COMMAND", "graft")
 			geminiPath := filepath.Join(root, "GEMINI.md")
 			oldGemini := "# Project notes\n\n<!-- graft:start -->\nold instructions\n<!-- graft:end -->\n\nkeep this line\n"
 			if err := os.WriteFile(geminiPath, []byte(oldGemini), 0o644); err != nil {
@@ -175,8 +175,8 @@ func TestRewriteWiringContract(t *testing.T) {
 				bucket, ok := settings["mcpServers"].(map[string]any)
 				if !ok || bucket["other"] == nil {
 					t.Errorf("RewriteWiring(%q, %q, %v, %+v) mcpServers = %v, want preserved other server", root, home, tt.hosts, tt.options, settings["mcpServers"])
-				} else if entry, ok := bucket["graft"].(map[string]any); !ok || entry["command"] != "npx" || !reflect.DeepEqual(entry["args"], []any{"-y", "@nanonets/graft", "mcp"}) {
-					t.Errorf("RewriteWiring(%q, %q, %v, %+v) mcpServers.graft = %v, want NPX launch", root, home, tt.hosts, tt.options, bucket["graft"])
+				} else if entry, ok := bucket["graft"].(map[string]any); !ok || entry["command"] != "graft" || !reflect.DeepEqual(entry["args"], []any{"mcp"}) {
+					t.Errorf("RewriteWiring(%q, %q, %v, %+v) mcpServers.graft = %v, want the graft launch", root, home, tt.hosts, tt.options, bucket["graft"])
 				}
 			} else if tt.settings != "" && (err != nil || string(gotSettings) != tt.settings) {
 				t.Errorf("RewriteWiring(%q, %q, %v, %+v) settings = %q, %v, want unchanged %q", root, home, tt.hosts, tt.options, gotSettings, err, tt.settings)

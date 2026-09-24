@@ -161,7 +161,7 @@ func (runtime *goldenRuntime) setEnvironment(t *testing.T, env map[string]string
 	if err := os.Unsetenv("CLAUDECODE"); err != nil {
 		t.Fatalf("os.Unsetenv(CLAUDECODE) error = %v, want nil", err)
 	}
-	t.Setenv("GRAFT_MCP_NPX", "1")
+	t.Setenv("GRAFT_MCP_COMMAND", "graft")
 	if runtime.bin() != "" {
 		if _, err := os.Stat(runtime.bin()); err == nil {
 			t.Setenv("PATH", runtime.bin()+string(os.PathListSeparator)+os.Getenv("PATH"))

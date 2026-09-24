@@ -90,7 +90,7 @@ func TestMCPStartupReconcilesGeminiWiringContract(t *testing.T) {
 	contextDir := filepath.Join(root, ".graft-context")
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("GRAFT_MCP_NPX", "1")
+	t.Setenv("GRAFT_MCP_COMMAND", "graft")
 	geminiPath := filepath.Join(root, "GEMINI.md")
 	const userText = "# User notes\n\n<!-- graft:start -->\nold instructions\n<!-- graft:end -->\n\nKeep this.\n"
 	if err := os.WriteFile(geminiPath, []byte(userText), 0o644); err != nil {
@@ -135,8 +135,8 @@ func TestMCPStartupReconcilesGeminiWiringContract(t *testing.T) {
 	}
 	servers, ok := settings["mcpServers"].(map[string]any)
 	entry, entryOK := servers["graft"].(map[string]any)
-	if !ok || !entryOK || entry["command"] != "npx" {
-		t.Errorf("mcpStartupInstructions(%q, %q, %q) mcpServers.graft = %v, want NPX server entry", root, contextDir, "2.0.0", settings["mcpServers"])
+	if !ok || !entryOK || entry["command"] != "graft" {
+		t.Errorf("mcpStartupInstructions(%q, %q, %q) mcpServers.graft = %v, want the graft server entry", root, contextDir, "2.0.0", settings["mcpServers"])
 	}
 	var stamp struct {
 		Version string `json:"version"`

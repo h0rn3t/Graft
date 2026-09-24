@@ -24,19 +24,15 @@ type Launch struct {
 	resolve func() Launch
 }
 
-var (
-	npxLaunch = Launch{Command: "npx", Args: []string{"-y", "@nanonets/graft", "mcp"}}
-	binLaunch = Launch{Command: "graft", Args: []string{"mcp"}}
-)
+var binLaunch = Launch{Command: "graft", Args: []string{"mcp"}}
 
 // ServerEntry returns the MCP launch command for this run, decided only when
-// a config is written: the installed binary when `graft --version` succeeds on
-// PATH, otherwise the absolute path of the running executable, so a host never
-// has to download graft to start it. GRAFT_MCP_NPX, an explicit opt-in, forces
-// the npx form.
+// a config is written: GRAFT_MCP_COMMAND when set, else the installed binary
+// when `graft --version` succeeds on PATH, else the absolute path of the
+// running executable, so a host never has to download graft to start it.
 func ServerEntry() Launch {
-	if envTruthy("GRAFT_MCP_NPX") {
-		return npxLaunch
+	if command := os.Getenv("GRAFT_MCP_COMMAND"); command != "" {
+		return Launch{Command: command, Args: []string{"mcp"}}
 	}
 	return Launch{resolve: sync.OnceValue(probeLaunch)}
 }
