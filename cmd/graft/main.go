@@ -338,7 +338,12 @@ func runCallers(opts callersOptions, stdout, stderr io.Writer) int {
 	if opts.jsonOutput {
 		return writeJSON(stdout, stderr, opts.query, *loaded, results, direction)
 	}
-	return writeHuman(stdout, root, *loaded, results, direction, depth)
+	out := &countingWriter{Writer: stdout}
+	code := writeHuman(out, root, *loaded, results, direction, depth)
+	if saved := callersSavings(*loaded, results); saved != nil {
+		recordQuerySavings(contextDir, out.n, saved.BaselineChars)
+	}
+	return code
 }
 
 func homeDir() string {

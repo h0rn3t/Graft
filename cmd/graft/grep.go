@@ -47,8 +47,12 @@ func runGrep(opts callersOptions, stdout, stderr io.Writer) int {
 		writeDiagnostic(stderr, "%s\n", grepZeroHitNote(result))
 		return 0
 	}
-	if _, err := io.WriteString(stdout, formatGrepResult(result)); err != nil {
+	text := formatGrepResult(result)
+	if _, err := io.WriteString(stdout, text); err != nil {
 		return 1
+	}
+	if result.Saved != nil {
+		recordQuerySavings(contextDir, len(text), result.Saved.BaselineChars)
 	}
 	return 0
 }

@@ -75,7 +75,13 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 		inlineAskHits(root, askCruxByPointer(*loaded), result.Hits, opts.full, opts.query)
 		result.Saved = askSavings(*loaded, result.Hits)
 	}
-	return writeAskResult(opts, result, stdout, stderr)
+	if result.Saved == nil {
+		return writeAskResult(opts, result, stdout, stderr)
+	}
+	out := &countingWriter{Writer: stdout}
+	code := writeAskResult(opts, result, out, stderr)
+	recordQuerySavings(contextDir, out.n, result.Saved.BaselineChars)
+	return code
 }
 
 func runWorkspaceAsk(root, contextDir string, children []string, opts callersOptions, limit float64, stdout, stderr io.Writer) int {

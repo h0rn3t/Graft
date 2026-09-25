@@ -46,8 +46,12 @@ func runMap(opts callersOptions, stdout, stderr io.Writer) int {
 		}
 		return 0
 	}
-	if _, err := io.WriteString(stdout, graph.FormatRepoMap(result)); err != nil {
+	text := graph.FormatRepoMap(result)
+	if _, err := io.WriteString(stdout, text); err != nil {
 		return 1
+	}
+	if result.Saved != nil {
+		recordQuerySavings(contextDir, len(text), result.Saved.BaselineChars)
 	}
 	return 0
 }

@@ -374,6 +374,12 @@ func startHookSync(root string) bool {
 
 func handleHookStop(input hookInput, root string) {
 	id := hookSessionID(input)
+	if saved := savings.DrainPending(hookCacheDir(root)); saved > 0 {
+		_ = updateHookSession(root, id, func(session *sessionState) bool {
+			session.SavedTokens += saved
+			return true
+		})
+	}
 	// A subagent's own transcript is counted when it stops; the main
 	// transcript waits for the main agent's turn to end.
 	if input.string("hook_event_name") == "SubagentStop" {

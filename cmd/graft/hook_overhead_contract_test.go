@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/h0rn3t/Graft/internal/savings"
+
 	"github.com/h0rn3t/Graft/internal/graph"
 )
 
@@ -206,5 +208,15 @@ func TestHookToolUseKeepsNoCounts(t *testing.T) {
 	}
 	if got := readHookSession(root, "s3"); got.GraftReads != 0 || got.SourceReads != 0 {
 		t.Errorf("handleHookToolUse(Read, graft MCP, graft CLI) session = graft %d, source %d; want 0, 0", got.GraftReads, got.SourceReads)
+	}
+}
+
+func TestHookStopCreditsPendingQuerySavings(t *testing.T) {
+	root := t.TempDir()
+	savings.RecordPending(hookContextDir(root), 1200)
+	handleHookStop(hookInput{"session_id": "s1", "hook_event_name": "Stop"}, root)
+	handleHookStop(hookInput{"session_id": "s1", "hook_event_name": "Stop"}, root)
+	if got := readHookSession(root, "s1").SavedTokens; got != 1200 {
+		t.Errorf("handleHookStop() savedTokens = %d, want 1200 credited once", got)
 	}
 }
