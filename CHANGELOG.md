@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.3.0-beta.3 - 2026-09-25
+
+### Added
+
+- **Exact symbol reads.** `graft read <symbol>` and the MCP tool `graft_read_symbol` return a known symbol's complete source, current span and source hash without a preceding search. Select by name, node ID or `path::name`. A read also returns the symbol's direct callees in the same directory: whole when they fit the budget (default 2000 estimated tokens), otherwise as pointers. On the CLI, repeated `--also` reads up to eight symbols under one shared budget. Oversized or stale definitions fail instead of returning partial source.
+- **Forgiving selectors.** A name shared by one production definition and only testdata, fixture, generated or test copies reads the production one. A `path::name` whose file lacks the name falls back to the name. A `note` says which applied; other ambiguous names still return candidate IDs.
+
+### Changed
+
+- **A ranked query that names its top hit returns that definition whole.** `ask --source` and `graft_find_code` inline the complete top definition instead of an excerpt when a query word equals its name and it fits half of the budget. Descriptive queries keep excerpts.
+- **Local MCP tools share a cached graph snapshot.** File API, call tracing, grep, map and exact reads reuse one decoded graph, and the ask index loads only for ranked queries. Source freshness is still checked before every query.
+- **Claude Code hooks run once.** When `graft init --global` wired both the project and the user settings, every hook ran twice. The shim now passes its path in `GRAFT_HOOK_SHIM`, and the user-level hook yields to the project's registration for the same event. Upkeep rewrites existing shims on the next session.
+- **Hooks are quieter.** The prompt hook no longer injects the "no strong match" notice, and the raw-search nudge is shown once per session instead of three times.
+- On Claude Opus 5.5 at low effort, over four side-by-side runs per task against 0.3.0-beta.2's retrieval, a named-function question took 44% fewer tokens and one model request fewer. A multi-file question was 13% cheaper, within run-to-run variance.
+
 ## 0.3.0-beta.2 - 2026-09-25
 
 ### Fixed
