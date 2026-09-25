@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0-beta.2 - 2026-09-25
+
+### Fixed
+
+- **The Claude Code statusline shows session savings again.** Since retrieval output dropped its `[graft] tokens saved` footer, the hook had nothing to add up and the `~N tok saved · ~$X` segment never appeared. `ask --source`, `grep`, `callers` and `map` (CLI and MCP) now record what they saved in `graft/.cache/savings-pending`, and the Stop hook credits it to the session. Agent-visible output is unchanged. Cursor sessions still report no savings.
+
 ## 0.3.0-beta.1 - 2026-09-25
 
 ### Changed
