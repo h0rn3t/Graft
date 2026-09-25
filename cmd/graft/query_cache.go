@@ -21,16 +21,31 @@ type queryCacheEntry struct {
 	graphFile, indexFile os.FileInfo
 	wiring               *graph.GraphV1
 	index                *graph.AskIndex
+	indexLoaded          bool
 }
 
 // load is safe for concurrent calls; callers must not mutate returned values.
 func (cache *queryCache) load(contextDir string) (*graph.GraphV1, *graph.AskIndex, error) {
+	return cache.snapshot(contextDir, true)
+}
+
+// loadGraph shares the graph without decoding the optional ranked-search index.
+func (cache *queryCache) loadGraph(contextDir string) (*graph.GraphV1, error) {
+	wiring, _, err := cache.snapshot(contextDir, false)
+	return wiring, err
+}
+
+func (cache *queryCache) snapshot(contextDir string, withIndex bool) (*graph.GraphV1, *graph.AskIndex, error) {
 	if cache == nil {
 		wiring, err := graph.Read(graph.WiringPath(contextDir))
 		if err != nil {
 			return nil, nil, err
 		}
-		return wiring, readAskIndex(filepath.Join(contextDir, ".cache", "ask-index.json")), nil
+		var index *graph.AskIndex
+		if withIndex {
+			index = readAskIndex(filepath.Join(contextDir, ".cache", "ask-index.json"))
+		}
+		return wiring, index, nil
 	}
 	dir, err := filepath.Abs(contextDir)
 	if err != nil {
@@ -43,25 +58,43 @@ func (cache *queryCache) load(contextDir string) (*graph.GraphV1, *graph.AskInde
 	indexPath := filepath.Join(dir, ".cache", "ask-index.json")
 	for range 3 {
 		graphFile, statErr := os.Stat(graphPath)
-		indexFile, _ := os.Stat(indexPath) // The sidecar is optional, including when unreadable.
+		var indexFile os.FileInfo
+		if withIndex {
+			indexFile, _ = os.Stat(indexPath) // The sidecar is optional, including when unreadable.
+		}
+		var wiring *graph.GraphV1
 		for i, entry := range cache.entries {
 			if entry.dir != dir {
 				continue
 			}
 			cache.entries = slices.Delete(cache.entries, i, i+1)
-			if statErr == nil && sameQueryFile(entry.graphFile, graphFile) && sameQueryFile(entry.indexFile, indexFile) {
-				cache.entries = append(cache.entries, entry)
-				return entry.wiring, entry.index, nil
+			if statErr == nil && sameQueryFile(entry.graphFile, graphFile) {
+				if !withIndex || (entry.indexLoaded && sameQueryFile(entry.indexFile, indexFile)) {
+					cache.entries = append(cache.entries, entry)
+					return entry.wiring, entry.index, nil
+				}
+				if !entry.indexLoaded {
+					wiring = entry.wiring
+				}
 			}
 			break
 		}
 		if statErr != nil {
 			return nil, nil, statErr
 		}
-		wiring, readErr := graph.Read(graphPath)
-		index := readAskIndex(indexPath)
+		var readErr error
+		if wiring == nil {
+			wiring, readErr = graph.Read(graphPath)
+		}
+		var index *graph.AskIndex
+		if withIndex {
+			index = readAskIndex(indexPath)
+		}
 		graphAfter, graphStatErr := os.Stat(graphPath)
-		indexAfter, _ := os.Stat(indexPath) // An absent sidecar must invalidate its cached value.
+		var indexAfter os.FileInfo
+		if withIndex {
+			indexAfter, _ = os.Stat(indexPath) // An absent sidecar must invalidate its cached value.
+		}
 		if graphStatErr != nil || !sameQueryFile(graphFile, graphAfter) || !sameQueryFile(indexFile, indexAfter) {
 			continue
 		}
@@ -73,7 +106,7 @@ func (cache *queryCache) load(contextDir string) (*graph.GraphV1, *graph.AskInde
 			cache.entries = slices.Delete(cache.entries, 0, 1)
 		}
 		cache.entries = append(cache.entries, queryCacheEntry{
-			dir: dir, graphFile: graphFile, indexFile: indexFile, wiring: wiring, index: index,
+			dir: dir, graphFile: graphFile, indexFile: indexFile, wiring: wiring, index: index, indexLoaded: withIndex,
 		})
 		return wiring, index, nil
 	}

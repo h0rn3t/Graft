@@ -54,7 +54,7 @@ var mcpAliases = map[string]string{
 var mcpTools = []mcpToolDefinition{
 	{
 		Name:        "graft_find_code",
-		Description: "Query the repo context graph in plain words — use it instead of grep plus file reads to learn how or where something works. Returns ranked nodes with exact file:line spans and the relevant source inlined — usually the full answer, no file reads needed.",
+		Description: "Discover code when the symbol or location is unknown. Returns ranked source excerpts and exact spans; a query naming the top hit returns it whole. If you already know a symbol, use graft_read_symbol directly; do not search again to expand a known hit.",
 		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
@@ -123,19 +123,35 @@ var mcpTools = []mcpToolDefinition{
 			"properties": map[string]any{"max_dirs": map[string]any{"type": "number", "description": "max directory entries shown, rest counted into dropped (default 16)"}},
 		},
 	},
+	{
+		Name:        "graft_read_symbol",
+		Description: "Read a known symbol directly; no preceding search or file-API call is needed. Returns its complete source, current span and hash, plus its direct callees in the same directory. A name shared with testdata or test copies reads the production definition; a path::name in the wrong file falls back to the name.",
+		AlwaysLoad:  true,
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"symbol": map[string]any{"type": "string", "description": "case-sensitive exact name, node ID, or path::name; include the child prefix in a workspace"},
+				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "total estimated-token budget (UTF-16 length / 4), default 2000; callees fill what the definition leaves, oversized definitions fail without partial source"},
+			},
+			"required": []string{"symbol"},
+		},
+	},
 }
 
 const mcpInstructionsText = `This repo is indexed by graft: a prebuilt graph of every symbol, its file:line
 span, and who calls what. Use these tools instead of grep, rg, find or reading
 source files to locate and understand code — one call usually replaces several.
 
-**If these tools are deferred (names shown, schemas withheld), load them all in ONE lookup:** ToolSearch "select:mcp__graft__graft_find_code,mcp__graft__graft_find_all,mcp__graft__graft_trace_calls,mcp__graft__graft_file_api,mcp__graft__graft_repo_map" — one round trip for the whole session. Never load them one at a time.
+**If these tools are deferred (names shown, schemas withheld), load them all in ONE lookup:** ToolSearch "select:mcp__graft__graft_read_symbol,mcp__graft__graft_find_code,mcp__graft__graft_find_all,mcp__graft__graft_trace_calls,mcp__graft__graft_file_api,mcp__graft__graft_repo_map" — one round trip for the whole session. Never load them one at a time.
 
-- graft_find_code — "how does X work" / "where is Y": ranked hits, code inlined.
-- graft_find_all — when you need EVERY occurrence; find_code is top-N and misses some.
+- Known symbol: graft_read_symbol directly — complete source plus its same-directory callees. Do not search for it first.
+- Unknown location: graft_find_code with a focused question; use in when the path is known.
+- Known file, unknown symbol: graft_file_api — the file's whole API in ~200 tokens.
+- graft_find_all — when you need EVERY occurrence; a query is top-N and misses some.
 - graft_trace_calls — who calls it, what it calls, blast radius before a rename.
-- graft_file_api — a file's whole API in ~200 tokens.
 - graft_repo_map — orientation in an unfamiliar repo.
+
+Use complete returned source as evidence without re-reading it. For a truncated hit, read its exact symbol with graft_read_symbol.
 
 Results already reflect uncommitted edits — the graph refreshes before each query.`
 
@@ -520,15 +536,21 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		name = requestedName
 	}
 	known := name == "graft_find_code" || name == "graft_file_api" || name == "graft_check_freshness" ||
-		name == "graft_trace_calls" || name == "graft_find_all" || name == "graft_repo_map"
+		name == "graft_trace_calls" || name == "graft_find_all" || name == "graft_repo_map" || name == "graft_read_symbol"
 	if !known {
 		return mcpResult{text: "unknown tool: " + requestedName, isError: true}
 	}
 	var askOpts callersOptions
-	if name == "graft_find_code" {
+	if name == "graft_find_code" || name == "graft_read_symbol" {
+		// Checked before graph access, so a malformed call fails fast.
+		if name == "graft_find_code" && mcpString(args["query"]) == "" {
+			return mcpResult{text: "graft_find_code requires a query", isError: true}
+		}
+		if name == "graft_read_symbol" && strings.TrimSpace(mcpString(args["symbol"])) == "" {
+			return mcpResult{text: "graft_read_symbol requires a symbol", isError: true}
+		}
 		var err error
-		askOpts, err = mcpAskOptions(args)
-		if err != nil {
+		if askOpts, err = mcpAskOptions(args); err != nil {
 			return mcpResult{text: err.Error(), isError: true}
 		}
 	}
@@ -554,7 +576,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 			refresh = graph.EnsureFreshGraph(root, options)
 		}
 		if note := graph.RefreshNote(refresh); note != "" {
-			if name == "graft_find_code" {
+			if name == "graft_find_code" || name == "graft_read_symbol" {
 				askOpts.queryNote = note
 			} else {
 				defer func() {
@@ -573,11 +595,16 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 	}
 
 	switch name {
+	case "graft_read_symbol":
+		var stdout, stderr bytes.Buffer
+		status := runRead(callersOptions{
+			command: "read", query: mcpString(args["symbol"]), root: root, rootSet: true,
+			contextDir: dirOverride, budget: askOpts.budget, queryNote: askOpts.queryNote,
+			queryCache: cache, mcp: true, noRefresh: true,
+		}, &stdout, &stderr)
+		return mcpResult{text: strings.TrimRight(stderr.String()+stdout.String(), "\n"), isError: status != 0}
 	case "graft_find_code":
 		query := mcpString(args["query"])
-		if query == "" {
-			return mcpResult{text: "graft_find_code requires a query", isError: true}
-		}
 		limit := 5
 		if value, ok := mcpNumber(args["limit"]); ok {
 			limit = int(value)
@@ -598,7 +625,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		// Skeleton never federates: at a workspace root it reports the missing
 		// graph through its own note, as the TypeScript tool does.
 		result := graph.SkeletonResult{File: file, Entries: make([]graph.SkeletonEntry, 0), Note: "no wiring graph — run `graft build` first"}
-		if loaded, err := graph.Read(graph.WiringPath(contextDir)); err == nil {
+		if loaded, err := cache.loadGraph(contextDir); err == nil {
 			result = graph.Skeleton(*loaded, file)
 		}
 		var text bytes.Buffer
@@ -615,7 +642,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		if _, workspace := graph.ReadWorkspaceChildren(contextDir); workspace {
 			return mcpWorkspaceTraceCalls(root, contextDir, symbol, args)
 		}
-		return mcpTraceCalls(root, contextDir, symbol, args)
+		return mcpTraceCalls(root, contextDir, symbol, args, cache)
 	case "graft_find_all":
 		pattern := mcpString(args["pattern"])
 		if pattern == "" {
@@ -629,6 +656,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		output := mcpRunCommand(runGrep, callersOptions{
 			command: "grep", query: pattern, root: root, rootSet: true, contextDir: dirOverride, jsonOutput: true,
 			ignoreCase: args["ignore_case"] == true, fixed: args["fixed"] == true, in: mcpString(args["in"]), noRefresh: true,
+			queryCache: cache,
 		})
 		if output.isError {
 			return output
@@ -649,7 +677,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		if _, ok := graph.ReadWorkspaceChildren(contextDir); ok {
 			return mcpResult{text: graph.FederateMap(root, contextDir, graph.RepoMapOptions{MaxDirs: maxDirs}), isError: false}
 		}
-		loaded, err := graph.Read(graph.WiringPath(contextDir))
+		loaded, err := cache.loadGraph(contextDir)
 		if err != nil {
 			return mcpResult{text: "no graph found — run `graft build` first", isError: true}
 		}
@@ -674,8 +702,8 @@ func mcpRunCommand(command func(callersOptions, io.Writer, io.Writer) int, opts 
 	return mcpResult{text: stdout.String(), isError: false}
 }
 
-func mcpTraceCalls(root, contextDir, symbol string, args map[string]any) mcpResult {
-	loaded, err := graph.Read(graph.WiringPath(contextDir))
+func mcpTraceCalls(root, contextDir, symbol string, args map[string]any, cache *queryCache) mcpResult {
+	loaded, err := cache.loadGraph(contextDir)
 	if err != nil {
 		return mcpResult{text: "no graph found — run `graft build` first", isError: true}
 	}

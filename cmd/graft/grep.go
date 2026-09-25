@@ -22,7 +22,7 @@ func runGrep(opts callersOptions, stdout, stderr io.Writer) int {
 	if _, workspace := graph.ReadWorkspaceChildren(contextDir); workspace {
 		return runWorkspaceGrep(root, contextDir, opts, stdout, stderr)
 	}
-	loaded, err := graph.Read(graph.WiringPath(contextDir))
+	loaded, err := opts.queryCache.loadGraph(contextDir)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ no graph — run graft build first\n")
 		return 1

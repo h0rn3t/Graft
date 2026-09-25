@@ -1,0 +1,22 @@
+Usage: graft read [options] <symbol> [dir]
+
+Read a known symbol's complete source with its current span and source hash,
+followed by its direct callees in the same directory: complete when they fit
+the budget, otherwise as pointers. A name shared with testdata, fixture or test
+copies reads the production definition; a path::name whose path lacks the name
+is resolved by name; a note says which applied. Other ambiguous names return
+candidate IDs; oversized definitions are never truncated.
+
+Arguments:
+  symbol             exact name, node ID, or repo-relative path::name
+  dir                repository root (default: nearest ancestor with a graft/ index)
+
+Options:
+  --also <symbol>    add another exact selector (repeatable, at most 8 total)
+  --budget <tokens>  total estimated-token budget, 128-64000 (default: "2000")
+  --json             output id, name, kind, pointer, sourceHash, code, note and callees as JSON
+  --no-refresh       skip graph refresh; still reject source that differs from the graph
+  -h, --help         display help for command
+
+Batch responses use one budget and report each item as ok, covered, omitted,
+or error, without callees. Source is sorted by file/span and contained definitions are not repeated.

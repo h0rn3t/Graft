@@ -13,16 +13,19 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/savings"
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
 var askPointerPattern = regexp.MustCompile(`^(.*):L(\d+)-L(\d+)$`)
 
 func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
-	if _, err := validateAskOptions(opts); err != nil {
+	budget, err := validateAskOptions(opts)
+	if err != nil {
 		writeDiagnostic(stderr, "%v\n", err)
 		return 1
 	}
@@ -73,6 +76,9 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 	if opts.source {
 		setAskSourceHashes(*loaded, result.Hits)
 		inlineAskHits(root, askCruxByPointer(*loaded), result.Hits, opts.full, opts.query)
+		if !opts.full {
+			expandNamedAskHit(root, result.Hits, opts.query, budget)
+		}
 		result.Saved = askSavings(*loaded, result.Hits)
 	}
 	if result.Saved == nil {
@@ -872,6 +878,37 @@ func inlineAskHits(root string, cruxByPointer map[string]string, hits []graph.As
 			}
 		}
 	}
+}
+
+// expandNamedAskHit inlines the complete top definition when the query names
+// it: the agent asked for that symbol, and an excerpt would cost another
+// round to expand. The definition may take at most half of the budget, which
+// leaves room for the other hits.
+func expandNamedAskHit(root string, hits []graph.AskHit, query string, budget int) {
+	if len(hits) == 0 || hits[0].Kind == "file" {
+		return
+	}
+	hit := &hits[0]
+	name, _, _ := strings.Cut(hit.Title, " · ")
+	name = strings.ToLower(name)
+	if _, last, ok := strings.CutLast(name, "."); ok {
+		name = last
+	}
+	words := strings.FieldsFunc(strings.ToLower(query), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_'
+	})
+	if name == "" || !slices.Contains(words, name) {
+		return
+	}
+	path, from, to, ok := parseAskPointer(hit.Pointer)
+	if !ok {
+		return
+	}
+	code, hash, exists := sliceAskSpan(filepath.Join(root, filepath.FromSlash(path)), from, to, path, true)
+	if !exists || savings.Tokens(savings.Length(code)) > budget/2 {
+		return
+	}
+	hit.Code, hit.SourceHash = code, hash
 }
 
 func parseAskPointer(pointer string) (string, int, int, bool) {

@@ -183,20 +183,14 @@ func formatHookRetrieval(result *graph.AskResult, cap int) string {
 	return hookRetrievalBody(result.Hits[:cap])
 }
 
-func hookWeakMatchNudge(session *sessionState, strong float64) string {
-	if session.Nudges >= 2 {
-		return ""
-	}
-	session.Nudges++
-	return fmt.Sprintf("[graft] no strong match for this prompt (name-field match %.2f) — the graph has more than this probe found. Run `graft ask \"<your task>\" --source` before grepping.", strong)
-}
-
 func relevantHookRetrieval(result *graph.AskResult, session *sessionState, cap int, agent string) string {
 	if result == nil || len(result.Hits) == 0 {
 		return ""
 	}
+	// A weak match injects nothing: a notice would only repeat the tool
+	// guidance the session already carries.
 	if askWeakMatch(*result) {
-		return hookWeakMatchNudge(session, askOptionalCoverage(result.CoverageStrong))
+		return ""
 	}
 	// Only a strong top hit is inlined; every other hit is a pointer. A
 	// revision covers the hit's code whether or not it is shown, plus whether

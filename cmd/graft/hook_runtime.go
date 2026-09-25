@@ -459,48 +459,92 @@ func computeHookStats(wiring graph.GraphV1) hookStats {
 	return stats
 }
 
+// claudeUserDir is Claude Code's user-level configuration directory.
+func claudeUserDir() string {
+	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
+		return dir
+	}
+	return filepath.Join(homeDir(), ".claude")
+}
+
+type claudeHookCommand struct {
+	Command string   `json:"command"`
+	Timeout *float64 `json:"timeout"`
+}
+
+// graftHookCommands lists graft's hook commands for event in one Claude Code
+// settings file; a missing or unreadable file has none.
+func graftHookCommands(file, event string) []claudeHookCommand {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		return nil
+	}
+	var settings struct {
+		Hooks map[string][]struct {
+			Hooks []claudeHookCommand `json:"hooks"`
+		} `json:"hooks"`
+	}
+	if jsonv2.Unmarshal(data, &settings) != nil {
+		return nil
+	}
+	var commands []claudeHookCommand
+	for _, block := range settings.Hooks[event] {
+		for _, hook := range block.Hooks {
+			if strings.Contains(hook.Command, "graft-hooks.cjs") {
+				commands = append(commands, hook)
+			}
+		}
+	}
+	return commands
+}
+
 // hookInstalledTimeout is the smallest timeout the Claude Code settings give
 // graft's hook for event. Claude Code reads the value in seconds.
 func hookInstalledTimeout(root, event string) (time.Duration, bool) {
-	user := os.Getenv("CLAUDE_CONFIG_DIR")
-	if user == "" {
-		user = filepath.Join(homeDir(), ".claude")
-	}
 	var smallest time.Duration
 	for _, file := range []string{
 		filepath.Join(root, ".claude", "settings.json"),
 		filepath.Join(root, ".claude", "settings.local.json"),
-		filepath.Join(user, "settings.json"),
+		filepath.Join(claudeUserDir(), "settings.json"),
 	} {
-		data, err := os.ReadFile(file)
-		if err != nil {
-			continue
-		}
-		var settings struct {
-			Hooks map[string][]struct {
-				Hooks []struct {
-					Command string   `json:"command"`
-					Timeout *float64 `json:"timeout"`
-				} `json:"hooks"`
-			} `json:"hooks"`
-		}
-		if jsonv2.Unmarshal(data, &settings) != nil {
-			continue
-		}
-		for _, block := range settings.Hooks[event] {
-			for _, hook := range block.Hooks {
-				if !strings.Contains(hook.Command, "graft-hooks.cjs") || hook.Timeout == nil || !(*hook.Timeout > 0) {
-					continue
-				}
-				// Capped at a million seconds so the conversion cannot overflow.
-				timeout := time.Duration(min(*hook.Timeout, 1e6) * float64(time.Second))
-				if smallest == 0 || timeout < smallest {
-					smallest = timeout
-				}
+		for _, hook := range graftHookCommands(file, event) {
+			if hook.Timeout == nil || !(*hook.Timeout > 0) {
+				continue
+			}
+			// Capped at a million seconds so the conversion cannot overflow.
+			timeout := time.Duration(min(*hook.Timeout, 1e6) * float64(time.Second))
+			if smallest == 0 || timeout < smallest {
+				smallest = timeout
 			}
 		}
 	}
 	return smallest, smallest > 0
+}
+
+// hookYieldsToProject reports whether a hook started by the user-level Claude
+// Code shim should stay silent because the project registers graft's own hook
+// for the same event. Claude Code runs both registrations, so without this
+// every injection and counter update would happen twice. A payload without an
+// event name, another shim, or an older shim that passes no path keeps
+// running: a duplicate beats a lost hook.
+func hookYieldsToProject(shim, root string, input hookInput) bool {
+	event := input.string("hook_event_name")
+	if shim == "" || event == "" {
+		return false
+	}
+	shimInfo, err := os.Stat(shim)
+	if err != nil {
+		return false
+	}
+	userInfo, err := os.Stat(filepath.Join(claudeUserDir(), "helpers", "graft-hooks.cjs"))
+	if err != nil || !os.SameFile(shimInfo, userInfo) {
+		return false
+	}
+	if _, err := os.Stat(filepath.Join(root, ".claude", "helpers", "graft-hooks.cjs")); err != nil {
+		return false
+	}
+	return len(graftHookCommands(filepath.Join(root, ".claude", "settings.json"), event)) > 0 ||
+		len(graftHookCommands(filepath.Join(root, ".claude", "settings.local.json"), event)) > 0
 }
 
 // hookPromptAskTimeout is graft's own budget inside the host's prompt-hook
@@ -647,11 +691,15 @@ func hookSessionStartLines(ctx context.Context, root string) []string {
 	return lines
 }
 
-// runHook handles one host hook event. ctx ends when the process is told to
-// stop; each event's own budget is derived from it.
-func runHook(ctx context.Context, event string, stdin io.Reader, stdout, stderr io.Writer) {
+// runHook handles one host hook event started by the shim at path shim, which
+// is empty for shims older than the path argument. ctx ends when the process
+// is told to stop; each event's own budget is derived from it.
+func runHook(ctx context.Context, event, shim string, stdin io.Reader, stdout, stderr io.Writer) {
 	input := readHookInput(stdin)
 	root := hookProjectDir(input)
+	if hookYieldsToProject(shim, root, input) {
+		return
+	}
 
 	switch event {
 	case "session-start":

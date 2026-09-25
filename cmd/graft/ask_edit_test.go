@@ -83,8 +83,8 @@ func TestAskEditIndexedTypeReference(t *testing.T) {
 func TestAskEditFocusedSourceAndFullExpansion(t *testing.T) {
 	root := t.TempDir()
 	buildAskEditFixture(t, root)
-	compact := runAskEditJSON(t, root, "processInvoice focusneedle", "--source", "--limit", "1")
-	full := runAskEditJSON(t, root, "processInvoice focusneedle", "--full", "--limit", "1", "--budget", "64000")
+	compact := runAskEditJSON(t, root, "invoice processing focusneedle", "--source", "--limit", "1")
+	full := runAskEditJSON(t, root, "invoice processing focusneedle", "--full", "--limit", "1", "--budget", "64000")
 	if len(compact.Hits) != 1 || len(full.Hits) != 1 {
 		t.Fatalf("ask source hits = (%d, %d), want (1, 1)", len(compact.Hits), len(full.Hits))
 	}
@@ -234,7 +234,7 @@ func TestMCPAskEditReferenceReplay(t *testing.T) {
 		}
 		return result.text
 	}
-	args := map[string]any{"query": "processInvoice focusneedle", "limit": float64(1)}
+	args := map[string]any{"query": "invoice processing focusneedle", "limit": float64(1)}
 	plain := call(args)
 	if strings.Contains(plain, "ref:") || !strings.Contains(plain, "focusneedle :=") {
 		t.Errorf("mcpCall without seen = %q, want source without references", plain)

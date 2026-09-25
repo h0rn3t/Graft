@@ -132,6 +132,7 @@ func programSpec() *commandSpec {
 		"--include-dir <name>", "--only-dir <path>", "--no-gitignore", "--no-ignore")
 	add(program, "graft ask [options] <query> [dir]", "-n, --limit <n>", "--source", "--full", "--budget <tokens>", "--intent <lookup|edit>", "--in <path>", "--json", "--no-graph-rank", "--no-refresh")
 	add(program, "graft skeleton [options] <file> [dir]", "--json", "--no-refresh")
+	add(program, "graft read [options] <symbol> [dir]", "--also <symbol>", "--budget <tokens>", "--json", "--no-refresh")
 	add(program, "graft check [options] [dir]", "-e, --extensions <exts...>", "--json")
 	add(program, "graft stats [options] [dir]", "--json")
 	add(program, "graft mcp [options] [dir]")
@@ -352,7 +353,7 @@ func (flags parsedFlags) set(option optionSpec, value string) {
 
 // repeatableOptions collect every occurrence, as the TypeScript CLI's
 // accumulating argument parsers do.
-var repeatableOptions = map[string]bool{"--include-dir": true, "--only-dir": true}
+var repeatableOptions = map[string]bool{"--include-dir": true, "--only-dir": true, "--also": true}
 
 func isHelpFlag(arg string) bool {
 	return arg == "-h" || arg == "--help"

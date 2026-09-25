@@ -24,6 +24,7 @@ import (
 type callersOptions struct {
 	command            string
 	query              string
+	symbols            []string
 	root               string
 	rootSet            bool
 	contextDir         string
@@ -166,7 +167,9 @@ func dispatchWithInput(ctx context.Context, parsed invocation, stdin io.Reader, 
 		if len(args) == 0 {
 			return 1
 		}
-		runHook(ctx, args[0], stdin, stdout, stderr)
+		// The shim names itself in the environment rather than argv, so an
+		// older graft on PATH still accepts a newer shim's invocation.
+		runHook(ctx, args[0], os.Getenv("GRAFT_HOOK_SHIM"), stdin, stdout, stderr)
 		return 0
 	case "_statusline":
 		runHookStatusline(stdin, stdout)
@@ -198,6 +201,8 @@ func dispatchWithInput(ctx context.Context, parsed invocation, stdin io.Reader, 
 		return runCallers(opts, stdout, stderr)
 	case "skeleton":
 		return runSkeleton(opts, stdout, stderr)
+	case "read":
+		return runRead(opts, stdout, stderr)
 	case "grep":
 		return runGrep(opts, stdout, stderr)
 	case "map":
@@ -265,9 +270,12 @@ func queryOptions(parsed invocation) callersOptions {
 	}
 	args := parsed.args
 	switch opts.command {
-	case "ask", "callers", "skeleton", "grep":
+	case "ask", "callers", "skeleton", "grep", "read":
 		opts.query = args[0]
 		args = args[1:]
+	}
+	if opts.command == "read" && len(flags.values["--also"]) > 0 {
+		opts.symbols = append([]string{opts.query}, flags.values["--also"]...)
 	}
 	if len(args) > 0 {
 		opts.root, opts.rootSet = args[0], true

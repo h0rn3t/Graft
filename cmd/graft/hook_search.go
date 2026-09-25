@@ -10,8 +10,9 @@ import (
 )
 
 // hookSearchNudgeLimit caps how often one session is told that a raw search
-// had a graft equivalent, so the note teaches without crowding the context.
-const hookSearchNudgeLimit = 3
+// had a graft equivalent: the first note carries the replacement call, later
+// ones would only repeat it.
+const hookSearchNudgeLimit = 1
 
 // hookSearch is a raw code search restated as graft_find_all arguments.
 type hookSearch struct {

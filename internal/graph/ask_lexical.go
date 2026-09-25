@@ -32,6 +32,13 @@ var (
 	askSpanStartPattern = regexp.MustCompile(`^L(\d+)-L\d+$`)
 )
 
+// IsCopyPath reports whether a repository-relative path holds testdata,
+// fixture, generated, vendored or test code, which retrieval places after
+// production code.
+func IsCopyPath(path string) bool {
+	return askTestPathPattern.MatchString(path)
+}
+
 // askScores is a string→number Map that iterates in insertion order.
 type askScores struct {
 	ids    []string

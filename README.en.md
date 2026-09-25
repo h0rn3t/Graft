@@ -293,11 +293,12 @@ Both configs are user-level, so they apply to **every** repo you open with Codex
 
 ### MCP server
 
-`graft init` also registers Graft's MCP server with agents that support it, so these six tools appear natively, no shell required. Claude Code gets this too: `graft init` writes the server into the project's `.mcp.json` (restart Claude Code to load it). Skip with `--no-mcp`; run it manually with `graft mcp [dir]`.
+`graft init` also registers Graft's MCP server with agents that support it, so these seven tools appear natively, no shell required. Claude Code gets this too: `graft init` writes the server into the project's `.mcp.json` (restart Claude Code to load it). Skip with `--no-mcp`; run it manually with `graft mcp [dir]`.
 
 | Tool | Takes | What it's for |
 |---|---|---|
 | `graft_find_code` | a question | Ranked nodes with file:line, source inlined — usually the full answer, no follow-up read needed. |
+| `graft_read_symbol` | an exact symbol or `path::name` | Complete source, current span and source hash, plus same-directory callees within the budget. |
 | `graft_file_api` | a file path | Every signature in that file, no bodies — the API surface for a tenth of the tokens. |
 | `graft_trace_calls` | a symbol | Who depends on it, or what it depends on with `direction: out`, N levels deep for blast radius. |
 | `graft_find_all` | a regex | Every hit, grouped by enclosing symbol, ranked by how coupled that symbol is. |
@@ -356,6 +357,10 @@ graft ask "<task>" --in <scope>      # narrow to one scope in a monorepo or mult
 
 graft skeleton <file> [dir]          # signatures only: the cheapest view of a file's API
 graft skeleton <file> --json         # machine-readable signatures
+graft read <symbol> [dir]            # complete source of one exact symbol
+graft read 'src/app.go::Handler'     # disambiguate with the exact file path
+graft read <symbol> --budget 4000 --json  # complete source and hash, within budget
+graft read First --also Second --also Third  # one shared budget for related definitions
 graft callers <symbol> [dir]         # who calls or references a symbol
 graft callers <symbol> --direction out  # what that symbol calls or references
 graft callers <symbol> -d all        # transitive dependencies; -d N sets an exact depth
@@ -414,8 +419,36 @@ source again. The MCP server caches decoded graph/index snapshots while still
 checking source freshness before queries. Retrieval does not print recurring
 savings banners; `graft stats` retains recorded estimates, not billing claims.
 
+Use `graft read` or MCP `graft_read_symbol` to expand a known definition
+without another ranked search. Select by case-sensitive name, node ID
+(`path#name`), or `path::name`; workspace selectors include the child prefix,
+such as `api/src/app.go::Handler`. A name shared by one production definition
+and only testdata, fixture, generated or test copies reads the production one,
+and a `path::name` whose path lacks the name falls back to a unique name; a
+`note` says which applied. Other ambiguous names return up to eight candidate
+IDs. A single read also returns the definition's direct callees in the same
+directory, complete when they fit the budget and as pointers otherwise. A ranked
+query that names its top hit (`probeDrift fast paths`) returns that definition
+whole when it fits half of the budget.
+Responses include the full indexed line span and a hash of the returned source.
+The default budget is 2000 estimated tokens (UTF-16 length / 4), configurable
+from 128 to 64000. A definition that does not fit returns an error with its
+required budget rather than partial source. Missing, unreadable, or changed
+source also returns an error; even `--no-refresh` never reads stale spans.
 
-`ask`, `skeleton`, `callers`, `grep`, `map`, and `blast` refresh changed source before answering. Use `--no-refresh` or `GRAFT_NO_REFRESH=1` to query the graph exactly as stored; set `GRAFT_REFRESH=hash` to verify files by content instead of size and mtime.
+For related definitions on the CLI, pass up to eight selectors using repeated
+`--also` flags.
+Batch JSON is `{results: [...]}` with per-item `ok`, `covered`, `omitted`, or
+`error` statuses. Definitions are ordered by file/span; containing definitions
+come first and cover their children without repeating source. A missing or
+oversized item does not discard the complete definitions that fit. If even the
+item metadata exceeds the shared budget, the request fails with guidance.
+
+Local MCP file API, call tracing, grep, map, and exact reads share the decoded
+graph cache. Ranked search loads its index on demand. Freshness checks still run
+before retrieval. Workspace federation retains its existing loading behavior.
+
+`ask`, `read`, `skeleton`, `callers`, `grep`, `map`, and `blast` refresh changed source before answering. Use `--no-refresh` or `GRAFT_NO_REFRESH=1` to query the graph exactly as stored; set `GRAFT_REFRESH=hash` to verify files by content instead of size and mtime.
 
 To update, re-run the installation command: `go install github.com/h0rn3t/Graft/cmd/graft@latest`.
 

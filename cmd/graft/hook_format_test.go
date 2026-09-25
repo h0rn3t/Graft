@@ -177,27 +177,11 @@ func TestHookRelevantRetrievalGate(t *testing.T) {
 	weak := base()
 	weak.Coverage = new(0.1649)
 	weak.CoverageStrong = new(0.0329)
-	got := relevantHookRetrieval(&weak, session, 3, "")
-	if !strings.Contains(got, "no strong match") || !strings.Contains(got, "0.03") {
-		t.Errorf("relevantHookRetrieval(weak) = %q, want measured nudge", got)
-	}
-	if len(session.InjectedPointers) != 0 {
-		t.Errorf("relevantHookRetrieval(weak) recorded %v, want no pointers", session.InjectedPointers)
-	}
-
-	session = fresh()
-	weak.Coverage = new(0.1)
-	weak.CoverageStrong = new(0.0)
-	for range 2 {
-		if got := relevantHookRetrieval(&weak, session, 3, ""); got == "" {
-			t.Fatal("relevantHookRetrieval(weak nudge) = empty before cap")
-		}
-	}
 	if got := relevantHookRetrieval(&weak, session, 3, ""); got != "" {
-		t.Errorf("relevantHookRetrieval(weak nudge) = %q after cap, want empty", got)
+		t.Errorf("relevantHookRetrieval(weak) = %q, want empty", got)
 	}
-	if session.Nudges != 2 {
-		t.Errorf("relevantHookRetrieval(weak nudge) nudges = %d, want 2", session.Nudges)
+	if len(session.InjectedPointers) != 0 || session.Nudges != 0 {
+		t.Errorf("relevantHookRetrieval(weak) recorded pointers %v, nudges %d, want none", session.InjectedPointers, session.Nudges)
 	}
 
 	session = fresh()
@@ -215,7 +199,7 @@ func TestHookRelevantRetrievalGate(t *testing.T) {
 		{Title: "verify", Pointer: "src/pkce.ts:L1-L4"},
 		{Title: "exchange", Pointer: "src/client.ts:L2-L8"},
 	}
-	got = relevantHookRetrieval(&result, session, 3, "")
+	got := relevantHookRetrieval(&result, session, 3, "")
 	if !strings.Contains(got, "exchange") || strings.Contains(got, "verify") {
 		t.Errorf("relevantHookRetrieval(one fresh hit) = %q, want only exchange", got)
 	}

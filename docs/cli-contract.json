@@ -56,6 +56,15 @@
       "effects": ["refresh: see queryRefresh"]
     },
     {
+      "name": "read",
+      "usage": "graft read [options] <symbol> [dir]",
+      "options": ["--also <symbol>", "--budget <tokens>", "--json", "--no-refresh"],
+      "backend": "go",
+      "stdout": "single complete definition with span and hash, a resolution note when a copy or wrong path was skipped, and same-directory callees inlined or listed within budget, or JSON {id,name,kind,pointer,sourceHash,code,note?,callees?}; --also returns a shared-budget batch with per-item ok/covered/omitted/error status, or JSON {results:[...]}",
+      "exit": { "0": "single definition or valid batch answered; inspect batch item statuses for omissions and errors", "1": "invalid request, missing graph, metadata over budget, or an unresolved, unsafe, stale or oversized single definition" },
+      "effects": ["refresh: see queryRefresh"]
+    },
+    {
       "name": "skeleton",
       "usage": "graft skeleton [options] <file> [dir]",
       "options": ["--json", "--no-refresh"],
@@ -215,6 +224,7 @@
     "CLAUDE_CONFIG_DIR": { "scope": "hook", "effect": "Claude user config directory" },
     "CLAUDE_PROJECT_DIR": { "scope": "hook", "effect": "repository root seen by native hooks and statusline" },
     "GRAFT_DIR": { "scope": "cli", "effect": "context directory override for build, state and hooks" },
+    "GRAFT_HOOK_SHIM": { "scope": "hook", "effect": "path of the hook shim that started `_hook`; a user-level Claude shim yields to the project's registration" },
     "GRAFT_MCP_COMMAND": { "scope": "cli", "effect": "command written into host MCP configs instead of the probed local graft" },
     "GRAFT_NO_GITIGNORE": { "scope": "cli", "effect": "skip the graft .gitignore entry" },
     "GRAFT_NO_IGNORE": { "scope": "cli", "effect": "skip the .ignore re-admit entries" },

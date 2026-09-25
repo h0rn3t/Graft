@@ -178,8 +178,15 @@ func Read(path string) (text string, ok bool, err error) {
 	if err != nil {
 		return "", false, err
 	}
+	text, ok = Decode(data)
+	return text, ok, nil
+}
+
+// Decode uses the source reader's UTF-8 and UTF-16LE decoding rules.
+// UTF-16BE is unsupported and returns false.
+func Decode(data []byte) (text string, ok bool) {
 	if len(data) >= 2 && data[0] == 0xfe && data[1] == 0xff {
-		return "", false, nil
+		return "", false
 	}
 	if len(data) >= 2 && data[0] == 0xff && data[1] == 0xfe {
 		data = data[2 : len(data)-len(data)%2]
@@ -187,10 +194,10 @@ func Read(path string) (text string, ok bool, err error) {
 		for index := range units {
 			units[index] = binary.LittleEndian.Uint16(data[index*2:])
 		}
-		return string(utf16.Decode(units)), true, nil
+		return string(utf16.Decode(units)), true
 	}
 	if utf8.Valid(data) {
-		return string(data), true, nil
+		return string(data), true
 	}
 	decoded := make([]byte, 0, len(data))
 	for len(data) > 0 {
@@ -201,7 +208,7 @@ func Read(path string) (text string, ok bool, err error) {
 		decoded = utf8.AppendRune(decoded, r)
 		data = data[width:]
 	}
-	return string(decoded), true, nil
+	return string(decoded), true
 }
 
 // invalidUTF8Prefix consumes one malformed UTF-8 subpart like Node's decoder.

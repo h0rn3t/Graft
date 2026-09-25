@@ -4,8 +4,10 @@ const { spawnSync } = require('child_process');
 const BAKED = "@@BAKED@@";
 
 // The graft binary that wrote this shim, else the first graft on PATH. A
-// missing binary exits 0 so the host never sees a failing hook.
+// missing binary exits 0 so the host never sees a failing hook. The shim's own
+// path lets a user-level hook yield to the project's registration.
 const binary = BAKED && fs.existsSync(BAKED) ? BAKED : 'graft';
-const result = spawnSync(binary, ['_hook', process.argv[2]], { stdio: 'inherit' });
+const env = { ...process.env, GRAFT_HOOK_SHIM: __filename };
+const result = spawnSync(binary, ['_hook', process.argv[2]], { stdio: 'inherit', env });
 if (result.error) process.exit(0);
 process.exit(result.status ?? 1);

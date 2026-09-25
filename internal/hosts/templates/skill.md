@@ -22,14 +22,18 @@ behave the same.
 | How does X work, where is Y | `graft_find_code` | `graft ask "<question>" --source` |
 | Every occurrence of a name or literal | `graft_find_all` | `graft grep "<pattern>"` |
 | What a file defines | `graft_file_api` | `graft skeleton <file>` |
+| Complete source of a known symbol | `graft_read_symbol` | `graft read <symbol>` |
 | Who calls a symbol, what breaks | `graft_trace_calls` | `graft callers <symbol>` |
 | What a symbol depends on | `graft_trace_calls` + `direction: "out"` | `graft callers <symbol> --direction out` |
 | Cold start in a repo or area | `graft_repo_map` | `graft map` |
 
 ## Where to start
 
-- You can already name the symbol or file: `find_all` it for the exact
-  `file:line`, then edit. Skip `find_code`; it adds nothing here.
+- You can already name the symbol: `read_symbol` it for the complete source,
+  current span and same-directory callees. Use `path::name` to disambiguate.
+  For a file, use `file_api`.
+- Several known definitions on the CLI: `graft read first --also second`
+  shares one budget.
 - You don't know where the code lives: one `find_code` with a plain-words
   question. About to edit what it finds? Add `intent: "edit"` (`--intent edit`)
   to get direct callers, dependencies and related tests in the same call.
@@ -60,9 +64,9 @@ behave the same.
    pass back the refs it returns on later calls; unchanged hits keep their
    location but omit source. After context compaction, omit `seen` to get the
    source again. Never share refs across agents.
-7. An excerpt ending in `… +N lines` is cut short: rerun with `full: true`
-   (`--full`) or open the file at exactly that range; never read a whole file to
-   rebuild what graft already returned.
+7. An excerpt ending in `… +N lines` is cut short: expand the exact symbol
+   with `graft_read_symbol` (`graft read path::name`). Do not repeat the ranked
+   search or read a whole file to rebuild what graft already returned.
 8. Output is already capped by `budget` (default 2000 estimated tokens) and
    states what it dropped: don't pipe it through `head` or `tail`, and keep its
    freshness, coverage and truncation notices.

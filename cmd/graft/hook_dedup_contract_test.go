@@ -120,7 +120,7 @@ func TestHookSessionStartPermitsContextReinjection(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("updateHookSession(compact) = %v, want nil", err)
 	}
-	runHook(t.Context(), "session-start", strings.NewReader(`{"session_id":"compact","source":"compact"}`), io.Discard, io.Discard)
+	runHook(t.Context(), "session-start", "", strings.NewReader(`{"session_id":"compact","source":"compact"}`), io.Discard, io.Discard)
 	var out bytes.Buffer
 	handleHookPrompt(t.Context(), input, root, &out, io.Discard)
 	if out.Len() == 0 {

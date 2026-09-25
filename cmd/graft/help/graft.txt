@@ -16,6 +16,8 @@ Commands:
   ask [options] <query> [dir]       Query the graft/ graph — returns ranked
                                     nodes + exact file:line, routed to prose or
                                     wiring ($0, no key)
+  read [options] <symbol> [dir]     Complete source of one exact symbol, with
+                                    current span and source hash
   skeleton [options] <file> [dir]   Signatures-only view of one file from the
                                     wiring graph — the cheapest way to see a
                                     file's API surface
@@ -25,7 +27,7 @@ Commands:
                                     usage mix and tokens saved
   mcp [dir]                         Serve the graph over MCP (stdio) — exposes
                                     graft_find_code, graft_trace_calls,
-                                    graft_find_all, graft_file_api,
+                                    graft_find_all, graft_file_api, graft_read_symbol,
                                     graft_repo_map and graft_check_freshness as
                                     tools
   callers [options] <symbol> [dir]  Who calls/references a symbol ($0, no LLM).
