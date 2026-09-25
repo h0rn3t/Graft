@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0-beta.4 - 2026-09-25
+
+### Fixed
+
+- **`go install` works without the public Go proxy.** Upstream deleted the `v0.25.0` tag of `github.com/tree-sitter/go-tree-sitter`, so resolving 0.3.0-beta.3 with `GOPROXY=direct` or a VCS-backed corporate proxy failed with `unknown revision v0.25.0`. graft now pins the tagged `go-tree-sitter v0.24.0` and the grammars that match its ABI 14 runtime: `tree-sitter-c v0.23.6`, `tree-sitter-go v0.23.4` and `tree-sitter-rust v0.23.3`. The extractor ID changed, so existing graphs rebuild once on the next query.
+
 ## 0.3.0-beta.3 - 2026-09-25
 
 ### Added
