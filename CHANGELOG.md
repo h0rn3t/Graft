@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0-rc.2 - 2026-09-27
+
+### Changed
+
+- **Hooks and the statusline no longer need Node.js.** `graft init` writes Claude Code, Codex and Cursor hook entries that run the binary directly as `graft _hook <sub>` and the Claude statusline as `graft _statusline`. Repo-level entries (`.claude/settings.json`, `.cursor/hooks.json`) call `graft` by name, and `init` warns when it is not on `PATH`. Machine-level entries (`~/.claude/settings.json`, `~/.codex/hooks.json`) name the absolute path of the binary that wrote them. `init`, `uninstall` and upkeep delete the `graft-hooks.cjs` and `graft-statusline.cjs` shims earlier releases wrote and leave a file with other content alone. Upkeep migrates existing wiring on the next session.
+- **The user-level Claude Code hook still yields to the project's.** The user-level entry passes `--user`, so it stays silent when the project registers graft for the same event. `GRAFT_HOOK_SHIM` is still honored for shims that have not been migrated yet.
+
 ## 0.3.0-rc.1 - 2026-09-26
 
 ### Changed
