@@ -153,7 +153,7 @@ func wireTarget(repo string, ids []string, plan []hosts.HostPlan, env hosts.Env,
 		built := buildGraphIfMissing(repo, opts.build)
 		writeDiagnostic(stderr, "✓ wrote %s\n", result.SettingsPath)
 		for _, shim := range result.Shims {
-			writeDiagnostic(stderr, "✓ wrote %s\n", shim)
+			writeDiagnostic(stderr, "✓ removed legacy Node shim %s\n", shim)
 		}
 		writeDiagnostic(stderr, "✓ wrote %s\n", result.Skill)
 		switch result.MCP.Action {
@@ -189,6 +189,13 @@ func wireTarget(repo string, ids []string, plan []hosts.HostPlan, env hosts.Env,
 		}
 		if !opts.global && slices.ContainsFunc(hosts.SelectedWrites(plan, ids), func(write hosts.PlannedWrite) bool { return write.Scope == hosts.ScopeGlobal }) {
 			writeDiagnostic(stderr, "· skipped out-of-repo writes (--no-global)\n")
+		}
+	}
+	// Repo-level entries run graft by name, so a host whose PATH lacks it runs
+	// none of them; the machine-level ones name this binary's path.
+	if wantClaude || opts.hooks && slices.Contains(ids, "cursor") {
+		if _, err := exec.LookPath("graft"); err != nil {
+			writeDiagnostic(stderr, "⚠ graft is not on PATH — the repo's hooks and statusline run `graft` by name and will not start until it is\n")
 		}
 	}
 	options := upkeep.WiringOptions{Global: opts.global, MCP: opts.mcp, Hooks: opts.hooks, Statusline: wantStatusline}

@@ -11,21 +11,21 @@ import (
 type Env struct {
 	// Home is the user's home directory.
 	Home string
-	// Binary is the running graft executable, the shims' first candidate.
+	// Binary is the running graft executable, which machine-level hook
+	// entries name by path.
 	Binary string
 	// Launch is the MCP launch command decided for this run.
 	Launch Launch
 }
 
-// CodexHookTargets lists the Codex hook files, both under ~/.codex and so
-// global; empty when Codex is not installed.
+// CodexHookTargets lists the Codex hook config under ~/.codex, a global
+// write; empty when Codex is not installed.
 func CodexHookTargets(home string) []PlannedWrite {
 	base := filepath.Join(home, ".codex")
 	if !dirExists(base) {
 		return nil
 	}
 	return []PlannedWrite{
-		{HostID: "agents", ID: "codex-hook-shim", Path: filepath.Join(base, "hooks", "graft", "graft-hooks.cjs"), Scope: ScopeGlobal, Kind: WriteHook, What: "post-edit hook shim"},
 		{HostID: "agents", ID: "codex-hooks", Path: filepath.Join(base, "hooks.json"), Scope: ScopeGlobal, Kind: WriteHook, What: "SessionStart / UserPromptSubmit / PostToolUse / Stop"},
 	}
 }
@@ -47,18 +47,24 @@ func shellPath(path string) string {
 	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 }
 
-// installCodexHooks writes the shared shim and graft's Codex hook entries.
-// Codex reads a hook's timeout in seconds.
+// binaryCommand is the executable a machine-level hook entry runs: binary,
+// quoted with forward slashes so it reads the same in a POSIX shell and
+// cmd.exe, or graft on PATH when the running executable is unknown.
+func binaryCommand(binary string) string {
+	if binary == "" {
+		return repoBinary
+	}
+	return shellPath(filepath.ToSlash(binary))
+}
+
+// installCodexHooks writes graft's Codex hook entries and deletes the legacy
+// shim. Codex reads a hook's timeout in seconds.
 func (f *files) installCodexHooks(env Env) ([]ConfigWrite, error) {
 	targets := CodexHookTargets(env.Home)
 	if len(targets) == 0 {
 		return nil, nil
 	}
-	shimPath, configPath := targets[0].Path, targets[1].Path
-	shim, err := f.writeOwnedFile("codex-hook-shim", shimPath, HooksShim(env.Binary), 0o755)
-	if err != nil {
-		return nil, err
-	}
+	configPath, binary := targets[0].Path, binaryCommand(env.Binary)
 	entries := []hookEntry{
 		{event: "SessionStart", matcher: "startup|resume|compact", sub: "session-start", timeout: 10},
 		{event: "UserPromptSubmit", sub: "prompt", timeout: 15},
@@ -68,7 +74,7 @@ func (f *files) installCodexHooks(env Env) ([]ConfigWrite, error) {
 	write, err := f.mergeHookConfig("codex-hooks", configPath, false, entries, func(entry hookEntry) *jsonjs.Object {
 		handler := jsonjs.NewObject()
 		handler.Set("type", "command")
-		handler.Set("command", "node "+shellPath(shimPath)+" "+entry.sub)
+		handler.Set("command", binary+" _hook "+entry.sub)
 		handler.Set("timeout", entry.timeout)
 		out := jsonjs.NewObject()
 		if entry.matcher != "" {
@@ -80,29 +86,28 @@ func (f *files) installCodexHooks(env Env) ([]ConfigWrite, error) {
 	if err != nil {
 		return nil, err
 	}
-	return []ConfigWrite{shim, write}, nil
+	writes := []ConfigWrite{write}
+	shim, ok, err := f.removeLegacyShim("codex-hook-shim", legacyCodexShim(env.Home))
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		writes = append(writes, shim)
+	}
+	return writes, nil
 }
 
-// cursorHookScript is the shim as Cursor's project hooks name it: they run
-// from the project root, so the committed config carries no absolute path.
-const cursorHookScript = ".cursor/hooks/graft-hooks.cjs"
-
-// CursorHookTargets lists Cursor's repo-local hook files.
+// CursorHookTargets lists Cursor's repo-local hook config.
 func CursorHookTargets(repo string) []PlannedWrite {
 	return []PlannedWrite{
-		{HostID: "cursor", ID: "cursor-hook-shim", Path: filepath.Join(repo, filepath.FromSlash(cursorHookScript)), Scope: ScopeRepo, Kind: WriteHook, What: "session-scoring hook shim"},
 		{HostID: "cursor", ID: "cursor-hooks", Path: filepath.Join(repo, ".cursor", "hooks.json"), Scope: ScopeRepo, Kind: WriteHook, What: "postToolUse / afterMCPExecution / sessionEnd"},
 	}
 }
 
-// installCursorHooks writes the shim and graft's Cursor project hook entries.
-func (f *files) installCursorHooks(repo string, env Env) ([]ConfigWrite, error) {
-	targets := CursorHookTargets(repo)
-	shimPath, configPath := targets[0].Path, targets[1].Path
-	shim, err := f.writeOwnedFile("cursor-hook-shim", shimPath, HooksShim(env.Binary), 0o755)
-	if err != nil {
-		return nil, err
-	}
+// installCursorHooks writes graft's Cursor project hook entries and deletes
+// the legacy shim. The config is committed, so its entries name graft on PATH.
+func (f *files) installCursorHooks(repo string) ([]ConfigWrite, error) {
+	configPath := CursorHookTargets(repo)[0].Path
 	entries := []hookEntry{
 		{event: "postToolUse", matcher: "Read|Grep|Glob|Search|Shell", sub: "cursor-post-tool"},
 		{event: "afterMCPExecution", sub: "cursor-mcp"},
@@ -113,13 +118,21 @@ func (f *files) installCursorHooks(repo string, env Env) ([]ConfigWrite, error) 
 		if entry.matcher != "" {
 			out.Set("matcher", entry.matcher)
 		}
-		out.Set("command", `node "`+cursorHookScript+`" `+entry.sub)
+		out.Set("command", repoBinary+" _hook "+entry.sub)
 		return out
 	})
 	if err != nil {
 		return nil, err
 	}
-	return []ConfigWrite{shim, write}, nil
+	writes := []ConfigWrite{write}
+	shim, ok, err := f.removeLegacyShim("cursor-hook-shim", legacyCursorShim(repo))
+	if err != nil {
+		return nil, err
+	}
+	if ok {
+		writes = append(writes, shim)
+	}
+	return writes, nil
 }
 
 // mergeHookConfig replaces graft's entries in a hooks.json, keeping foreign

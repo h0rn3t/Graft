@@ -34,22 +34,15 @@ type wiringStamp struct {
 	At      string          `json:"at"`
 }
 
-func hasLegacyHookShim(repo string) bool {
-	for _, path := range []string{
-		filepath.Join(repo, ".claude", "helpers", "graft-hooks.cjs"),
-		filepath.Join(repo, ".claude", "helpers", "graft-statusline.cjs"),
-		filepath.Join(repo, ".cursor", "hooks", "graft-hooks.cjs"),
-	} {
-		data, err := os.ReadFile(path) //nolint:gosec // G304: fixed graft shim paths under the repository
-		if err == nil && strings.Contains(string(data), "pathToFileURL") {
-			return true
-		}
-	}
-	return false
-}
-
+// stampIsCurrent reports whether the stamp records this version and no
+// legacy Node shim is left where replaying the stamped hosts would remove it.
 func stampIsCurrent(stamp *wiringStamp, repo, current string) bool {
-	return stamp != nil && stamp.Version != nil && *stamp.Version == current && !hasLegacyHookShim(repo)
+	if stamp == nil || stamp.Version == nil || *stamp.Version != current {
+		return false
+	}
+	options := stampedOptions(stamp)
+	home, err := os.UserHomeDir()
+	return !hosts.HasLegacyShim(repo, home, stamp.Hosts, options.Hooks, options.Global && err == nil)
 }
 
 // ReconcileWiring refreshes stale host wiring and records the choices it used.

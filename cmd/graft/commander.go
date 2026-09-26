@@ -123,7 +123,7 @@ func programSpec() *commandSpec {
 		parent.commands = append(parent.commands, command)
 		return command
 	}
-	add(program, "graft _hook [options] <sub>").hidden = true
+	add(program, "graft _hook [options] <sub>", "--user").hidden = true
 	add(program, "graft _statusline [options]").hidden = true
 	add(program, "graft _sync-run [options] <dir>").hidden = true
 	add(program, "graft version [options]")

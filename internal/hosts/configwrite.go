@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"strings"
 
 	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
@@ -19,6 +18,10 @@ const (
 	ActionUpdated     WriteAction = "updated"
 	ActionUnchanged   WriteAction = "unchanged"
 	ActionUnparseable WriteAction = "skipped-unparseable"
+	// ActionRemoved and ActionKeptForeign report a legacy Node shim that was
+	// deleted, or left in place because graft did not write it.
+	ActionRemoved     WriteAction = "removed"
+	ActionKeptForeign WriteAction = "kept-foreign"
 )
 
 // ConfigWrite reports one config or shim write.
@@ -61,14 +64,6 @@ func (f *files) writeOwnedFile(id, path, content string, mode os.FileMode) (Conf
 		action = ActionUpdated
 	}
 	return ConfigWrite{ID: id, Path: path, Action: action}, nil
-}
-
-// isGraftEntry reports whether a hooks-config entry is one graft installed.
-func isGraftEntry(entry jsonjs.Value) bool {
-	if entry == nil {
-		entry = ""
-	}
-	return strings.Contains(jsonjs.Stringify(entry, 0), "graft-hooks.cjs")
 }
 
 // readJSONObject loads a JSON config for merging: a missing file is a fresh

@@ -37,10 +37,14 @@ func TestHookUserShimYieldsToProjectRegistration(t *testing.T) {
 	writeHookYieldFile(t, filepath.Join(local, ".claude", "settings.local.json"), settings)
 	shimless := t.TempDir()
 	writeHookYieldFile(t, filepath.Join(shimless, ".claude", "settings.json"), settings)
+	direct := t.TempDir()
+	writeHookYieldFile(t, filepath.Join(direct, ".claude", "settings.json"),
+		`{"hooks":{"UserPromptSubmit":[{"hooks":[{"type":"command","command":"graft _hook prompt"}]}]}}`)
 	bare := t.TempDir()
 
 	tests := []struct {
 		name  string
+		user  bool
 		shim  string
 		root  string
 		event string
@@ -51,10 +55,16 @@ func TestHookUserShimYieldsToProjectRegistration(t *testing.T) {
 		{name: "project shim itself", shim: projectShim, root: wired, event: "UserPromptSubmit", want: false},
 		{name: "event not registered by graft", shim: userShim, root: wired, event: "Stop", want: false},
 		{name: "payload without event name", shim: userShim, root: wired, event: "", want: false},
-		{name: "project settings without project shim", shim: userShim, root: shimless, event: "UserPromptSubmit", want: false},
+		{name: "project settings without project shim", shim: userShim, root: shimless, event: "UserPromptSubmit", want: true},
 		{name: "repository without wiring", shim: userShim, root: bare, event: "UserPromptSubmit", want: false},
 		{name: "codex shim", shim: codexShim, root: wired, event: "UserPromptSubmit", want: false},
 		{name: "older shim without path", shim: "", root: wired, event: "UserPromptSubmit", want: false},
+		{name: "user flag, project registers a direct entry", user: true, root: direct, event: "UserPromptSubmit", want: true},
+		{name: "user flag, project registers a shim entry", user: true, root: wired, event: "UserPromptSubmit", want: true},
+		{name: "user flag, event not registered by graft", user: true, root: wired, event: "Stop", want: false},
+		{name: "user flag, repository without wiring", user: true, root: bare, event: "UserPromptSubmit", want: false},
+		{name: "user flag, payload without event name", user: true, root: direct, event: "", want: false},
+		{name: "project direct entry itself", root: direct, event: "UserPromptSubmit", want: false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -62,8 +72,8 @@ func TestHookUserShimYieldsToProjectRegistration(t *testing.T) {
 			if tt.event != "" {
 				input["hook_event_name"] = tt.event
 			}
-			if got := hookYieldsToProject(tt.shim, tt.root, input); got != tt.want {
-				t.Errorf("hookYieldsToProject(%q, %q, event=%q) = %t, want %t", tt.shim, tt.root, tt.event, got, tt.want)
+			if got := hookYieldsToProject(tt.user, tt.shim, tt.root, input); got != tt.want {
+				t.Errorf("hookYieldsToProject(%t, %q, %q, event=%q) = %t, want %t", tt.user, tt.shim, tt.root, tt.event, got, tt.want)
 			}
 		})
 	}
@@ -85,18 +95,24 @@ func TestRunHookUserShimStaysSilentWhenProjectIsWired(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		shim string
+		user bool
 		want bool
 	}{
 		{name: "user shim", shim: userShim, want: false},
+		{name: "user flag", user: true, want: false},
 		{name: "project shim", shim: filepath.Join(root, ".claude", "helpers", "graft-hooks.cjs"), want: true},
 		{name: "older shim without GRAFT_HOOK_SHIM", shim: "", want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("GRAFT_HOOK_SHIM", tc.shim)
 			var out, diagnostic bytes.Buffer
-			status := runWithInput([]string{"_hook", "session-start"}, strings.NewReader(payload), &out, &diagnostic)
+			args := []string{"_hook", "session-start"}
+			if tc.user {
+				args = append(args, "--user")
+			}
+			status := runWithInput(args, strings.NewReader(payload), &out, &diagnostic)
 			if status != 0 || strings.Contains(out.String(), "repo map") != tc.want {
-				t.Errorf("_hook session-start (GRAFT_HOOK_SHIM=%q) = (%d, %q, %q), want orientation %t", tc.shim, status, out.String(), diagnostic.String(), tc.want)
+				t.Errorf("%v (GRAFT_HOOK_SHIM=%q) = (%d, %q, %q), want orientation %t", args, tc.shim, status, out.String(), diagnostic.String(), tc.want)
 			}
 		})
 	}

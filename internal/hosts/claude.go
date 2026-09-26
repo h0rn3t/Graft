@@ -1,19 +1,21 @@
 package hosts
 
 import (
+	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
 const (
-	statuslineCommand = `node "${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-statusline.cjs"`
-	statuslineHelper  = "graft-statusline.cjs"
+	// Repo-level entries name bare graft: the settings file is usually
+	// committed, so it must not carry this machine's binary path.
+	repoBinary        = "graft"
+	statuslineCommand = repoBinary + " _statusline"
 	footerRegex       = `graft/[\w./-]+\.md`
-	// repoHookScript stays double-quoted so the shell expands the project dir.
-	repoHookScript = `"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs"`
 )
 
 var (
@@ -28,14 +30,12 @@ func ClaudeTargets(repo string) []PlannedWrite {
 	}
 	return []PlannedWrite{
 		target(filepath.Join(repo, ".claude", "settings.json"), "graft statusline + hook blocks", WriteClaude),
-		target(filepath.Join(repo, ".claude", "helpers", "graft-statusline.cjs"), "statusline shim", WriteClaude),
-		target(filepath.Join(repo, ".claude", "helpers", "graft-hooks.cjs"), "hooks shim", WriteClaude),
 		target(filepath.Join(repo, ".claude", "skills", "graft", "SKILL.md"), "graft skill", WriteClaude),
 		target(filepath.Join(repo, ".mcp.json"), "mcpServers.graft", WriteMCP),
 	}
 }
 
-// globalHelpersDir is where the user-level shim lives.
+// globalHelpersDir is where the user-level legacy shim lived.
 func globalHelpersDir(home string) string {
 	return filepath.Join(home, ".claude", "helpers")
 }
@@ -46,7 +46,6 @@ func ClaudeGlobalTargets(home string) []PlannedWrite {
 		return PlannedWrite{HostID: "claude", ID: id, Path: path, Scope: ScopeGlobal, Kind: kind, What: what}
 	}
 	return []PlannedWrite{
-		target("claude-global-shim", filepath.Join(globalHelpersDir(home), "graft-hooks.cjs"), WriteHook, "hooks shim (user level)"),
 		target("claude-global-hooks", filepath.Join(home, ".claude", "settings.json"), WriteHook, "SessionStart / UserPromptSubmit / PostToolUse / Stop / SubagentStop"),
 		target("claude-global-mcp", filepath.Join(home, ".claude.json"), WriteMCP, "mcpServers.graft"),
 	}
@@ -57,13 +56,14 @@ type graftBlock struct {
 	blocks []jsonjs.Value
 }
 
-// graftBlocks renders graft's Claude Code hook blocks for the quoted shim
-// script. Claude Code reads a hook's timeout in seconds.
-func graftBlocks(script string) []graftBlock {
+// graftBlocks renders graft's Claude Code hook blocks running binary, a bare
+// name or a quoted path, with suffix after each subcommand. Claude Code reads
+// a hook's timeout in seconds.
+func graftBlocks(binary, suffix string) []graftBlock {
 	block := func(matcher, sub string, timeout float64) *jsonjs.Object {
 		handler := jsonjs.NewObject()
 		handler.Set("type", "command")
-		handler.Set("command", "node "+script+" "+sub)
+		handler.Set("command", binary+" _hook "+sub+suffix)
 		handler.Set("timeout", timeout)
 		out := jsonjs.NewObject()
 		if matcher != "" {
@@ -86,6 +86,37 @@ func graftBlocks(script string) []graftBlock {
 	}
 }
 
+// ClaudeWired reports whether repo's .claude/settings.json registers one of
+// graft's hooks, in either form, or a legacy shim graft wrote is still there.
+func ClaudeWired(repo string) bool {
+	if HasLegacyShim(repo, "", nil, false, false) {
+		return true
+	}
+	data, err := os.ReadFile(filepath.Join(repo, ".claude", "settings.json"))
+	if err != nil {
+		return false
+	}
+	value, err := jsonjs.Parse(data)
+	if err != nil {
+		return false
+	}
+	root, ok := jsonjs.AsObject(value)
+	if !ok {
+		return false
+	}
+	hooks, ok := jsonjs.AsObject(mustGet(root, "hooks"))
+	if !ok {
+		return false
+	}
+	for _, event := range hooks.Keys() {
+		entries, _ := jsonjs.AsArray(mustGet(hooks, event))
+		if slices.ContainsFunc(entries, isGraftEntry) {
+			return true
+		}
+	}
+	return false
+}
+
 // IsGraftAllowEntry reports whether a Bash allowlist entry is one graft wrote.
 func IsGraftAllowEntry(entry jsonjs.Value) bool {
 	return graftAllowEntry.MatchString(jsonjs.String(entry))
@@ -103,7 +134,7 @@ func isGraftStatusline(value jsonjs.Value) bool {
 	}
 	command, ok := object.Get("command")
 	text, isString := command.(string)
-	return ok && isString && strings.Contains(text, statuslineHelper)
+	return ok && isString && isGraftStatuslineCommand(text)
 }
 
 func applyStatusline(merged *jsonjs.Object, key string, wanted bool, foreignWarning string, warnings *[]string) {
@@ -158,13 +189,13 @@ func ownObject(object *jsonjs.Object, key string) (*jsonjs.Object, bool) {
 // mergeHookBlocks replaces graft's hook blocks in merged.hooks, keeping the
 // user's blocks. A hooks value or event that is not the expected shape is left
 // as it is and reported, where naming the file.
-func mergeHookBlocks(merged *jsonjs.Object, script, where string) []string {
+func mergeHookBlocks(merged *jsonjs.Object, binary, suffix, where string) []string {
 	hooks, ok := ownObject(merged, "hooks")
 	if !ok {
 		return []string{where + ": hooks is not an object — graft's hooks were not added."}
 	}
 	var warnings []string
-	for _, entry := range graftBlocks(script) {
+	for _, entry := range graftBlocks(binary, suffix) {
 		prior, ok := arrayField(hooks, entry.event)
 		if !ok {
 			warnings = append(warnings, where+": hooks."+entry.event+" is not an array — graft's "+entry.event+" hook was not added.")
@@ -190,9 +221,9 @@ func MergeGraftSettings(existing *jsonjs.Object, statusline bool) (*jsonjs.Objec
 	warnings := make([]string, 0)
 	wanted := StatuslineWanted(statusline)
 	applyStatusline(merged, "statusLine", wanted,
-		"Existing statusLine left untouched (a session allows only one). To use Graft, point it at .claude/helpers/graft-statusline.cjs.", &warnings)
+		"Existing statusLine left untouched (a session allows only one). To use Graft, set its command to `graft _statusline`.", &warnings)
 	applyStatusline(merged, "subagentStatusLine", wanted, "Existing subagentStatusLine left untouched.", &warnings)
-	warnings = append(warnings, mergeHookBlocks(merged, repoHookScript, where)...)
+	warnings = append(warnings, mergeHookBlocks(merged, repoBinary, "", where)...)
 
 	if priorFooter, ok := arrayField(merged, "footerLinksRegexes"); ok {
 		footers := make([]jsonjs.Value, 0, len(priorFooter)+1)
@@ -230,11 +261,12 @@ func MergeGraftSettings(existing *jsonjs.Object, statusline bool) (*jsonjs.Objec
 // ClaudeInitResult reports the repo-level Claude Code writes.
 type ClaudeInitResult struct {
 	SettingsPath string
-	Shims        []string
-	Skill        string
-	MCP          ConfigWrite
-	Global       []ConfigWrite
-	Warnings     []string
+	// Shims are the legacy Node shims init deleted.
+	Shims    []string
+	Skill    string
+	MCP      ConfigWrite
+	Global   []ConfigWrite
+	Warnings []string
 }
 
 // RunClaudeInit writes the repo's Claude Code layer, plus the user-level copy
@@ -245,8 +277,8 @@ func RunClaudeInit(repo string, env Env, statusline, global bool) (ClaudeInitRes
 	f := openFiles(repo, env.Home)
 	defer f.close()
 	targets := ClaudeTargets(repo)
-	settingsPath, statuslinePath, hooksPath, skillPath, mcpPath := targets[0].Path, targets[1].Path, targets[2].Path, targets[3].Path, targets[4].Path
-	result := ClaudeInitResult{SettingsPath: settingsPath, Shims: []string{statuslinePath, hooksPath}, Skill: skillPath}
+	settingsPath, skillPath, mcpPath := targets[0].Path, targets[1].Path, targets[2].Path
+	result := ClaudeInitResult{SettingsPath: settingsPath, Skill: skillPath}
 	existing, _, ok, err := f.readJSONObject(settingsPath)
 	switch {
 	case err != nil:
@@ -260,12 +292,16 @@ func RunClaudeInit(repo string, env Env, statusline, global bool) (ClaudeInitRes
 			return ClaudeInitResult{}, err
 		}
 	}
-	for _, shim := range []struct{ path, content string }{
-		{statuslinePath, StatuslineShim(env.Binary)},
-		{hooksPath, HooksShim(env.Binary)},
-	} {
-		if _, err := f.writeOwnedFile("claude", shim.path, shim.content, 0o755); err != nil {
+	for _, shim := range legacyClaudeShims(repo) {
+		write, ok, err := f.removeLegacyShim("claude", shim)
+		switch {
+		case err != nil:
 			return ClaudeInitResult{}, err
+		case !ok:
+		case write.Action == ActionKeptForeign:
+			result.Warnings = append(result.Warnings, shim+" is not a graft shim — left in place.")
+		default:
+			result.Shims = append(result.Shims, shim)
 		}
 	}
 	if _, err := f.writeOwnedFile("claude", skillPath, SkillTemplate(), 0); err != nil {
@@ -285,18 +321,14 @@ func RunClaudeInit(repo string, env Env, statusline, global bool) (ClaudeInitRes
 	return result, nil
 }
 
-// installClaudeGlobal writes the user-level shim, hook entries, and MCP
-// registration. A config that is not a JSON object is reported as skipped; a
-// read or write failure is returned.
+// installClaudeGlobal writes the user-level hook entries and MCP registration
+// and deletes the legacy user-level shim. The entries carry --user so a run
+// can yield to the project's own registration. A config that is not a JSON
+// object is reported as skipped; a read or write failure is returned.
 func (f *files) installClaudeGlobal(env Env) ([]ConfigWrite, []string, error) {
 	targets := ClaudeGlobalTargets(env.Home)
-	shimTarget, settingsTarget, mcpTarget := targets[0], targets[1], targets[2]
-	shim, err := f.writeOwnedFile(shimTarget.ID, shimTarget.Path, HooksShim(env.Binary), 0o755)
-	if err != nil {
-		return nil, nil, err
-	}
-	script := shellPath(filepath.ToSlash(filepath.Join(globalHelpersDir(env.Home), "graft-hooks.cjs")))
-	hooks, warnings, err := f.upsertGlobalHooks(settingsTarget, script)
+	settingsTarget, mcpTarget := targets[0], targets[1]
+	hooks, warnings, err := f.upsertGlobalHooks(settingsTarget, binaryCommand(env.Binary))
 	if err != nil {
 		return nil, nil, err
 	}
@@ -304,10 +336,18 @@ func (f *files) installClaudeGlobal(env Env) ([]ConfigWrite, []string, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return []ConfigWrite{shim, hooks, mcp}, warnings, nil
+	writes := []ConfigWrite{hooks, mcp}
+	shim, ok, err := f.removeLegacyShim("claude-global-shim", legacyClaudeGlobalShim(env.Home))
+	if err != nil {
+		return nil, nil, err
+	}
+	if ok {
+		writes = append(writes, shim)
+	}
+	return writes, warnings, nil
 }
 
-func (f *files) upsertGlobalHooks(target PlannedWrite, script string) (ConfigWrite, []string, error) {
+func (f *files) upsertGlobalHooks(target PlannedWrite, binary string) (ConfigWrite, []string, error) {
 	root, existed, ok, err := f.readJSONObject(target.Path)
 	if err != nil {
 		return ConfigWrite{}, nil, err
@@ -317,7 +357,7 @@ func (f *files) upsertGlobalHooks(target PlannedWrite, script string) (ConfigWri
 	}
 	before := jsonjs.Stringify(root, 0)
 	merged := root.Clone()
-	warnings := mergeHookBlocks(merged, script, target.Path)
+	warnings := mergeHookBlocks(merged, binary, " --user", target.Path)
 	if jsonjs.Stringify(merged, 0) == before {
 		return ConfigWrite{ID: target.ID, Path: target.Path, Action: ActionUnchanged}, warnings, nil
 	}

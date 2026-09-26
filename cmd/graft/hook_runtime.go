@@ -490,7 +490,7 @@ func graftHookCommands(file, event string) []claudeHookCommand {
 	var commands []claudeHookCommand
 	for _, block := range settings.Hooks[event] {
 		for _, hook := range block.Hooks {
-			if strings.Contains(hook.Command, "graft-hooks.cjs") {
+			if hosts.IsGraftHookCommand(hook.Command) {
 				commands = append(commands, hook)
 			}
 		}
@@ -522,14 +522,23 @@ func hookInstalledTimeout(root, event string) (time.Duration, bool) {
 }
 
 // hookYieldsToProject reports whether a hook started by the user-level Claude
-// Code shim should stay silent because the project registers graft's own hook
-// for the same event. Claude Code runs both registrations, so without this
-// every injection and counter update would happen twice. A payload without an
-// event name, another shim, or an older shim that passes no path keeps
-// running: a duplicate beats a lost hook.
-func hookYieldsToProject(shim, root string, input hookInput) bool {
+// Code registration should stay silent because the project registers graft's
+// own hook for the same event. Claude Code runs both registrations, so without
+// this every injection and counter update would happen twice. The user-level
+// run is marked by user (the --user option) or, for a legacy Node shim, by
+// shim being the user-level shim. A payload without an event name or a run
+// that is not marked keeps running: a duplicate beats a lost hook.
+func hookYieldsToProject(user bool, shim, root string, input hookInput) bool {
 	event := input.string("hook_event_name")
-	if shim == "" || event == "" {
+	if event == "" || !user && !isUserLevelShim(shim) {
+		return false
+	}
+	return len(graftHookCommands(filepath.Join(root, ".claude", "settings.json"), event)) > 0 ||
+		len(graftHookCommands(filepath.Join(root, ".claude", "settings.local.json"), event)) > 0
+}
+
+func isUserLevelShim(shim string) bool {
+	if shim == "" {
 		return false
 	}
 	shimInfo, err := os.Stat(shim)
@@ -537,14 +546,7 @@ func hookYieldsToProject(shim, root string, input hookInput) bool {
 		return false
 	}
 	userInfo, err := os.Stat(filepath.Join(claudeUserDir(), "helpers", "graft-hooks.cjs"))
-	if err != nil || !os.SameFile(shimInfo, userInfo) {
-		return false
-	}
-	if _, err := os.Stat(filepath.Join(root, ".claude", "helpers", "graft-hooks.cjs")); err != nil {
-		return false
-	}
-	return len(graftHookCommands(filepath.Join(root, ".claude", "settings.json"), event)) > 0 ||
-		len(graftHookCommands(filepath.Join(root, ".claude", "settings.local.json"), event)) > 0
+	return err == nil && os.SameFile(shimInfo, userInfo)
 }
 
 // hookPromptAskTimeout is graft's own budget inside the host's prompt-hook
@@ -694,10 +696,10 @@ func hookSessionStartLines(ctx context.Context, root string) []string {
 // runHook handles one host hook event started by the shim at path shim, which
 // is empty for shims older than the path argument. ctx ends when the process
 // is told to stop; each event's own budget is derived from it.
-func runHook(ctx context.Context, event, shim string, stdin io.Reader, stdout, stderr io.Writer) {
+func runHook(ctx context.Context, event string, user bool, shim string, stdin io.Reader, stdout, stderr io.Writer) {
 	input := readHookInput(stdin)
 	root := hookProjectDir(input)
-	if hookYieldsToProject(shim, root, input) {
+	if hookYieldsToProject(user, shim, root, input) {
 		return
 	}
 

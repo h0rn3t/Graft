@@ -271,7 +271,7 @@ func (f *files) stripClaudeSettings(path string, apply bool) (RetractAction, err
 	}
 	before := jsonjs.Stringify(root, 0)
 	for _, key := range []string{"statusLine", "subagentStatusLine"} {
-		if value, ok := root.Get(key); ok && strings.Contains(jsonjs.Stringify(orEmpty(value), 0), statuslineHelper) {
+		if value, ok := root.Get(key); ok && isGraftStatusline(value) {
 			root.Delete(key)
 		}
 	}
@@ -301,13 +301,6 @@ func (f *files) stripClaudeSettings(path string, apply bool) (RetractAction, err
 		return RetractAbsent, nil
 	}
 	return f.finishJSON(path, root, apply)
-}
-
-func orEmpty(value jsonjs.Value) jsonjs.Value {
-	if value == nil {
-		return ""
-	}
-	return value
 }
 
 func (f *files) stripCodexHooks(path string, apply bool) (RetractAction, error) {
@@ -477,10 +470,11 @@ func (f *files) retractTargets(repo string, env Env, opts RetractOptions) []retr
 
 func (f *files) addClaudeTargets(list *targetList, repo string) {
 	claude := ClaudeTargets(repo)
-	settings, statusline, hooks, skill, mcp := claude[0].Path, claude[1].Path, claude[2].Path, claude[3].Path, claude[4].Path
+	settings, skill, mcp := claude[0].Path, claude[1].Path, claude[2].Path
 	list.add("claude", settings, "statusline + hooks + allowlist + footer regex", ScopeRepo, func(apply bool) (RetractAction, error) { return f.stripClaudeSettings(settings, apply) })
-	list.add("claude", statusline, "statusline shim", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeFile(statusline, apply) })
-	list.add("claude", hooks, "hooks shim", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeFile(hooks, apply) })
+	for _, shim := range legacyClaudeShims(repo) {
+		list.add("claude", shim, "legacy Node shim", ScopeRepo, func(apply bool) (RetractAction, error) { return f.retractLegacyShim(shim, apply) })
+	}
 	list.add("claude", skill, "graft skill", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeFile(skill, apply) })
 	list.add("claude", mcp, "mcpServers.graft", ScopeRepo, func(apply bool) (RetractAction, error) { return f.removeJSONKey(mcp, "mcpServers", apply) })
 }
@@ -488,19 +482,16 @@ func (f *files) addClaudeTargets(list *targetList, repo string) {
 func (f *files) addGlobalTargets(list *targetList, home string, exclude func(string) bool) {
 	if !exclude("claude") {
 		global := ClaudeGlobalTargets(home)
-		shim, settings, mcp := global[0], global[1], global[2]
-		list.add("claude", shim.Path, shim.What, ScopeGlobal, func(apply bool) (RetractAction, error) { return f.removeFile(shim.Path, apply) })
+		settings, mcp, shim := global[0], global[1], legacyClaudeGlobalShim(home)
+		list.add("claude", shim, "legacy Node shim (user level)", ScopeGlobal, func(apply bool) (RetractAction, error) { return f.retractLegacyShim(shim, apply) })
 		list.add("claude", settings.Path, settings.What, ScopeGlobal, func(apply bool) (RetractAction, error) { return f.stripClaudeSettings(settings.Path, apply) })
 		list.add("claude", mcp.Path, mcp.What, ScopeGlobal, func(apply bool) (RetractAction, error) { return f.removeJSONKey(mcp.Path, "mcpServers", apply) })
 	}
 	if !exclude("agents") {
 		for _, hook := range CodexHookTargets(home) {
-			list.add(hook.HostID, hook.Path, hook.What, ScopeGlobal, func(apply bool) (RetractAction, error) {
-				if strings.HasSuffix(hook.Path, ".json") {
-					return f.stripCodexHooks(hook.Path, apply)
-				}
-				return f.removeFile(hook.Path, apply)
-			})
+			shim := legacyCodexShim(home)
+			list.add(hook.HostID, shim, "legacy Node shim", ScopeGlobal, func(apply bool) (RetractAction, error) { return f.retractLegacyShim(shim, apply) })
+			list.add(hook.HostID, hook.Path, hook.What, ScopeGlobal, func(apply bool) (RetractAction, error) { return f.stripCodexHooks(hook.Path, apply) })
 		}
 	}
 	if !exclude("antigravity") {

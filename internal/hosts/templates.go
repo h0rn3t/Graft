@@ -6,14 +6,10 @@ package hosts
 import (
 	"embed"
 	"strings"
-
-	"github.com/h0rn3t/Graft/internal/jsonjs"
 )
 
-//go:embed templates/instructions.md templates/skill.md templates/hooks-shim.cjs templates/statusline-shim.cjs
+//go:embed templates/instructions.md templates/skill.md
 var templates embed.FS
-
-const bakedPlaceholder = `"@@BAKED@@"`
 
 func template(name string) string {
 	data, err := templates.ReadFile("templates/" + name)
@@ -46,15 +42,4 @@ func WindsurfRule() string {
 // SkillTemplate is the graft skill card shared by Claude Code, AdaL, Grok, and Antigravity.
 func SkillTemplate() string {
 	return template("skill.md")
-}
-
-// HooksShim is the hook shim that runs `graft _hook <event>`, preferring
-// binary (the graft executable that wrote it) over the first graft on PATH.
-func HooksShim(binary string) string {
-	return strings.Replace(template("hooks-shim.cjs"), bakedPlaceholder, jsonjs.Quote(binary), 1)
-}
-
-// StatuslineShim is the statusline shim, resolved the same way as HooksShim.
-func StatuslineShim(binary string) string {
-	return strings.Replace(template("statusline-shim.cjs"), bakedPlaceholder, jsonjs.Quote(binary), 1)
 }

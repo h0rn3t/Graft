@@ -42,6 +42,9 @@ func TestReconcileWiringRewritesLegacyShimAtCurrentVersion(t *testing.T) {
 }
 
 func TestReconcileWiringContract(t *testing.T) {
+	// A legacy shim under the real home would make every stamp stale.
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("USERPROFILE", t.TempDir())
 	now := time.Date(2026, 9, 22, 10, 20, 30, 456_000_000, time.FixedZone("UTC+3", 3*60*60))
 	defaultOptions := WiringOptions{Global: true, MCP: true, Hooks: true, Statusline: true}
 	// Without a stamp nobody chose machine-wide writes.

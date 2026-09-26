@@ -167,9 +167,9 @@ func dispatchWithInput(ctx context.Context, parsed invocation, stdin io.Reader, 
 		if len(args) == 0 {
 			return 1
 		}
-		// The shim names itself in the environment rather than argv, so an
-		// older graft on PATH still accepts a newer shim's invocation.
-		runHook(ctx, args[0], os.Getenv("GRAFT_HOOK_SHIM"), stdin, stdout, stderr)
+		// --user marks the user-level Claude Code entry. GRAFT_HOOK_SHIM is how
+		// a legacy Node shim named itself, until upkeep migrates it.
+		runHook(ctx, args[0], parsed.flags.bools["--user"], os.Getenv("GRAFT_HOOK_SHIM"), stdin, stdout, stderr)
 		return 0
 	case "_statusline":
 		runHookStatusline(stdin, stdout)

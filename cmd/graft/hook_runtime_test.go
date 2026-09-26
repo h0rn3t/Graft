@@ -65,6 +65,14 @@ func TestHookPromptTimeoutContract(t *testing.T) {
 			t.Errorf("hookPromptAskTimeout(timeout %s) = %s, want %s", tt.timeout, got, tt.want)
 		}
 	}
+
+	direct := `{"hooks":{"UserPromptSubmit":[{"hooks":[{"command":"graft _hook prompt","timeout":10}]}]}}`
+	if err := os.WriteFile(filepath.Join(root, ".claude", "settings.json"), []byte(direct), 0o644); err != nil {
+		t.Fatalf("os.WriteFile(project settings) error = %v, want nil", err)
+	}
+	if got := hookPromptAskTimeout(root); got != 8*time.Second {
+		t.Errorf("hookPromptAskTimeout(direct entry, 10s) = %s, want 8s", got)
+	}
 }
 
 func TestHookEditedFileContract(t *testing.T) {

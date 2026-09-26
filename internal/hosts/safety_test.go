@@ -176,7 +176,7 @@ func TestRetractStopsPruningAtTheRepoAndHostDirs(t *testing.T) {
 	owned := filepath.Join(repo, ".kiro", "steering", "graft.md")
 	writeTestFile(t, owned, "graft")
 	shim := filepath.Join(home, ".codex", "hooks", "graft", "graft-hooks.cjs")
-	writeTestFile(t, shim, "shim")
+	writeTestFile(t, shim, "spawnSync(binary, ['_hook', process.argv[2]])")
 
 	Retract(repo, Env{Home: home, Launch: binLaunch}, RetractOptions{Apply: true, Global: true})
 
@@ -354,7 +354,7 @@ func TestRunClaudeInitWritesOnlyChangedFiles(t *testing.T) {
 		t.Fatalf("RunClaudeInit() error = %v, want nil", err)
 	}
 	targets := ClaudeTargets(repo)
-	for _, target := range targets[:4] {
+	for _, target := range targets[:2] {
 		marker := target.Path + ".marker"
 		if err := os.Link(target.Path, marker); err != nil {
 			t.Skipf("Link(%q) error = %v; hard links unavailable", target.Path, err)
@@ -363,7 +363,7 @@ func TestRunClaudeInitWritesOnlyChangedFiles(t *testing.T) {
 	if _, err := RunClaudeInit(repo, env, true, false); err != nil {
 		t.Fatalf("RunClaudeInit() again error = %v, want nil", err)
 	}
-	for _, target := range targets[:4] {
+	for _, target := range targets[:2] {
 		before, err := os.Stat(target.Path + ".marker")
 		if err != nil {
 			t.Fatalf("Stat(%q) error = %v, want nil", target.Path+".marker", err)
@@ -379,7 +379,7 @@ func TestRunClaudeInitWritesOnlyChangedFiles(t *testing.T) {
 }
 
 func TestHookCommands(t *testing.T) {
-	for _, entry := range graftBlocks(repoHookScript) {
+	for _, entry := range graftBlocks(repoBinary, "") {
 		for _, block := range entry.blocks {
 			object, _ := jsonjs.AsObject(block)
 			handlers, _ := jsonjs.AsArray(mustGet(object, "hooks"))
@@ -403,11 +403,11 @@ func TestHookCommands(t *testing.T) {
 	repo := t.TempDir()
 	f := openFiles(repo, t.TempDir())
 	defer f.close()
-	if _, err := f.installCursorHooks(repo, Env{Launch: binLaunch}); err != nil {
+	if _, err := f.installCursorHooks(repo); err != nil {
 		t.Fatalf("installCursorHooks() error = %v, want nil", err)
 	}
-	if got := readTestFile(t, filepath.Join(repo, ".cursor", "hooks.json")); strings.Contains(got, repo) || !strings.Contains(got, `node \".cursor/hooks/graft-hooks.cjs\"`) {
-		t.Errorf("installCursorHooks() hooks.json = %q, want repo-relative shim commands", got)
+	if got := readTestFile(t, filepath.Join(repo, ".cursor", "hooks.json")); strings.Contains(got, repo) || strings.Contains(got, "node") || !strings.Contains(got, `"graft _hook cursor-post-tool"`) {
+		t.Errorf("installCursorHooks() hooks.json = %q, want bare graft commands", got)
 	}
 }
 

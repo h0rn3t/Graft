@@ -154,13 +154,13 @@
       "effects": [
         "none: --list-agents, --dry-run, and a non-TTY run without --agents/--yes/--all-agents/--no-agents",
         "repo+home: hosts not selected are retracted first (graph cache kept)",
-        "repo (claude): .claude/settings.json (statusLine omitted under --no-statusline or GRAFT_NO_STATUSLINE), .claude/helpers/graft-statusline.cjs and graft-hooks.cjs (0755, statusline shim written even with --no-statusline), .claude/skills/graft/SKILL.md, .mcp.json mcpServers.graft",
-        "home (claude, unless --no-global): ~/.claude/helpers/graft-hooks.cjs, ~/.claude/settings.json hooks, ~/.claude.json mcpServers.graft",
+        "repo (claude): .claude/settings.json (hooks as `graft _hook <sub>`, statusLine as `graft _statusline`, omitted under --no-statusline or GRAFT_NO_STATUSLINE), .claude/skills/graft/SKILL.md, .mcp.json mcpServers.graft; legacy .claude/helpers/graft-hooks.cjs and graft-statusline.cjs deleted when graft wrote them",
+        "home (claude, unless --no-global): ~/.claude/settings.json hooks as `\"<graft binary>\" _hook <sub> --user`, ~/.claude.json mcpServers.graft; legacy ~/.claude/helpers/graft-hooks.cjs deleted when graft wrote it",
         "repo (instructions): fenced sections in AGENTS.md (agents, hermes, antigravity), GEMINI.md, .github/copilot-instructions.md; owned .adal/skills/graft/SKILL.md, .cursor/rules/graft.mdc, .grok/skills/graft/SKILL.md, .kiro/steering/graft.md, .windsurf/rules/graft.md",
         "repo (MCP, unless --no-mcp): .cursor/mcp.json, .gemini/settings.json, .kiro/settings/mcp.json, .grok/config.toml, opencode.json (only when ~/.config/opencode exists)",
         "home (MCP, unless --no-mcp or --no-global): ~/.codex/config.toml (only when ~/.codex exists), ~/.gemini/config/mcp_config.json",
-        "home (hooks, unless --no-hooks or --no-global): ~/.codex/hooks/graft/graft-hooks.cjs, ~/.codex/hooks.json (only when ~/.codex exists)",
-        "repo (hooks, unless --no-hooks; not affected by --no-global): .cursor/hooks/graft-hooks.cjs, .cursor/hooks.json",
+        "home (hooks, unless --no-hooks or --no-global): ~/.codex/hooks.json hooks as `\"<graft binary>\" _hook <sub>` (only when ~/.codex exists); legacy ~/.codex/hooks/graft/graft-hooks.cjs deleted when graft wrote it",
+        "repo (hooks, unless --no-hooks; not affected by --no-global): .cursor/hooks.json hooks as `graft _hook <sub>`; legacy .cursor/hooks/graft-hooks.cjs deleted when graft wrote it",
         "home (antigravity, unless --no-global; not affected by --no-hooks): ~/.gemini/skills/graft/SKILL.md",
         "repo: <K>/wiring-stamp.json with version, host ids and global/mcp/hooks/statusline options",
         "process: `graft build .` child (300s timeout) when no graph exists and --no-build is absent; `graft --version` probe for the MCP launch command unless GRAFT_MCP_COMMAND is set",
@@ -179,14 +179,14 @@
         "-y: owned instruction files deleted with empty parents pruned, fenced sections (including the legacy brain block) removed, MCP keys and TOML tables removed, the Claude repo layer removed",
         "-y, unless --no-global: ~/.claude* entries, Codex hooks, the Antigravity skill",
         "-y, unless --keep-cache: <R>/graft (hardcoded, ignores --dir/GRAFT_DIR) and the graft lines in .gitignore/.ignore",
-        "never removed: .cursor/hooks.json, .cursor/hooks/graft-hooks.cjs, <R>/.graft/config.json, the /.graft/ gitignore line, ~/.graft/*"
+        "never removed: .cursor/hooks.json, .cursor/hooks/graft-hooks.cjs, <R>/.graft/config.json, the /.graft/ gitignore line, ~/.graft/*, legacy shims with content graft did not write"
       ]
     },
     {
       "name": "_hook",
       "usage": "graft _hook [options] <sub>",
       "hidden": true,
-      "options": [],
+      "options": ["--user"],
       "backend": "go",
       "exit": { "0": "handled; malformed payloads and query failures are non-blocking" },
       "effects": ["session state, graph dirty/refresh state, and detached sync"]
@@ -225,7 +225,7 @@
     "CLAUDE_CONFIG_DIR": { "scope": "hook", "effect": "Claude user config directory" },
     "CLAUDE_PROJECT_DIR": { "scope": "hook", "effect": "repository root seen by native hooks and statusline" },
     "GRAFT_DIR": { "scope": "cli", "effect": "context directory override for build, state and hooks" },
-    "GRAFT_HOOK_SHIM": { "scope": "hook", "effect": "path of the hook shim that started `_hook`; a user-level Claude shim yields to the project's registration" },
+    "GRAFT_HOOK_SHIM": { "scope": "hook", "effect": "legacy: path of the Node hook shim that started `_hook`; a user-level Claude shim yields to the project's registration until upkeep migrates it to a direct `_hook <sub> --user` entry" },
     "GRAFT_MCP_COMMAND": { "scope": "cli", "effect": "command written into host MCP configs instead of the probed local graft" },
     "GRAFT_NO_GITIGNORE": { "scope": "cli", "effect": "skip the graft .gitignore entry" },
     "GRAFT_NO_IGNORE": { "scope": "cli", "effect": "skip the .ignore re-admit entries" },
@@ -235,5 +235,5 @@
     "GRAFT_NO_STATUSLINE": { "scope": "cli", "effect": "omit the Claude statusLine block" },
     "GRAFT_REFRESH": { "scope": "cli", "effect": "`hash` confirms every file by content" }
   },
-  "hookRuntime": "Claude, Codex and Cursor hooks and the Claude statusline use plain-JS shims that spawn the graft binary that wrote them (else `graft` on PATH) with `_hook <sub>` or `_statusline`."
+  "hookRuntime": "Claude, Codex and Cursor hooks and the Claude statusline run the graft binary directly with `_hook <sub>` or `_statusline`, no Node.js: machine-level configs name the absolute path of the binary that wrote them, repo-level configs name `graft` on PATH (init warns when it is missing). Upkeep migrates entries that still run a legacy Node shim and deletes the shim."
 }

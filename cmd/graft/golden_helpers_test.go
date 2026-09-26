@@ -162,6 +162,15 @@ func (runtime *goldenRuntime) setEnvironment(t *testing.T, env map[string]string
 		t.Fatalf("os.Unsetenv(CLAUDECODE) error = %v, want nil", err)
 	}
 	t.Setenv("GRAFT_MCP_COMMAND", "graft")
+	// Repo-level hooks run graft by name, and init warns when PATH lacks it;
+	// a stub keeps the goldens independent of the machine's PATH.
+	stub := filepath.Join(runtime.base, "graft-on-path")
+	writeGoldenInput(t, stub, "graft", "#!/bin/sh\n")
+	writeGoldenInput(t, stub, "graft.exe", "")
+	if err := os.Chmod(filepath.Join(stub, "graft"), 0o755); err != nil {
+		t.Fatalf("os.Chmod(graft stub) error = %v, want nil", err)
+	}
+	t.Setenv("PATH", stub+string(os.PathListSeparator)+os.Getenv("PATH"))
 	if runtime.bin() != "" {
 		if _, err := os.Stat(runtime.bin()); err == nil {
 			t.Setenv("PATH", runtime.bin()+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -182,6 +191,10 @@ func (runtime goldenRuntime) normalize(value string) string {
 		}
 	}
 	value = regexp.MustCompile(`\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z`).ReplaceAllString(value, "<ISO>")
+	// Machine-level hook entries name the running binary, here the test binary.
+	if executable := executablePath(); executable != "" {
+		value = strings.ReplaceAll(value, filepath.ToSlash(executable), "<BAKED>")
+	}
 	value = normalizeGoldenText(value, runtime.base, runtime.repo, runtime.home, runtime.elsewhere)
 	value = regexp.MustCompile(`[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}`).ReplaceAllString(value, "<UUID>")
 	value = regexp.MustCompile(`"pid":\s*\d+`).ReplaceAllString(value, `"pid":<PID>`)

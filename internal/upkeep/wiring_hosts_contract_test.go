@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/h0rn3t/Graft/internal/hosts"
 )
@@ -32,12 +33,29 @@ func TestWiredHostIDsContract(t *testing.T) {
 			files: map[string]string{"AGENTS.md": "<!-- graft:start -->\nowned\n<!-- graft:end -->\n"},
 		},
 		{
-			name: "owned cursor file and claude hook marker",
+			name: "owned cursor file and claude legacy shim",
 			files: map[string]string{
 				".cursor/rules/graft.mdc":         "owned",
-				".claude/helpers/graft-hooks.cjs": "owned",
+				".claude/helpers/graft-hooks.cjs": "spawnSync(binary, ['_hook', process.argv[2]])",
 			},
 			want: []string{"claude", "cursor"},
+		},
+		{
+			name:  "claude direct hook entry",
+			files: map[string]string{".claude/settings.json": `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"graft _hook stop"}]}]}}`},
+			want:  []string{"claude"},
+		},
+		{
+			name:  "claude legacy hook entry without its shim",
+			files: map[string]string{".claude/settings.json": `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"node .claude/helpers/graft-hooks.cjs stop"}]}]}}`},
+			want:  []string{"claude"},
+		},
+		{
+			name: "claude settings without graft and a foreign helper",
+			files: map[string]string{
+				".claude/settings.json":           `{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"echo user"}]}]}}`,
+				".claude/helpers/graft-hooks.cjs": "console.log('mine')",
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -220,5 +238,64 @@ func TestRewriteWiringUpgradesClaudeHooksKeepingUserHooks(t *testing.T) {
 	}
 	if strings.Contains(got, "Bash|mcp__graft__|Read|Grep|Glob") {
 		t.Errorf("RewriteWiring(legacy claude settings) settings = %s, want the legacy matcher gone", got)
+	}
+}
+
+func TestReconcileWiringMigratesLegacyShimsAtTheCurrentVersion(t *testing.T) {
+	root := t.TempDir()
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("GRAFT_MCP_COMMAND", "graft")
+	const shim = "#!/usr/bin/env node\nconst result = spawnSync(binary, ['_hook', process.argv[2]], { stdio: 'inherit' });\n"
+	files := map[string]string{
+		".claude/settings.json": `{"hooks":{"Stop":[
+			{"hooks":[{"type":"command","command":"echo user"}]},
+			{"hooks":[{"type":"command","command":"node \"${CLAUDE_PROJECT_DIR:-.}/.claude/helpers/graft-hooks.cjs\" stop","timeout":8}]}
+		]}}`,
+		".claude/helpers/graft-hooks.cjs":      shim,
+		".claude/helpers/graft-statusline.cjs": "const result = spawnSync(binary, ['_statusline'], { stdio: 'inherit' });\n",
+		// Cursor is not wired, so no refresh removes its shim; it must not
+		// keep the wiring stale.
+		".cursor/hooks/graft-hooks.cjs": shim,
+	}
+	for name, content := range files {
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	options := WiringOptions{MCP: true, Hooks: true, Statusline: true}
+	if err := WriteWiringStamp(root, "", "2.0.0", []string{"claude"}, options, time.Now()); err != nil {
+		t.Fatal(err)
+	}
+	env := hosts.Env{Home: home, Binary: "/pkg/graft", Launch: hosts.ServerEntry()}
+	rewrites := 0
+	rewrite := func(repo string, ids []string, options WiringOptions) error {
+		rewrites++
+		return RewriteWiring(t.Context(), repo, ids, options, env)
+	}
+
+	if note := ReconcileWiring(root, "", "2.0.0", time.Now(), func(repo string) ([]string, error) { return WiredHostIDs(repo), nil }, rewrite); note == "" || rewrites != 1 {
+		t.Fatalf("ReconcileWiring(shim-era repo, current stamp) = (%q, %d rewrites), want one refresh", note, rewrites)
+	}
+	settings, err := os.ReadFile(filepath.Join(root, ".claude", "settings.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(settings); !strings.Contains(got, `"echo user"`) || !strings.Contains(got, `"graft _hook stop"`) || strings.Contains(got, "graft-hooks.cjs") {
+		t.Errorf("ReconcileWiring(shim-era repo) settings = %s, want the user hook kept and graft's entry direct", got)
+	}
+	for _, name := range []string{".claude/helpers/graft-hooks.cjs", ".claude/helpers/graft-statusline.cjs"} {
+		if _, err := os.Lstat(filepath.Join(root, name)); !os.IsNotExist(err) {
+			t.Errorf("ReconcileWiring(shim-era repo) left %s (err = %v), want it deleted", name, err)
+		}
+	}
+
+	if note := ReconcileWiring(root, "", "2.0.0", time.Now(), func(repo string) ([]string, error) { return WiredHostIDs(repo), nil }, rewrite); note != "" || rewrites != 1 {
+		t.Errorf("ReconcileWiring(migrated repo) = (%q, %d rewrites), want no further refresh", note, rewrites)
 	}
 }
