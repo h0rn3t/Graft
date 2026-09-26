@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -24,48 +25,93 @@ func TestBuildLSPAddsCompilerResolvedCallEdge(t *testing.T) {
 	if _, err := exec.LookPath("sh"); err != nil {
 		t.Skip("POSIX shell is unavailable")
 	}
-	t.Setenv("GRAFT_DIR", "")
+	tests := []struct {
+		name     string
+		flags    []string
+		noLSP    string
+		wantEdge bool
+	}{
+		{name: "default", wantEdge: true},
+		{name: "explicit --lsp", flags: []string{"--lsp"}, wantEdge: true},
+		{name: "GRAFT_NO_LSP=0", noLSP: "0", wantEdge: true},
+		{name: "--no-lsp", flags: []string{"--no-lsp"}},
+		{name: "GRAFT_NO_LSP=1", noLSP: "1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("GRAFT_DIR", "")
+			root := t.TempDir()
+			sourcePath := filepath.Join(root, "main.go")
+			source := "package main\n\nfunc target() {}\nfunc caller() { receiver.Call() }\n"
+			if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			installFakeLSPServer(t, "gopls", sourcePath)
+			t.Setenv("GRAFT_NO_LSP", tt.noLSP)
+			var stdout, stderr strings.Builder
+			args := append([]string{"build", root}, tt.flags...)
+			if status := run(args, &stdout, &stderr); status != 0 {
+				t.Fatalf("run(%v) status = %d, want 0; stderr = %q", args, status, stderr.String())
+			}
+			loaded, err := graph.Read(graph.WiringPath(filepath.Join(root, "graft")))
+			if err != nil {
+				t.Fatalf("Read(%q) error = %v", graph.WiringPath(filepath.Join(root, "graft")), err)
+			}
+			_, progress, hasProgress := strings.Cut(stderr.String(), "\rsummarizing 2/2: ")
+			if hasProgress != tt.wantEdge {
+				t.Errorf("run(%v) stderr = %q, want LSP progress = %t", args, stderr.String(), tt.wantEdge)
+			} else if line := strings.TrimSuffix(progress, "\n"); hasProgress && len([]rune(line)) != 50 {
+				t.Errorf("run(%v) LSP progress label length = %d, want 50; stderr = %q", args, len([]rune(line)), stderr.String())
+			}
+			hasEdge := slices.ContainsFunc(loaded.Edges, func(edge graph.EdgeV1) bool {
+				return edge.Source == "main.go#caller" && edge.Target == "main.go#target" &&
+					edge.Relation == "calls" && edge.Confidence == "lsp_resolved"
+			})
+			if hasEdge != tt.wantEdge {
+				t.Errorf("run(%v) LSP-resolved caller to target edge = %t, want %t; edges = %#v; stderr = %q", args, hasEdge, tt.wantEdge, loaded.Edges, stderr.String())
+			}
+		})
+	}
+}
 
+func TestHookSyncSkipsLSP(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake language server launcher uses a POSIX shell")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("POSIX shell is unavailable")
+	}
+	t.Setenv("GRAFT_DIR", "")
 	root := t.TempDir()
 	sourcePath := filepath.Join(root, "main.go")
-	source := "package main\n\nfunc target() {}\nfunc caller() { receiver.Call() }\n"
-	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+	if err := os.WriteFile(sourcePath, []byte("package main\n\nfunc target() {}\nfunc caller() { receiver.Call() }\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	installFakeLSPServer(t, "gopls", sourcePath)
-	var stdout, stderr strings.Builder
-	args := []string{"build", root, "--lsp"}
-	if status := run(args, &stdout, &stderr); status != 0 {
-		t.Fatalf("run(%v) status = %d, want 0; stderr = %q", args, status, stderr.String())
+	if err := buildHookSync(root); err != nil {
+		t.Fatalf("buildHookSync(%q) error = %v, want nil", root, err)
 	}
 	loaded, err := graph.Read(graph.WiringPath(filepath.Join(root, "graft")))
 	if err != nil {
-		t.Fatalf("Read(%q) error = %v", graph.WiringPath(filepath.Join(root, "graft")), err)
-	}
-	_, progress, ok := strings.Cut(stderr.String(), "\rsummarizing 2/2: ")
-	if !ok {
-		t.Errorf("run(%v) stderr = %q, want LSP progress", args, stderr.String())
-	} else if line := strings.TrimSuffix(progress, "\n"); len([]rune(line)) != 50 {
-		t.Errorf("run(%v) LSP progress label length = %d, want 50; stderr = %q", args, len([]rune(line)), stderr.String())
+		t.Fatal(err)
 	}
 	for _, edge := range loaded.Edges {
-		if edge.Source == "main.go#caller" && edge.Target == "main.go#target" &&
-			edge.Relation == "calls" && edge.Confidence == "lsp_resolved" {
-			return
+		if edge.Confidence == "lsp_resolved" {
+			t.Errorf("buildHookSync(%q) edge %#v, want no LSP-resolved edges", root, edge)
 		}
 	}
-	t.Errorf("run(%v) graph edges = %#v, want LSP-resolved caller to target edge; stdout = %q; stderr = %q", args, loaded.Edges, stdout.String(), stderr.String())
 }
 
 func TestBuildLSPWithoutMatchingLanguageSucceeds(t *testing.T) {
 	t.Setenv("GRAFT_DIR", "")
+	t.Setenv("GRAFT_NO_LSP", "")
 	root := t.TempDir()
 	var stdout, stderr strings.Builder
-	args := []string{"build", root, "--lsp"}
+	args := []string{"build", root}
 	if status := run(args, &stdout, &stderr); status != 0 {
 		t.Fatalf("run(%v) status = %d, want 0; stderr = %q", args, status, stderr.String())
 	}
-	if strings.Contains(stdout.String(), "lsp_resolved") || strings.Contains(stderr.String(), "unknown option") {
+	if strings.Contains(stdout.String(), "lsp_resolved") || strings.Contains(stderr.String(), "unknown option") || strings.Contains(stderr.String(), "summarizing") {
 		t.Errorf("run(%v) output = (%q, %q), want successful no-op without a matching language", args, stdout.String(), stderr.String())
 	}
 }
@@ -117,6 +163,7 @@ func TestBuildLSPUsesUTF16CharacterPositions(t *testing.T) {
 func installFakeLSPServer(t *testing.T, name, sourcePath string) {
 	t.Helper()
 	t.Setenv("GRAFT_TEST_LSP_SERVER", "")
+	t.Setenv("GRAFT_NO_LSP", "")
 	serverDir := t.TempDir()
 	binary, err := os.Executable()
 	if err != nil {

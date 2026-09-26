@@ -17,6 +17,11 @@ func TestMain(m *testing.M) {
 			panic(err)
 		}
 	}
+	// A language server installed on the machine must not change build output;
+	// the LSP tests re-enable enrichment with a fake server.
+	if err := os.Setenv("GRAFT_NO_LSP", "1"); err != nil {
+		panic(err)
+	}
 	status := m.Run()
 	_ = os.RemoveAll(home) // best-effort scratch cleanup
 	os.Exit(status)

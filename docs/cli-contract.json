@@ -19,6 +19,7 @@
         "-e, --extensions <exts...>",
         "--no-reuse",
         "--lsp",
+        "--no-lsp",
         "--follow-submodules",
         "--no-follow-submodules",
         "--follow-nested-repos",
@@ -42,7 +43,7 @@
         "repo: <C>/.cache/extract.<stamp>.json (newest 2 kept), <C>/.graph/wiring.json (atomic via .tmp), <C>/.cache/ask-index.json, <C>/.cache/fingerprint.<stamp>.json (newest 2 kept)",
         "repo: /graft/ appended to <R>/.gitignore unless --no-gitignore or GRAFT_NO_GITIGNORE; `!graft/`, `graft/.cache/`, `graft/.graph/` appended to <R>/.ignore unless --no-ignore or GRAFT_NO_IGNORE; both skipped when <C> is outside <R>",
         "repo: per-file cards <C>/<path minus extension>.md (or <C>/_root/…), stale cards and empty directories removed, <C>/INDEX.md",
-        "process: --lsp spawns an installed language server (rust-analyzer, clangd, gopls, pyright-langserver, typescript-language-server)",
+        "process: spawns the first installed language server for the graph's languages (rust-analyzer, clangd, gopls, pyright-langserver, typescript-language-server) and adds lsp_resolved call edges; skipped by --no-lsp or GRAFT_NO_LSP, never run by hook syncs",
         "workspace root (no own .git and ≥2 git children, or an existing workspace.json): each child gets its own .graft/config.json and <child>/graft build, then the parent <C> is removed and rewritten with workspace.json and the .gitignore entry"
       ]
     },
@@ -228,6 +229,7 @@
     "GRAFT_MCP_COMMAND": { "scope": "cli", "effect": "command written into host MCP configs instead of the probed local graft" },
     "GRAFT_NO_GITIGNORE": { "scope": "cli", "effect": "skip the graft .gitignore entry" },
     "GRAFT_NO_IGNORE": { "scope": "cli", "effect": "skip the .ignore re-admit entries" },
+    "GRAFT_NO_LSP": { "scope": "cli", "effect": "skip language-server enrichment in graft build" },
     "GRAFT_NO_REFRESH": { "scope": "cli", "effect": "disable pre-query refresh" },
     "GRAFT_NO_SEED": { "scope": "cli", "effect": "disable worktree graph seeding" },
     "GRAFT_NO_STATUSLINE": { "scope": "cli", "effect": "omit the Claude statusLine block" },

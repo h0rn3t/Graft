@@ -127,7 +127,7 @@ func programSpec() *commandSpec {
 	add(program, "graft _statusline [options]").hidden = true
 	add(program, "graft _sync-run [options] <dir>").hidden = true
 	add(program, "graft version [options]")
-	add(program, "graft build [options] [dir]", "-e, --extensions <exts...>", "--no-reuse", "--lsp",
+	add(program, "graft build [options] [dir]", "-e, --extensions <exts...>", "--no-reuse", "--lsp", "--no-lsp",
 		"--follow-submodules", "--no-follow-submodules", "--follow-nested-repos", "--no-follow-nested-repos",
 		"--include-dir <name>", "--only-dir <path>", "--no-gitignore", "--no-ignore")
 	add(program, "graft ask [options] <query> [dir]", "-n, --limit <n>", "--source", "--full", "--budget <tokens>", "--intent <lookup|edit>", "--in <path>", "--json", "--no-graph-rank", "--no-refresh")

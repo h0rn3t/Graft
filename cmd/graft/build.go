@@ -102,17 +102,16 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		}
 		return 1
 	}
-	if opts.lsp {
-		lsp := graph.EnrichWithLSP(context.Background(), &built.Graph, root)
-		server := lsp.Server
-		if server == "" {
-			server = "none"
+	// Only an explicit graft build enriches: hook syncs leave opts.lsp unset,
+	// since a language server can take minutes to index.
+	if value := os.Getenv("GRAFT_NO_LSP"); opts.lsp && (value == "" || value == "0" || value == "false") {
+		if lsp := graph.EnrichWithLSP(context.Background(), &built.Graph, root); lsp.Server != "" {
+			label := []rune("lsp:" + lsp.Server)
+			if len(label) > 50 {
+				label = label[:50]
+			}
+			writeDiagnostic(stderr, "\rsummarizing %d/%d: %-50s", lsp.Added+1, lsp.Queried, string(label))
 		}
-		label := []rune("lsp:" + server)
-		if len(label) > 50 {
-			label = label[:50]
-		}
-		writeDiagnostic(stderr, "\rsummarizing %d/%d: %-50s", lsp.Added+1, lsp.Queried, string(label))
 	}
 	if opts.workspaceChildName == "" {
 		writeDiagnostic(stderr, "\n")

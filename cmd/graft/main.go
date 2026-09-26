@@ -242,7 +242,7 @@ func queryOptions(parsed invocation) callersOptions {
 		jsonOutput:  flags.bools["--json"],
 		noRefresh:   flags.bools["--no-refresh"],
 		noReuse:     flags.bools["--no-reuse"],
-		lsp:         flags.bools["--lsp"],
+		lsp:         !flags.bools["--no-lsp"],
 		noGitignore: flags.bools["--no-gitignore"],
 		noIgnore:    flags.bools["--no-ignore"],
 		onlyDirs:    flags.values["--only-dir"],

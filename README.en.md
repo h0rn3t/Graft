@@ -217,14 +217,15 @@ Graft's native extractor is deterministic and local. It supports:
 - **C**: `.c`, `.h`
 - **C++**: `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh`
 
-`graft build --lsp` can add compiler-grade call edges when `rust-analyzer`, `clangd`, `gopls`, `pyright`, or `typescript-language-server` is installed. A file with an unsupported extension is skipped and reported rather than guessed.
+`graft build` adds compiler-grade call edges by default when `rust-analyzer`, `clangd`, `gopls`, `pyright`, or `typescript-language-server` is installed (turn it off with `--no-lsp` or `GRAFT_NO_LSP=1`). A file with an unsupported extension is skipped and reported rather than guessed.
 
 - **Generic extraction** — Rust, C, and C++ use tags queries for symbols and calls.
-- **Compiler-grade edges (opt-in)** — `graft build --lsp` adds precise
+- **Compiler-grade edges (by default)** — `graft build` adds precise
   `lsp_resolved` call edges (member calls the static pass can't type) when a
   language server is on your `PATH`: `rust-analyzer` (Rust), `clangd` (C/C++),
   `gopls` (Go), `pyright` (Python), `typescript-language-server` (TS/JS).
   It's best-effort — with no server installed the graph is unchanged.
+  Hook-driven background syncs never start a language server; `--no-lsp` skips it.
 
 ---
 
@@ -339,7 +340,7 @@ graft build [dir]                    # build the graph and per-file cards
 graft build --extensions .ts .py     # restrict source extensions
 graft build --include-dir <name>     # re-include a normally excluded dot-directory
 graft build --only-dir <path>        # build one repository-relative subtree
-graft build --lsp                    # add best-effort compiler-resolved call edges
+graft build --no-lsp                 # skip the language server (used by default when on PATH)
 graft build --no-reuse               # re-parse every file instead of replaying the extraction cache
 graft build --follow-submodules      # include initialized submodules and persist the choice
 graft build --no-follow-submodules   # restore the default submodule boundary

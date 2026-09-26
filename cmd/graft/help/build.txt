@@ -11,9 +11,12 @@ Options:
                               that lists the supported set
   --no-reuse                  re-parse every file instead of replaying unchanged
                               ones from the extraction cache
-  --lsp                       add compiler-grade call edges via a language
-                              server if one is installed (opt-in, slower; e.g.
-                              rust-analyzer, clangd)
+  --lsp                       add compiler-grade call edges via an installed
+                              language server (gopls, rust-analyzer, clangd,
+                              pyright-langserver, typescript-language-server);
+                              skipped when none is on PATH (default)
+  --no-lsp                    skip language-server enrichment (same as
+                              GRAFT_NO_LSP=1)
   --follow-submodules         include initialized Git submodules recursively;
                               persisted for later builds and automatic refreshes
   --no-follow-submodules      exclude Git submodules; persisted for later builds
