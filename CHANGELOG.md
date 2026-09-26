@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.0-rc.1 - 2026-09-26
+
+### Changed
+
+- **`graft build` uses an installed language server by default.** When `gopls`, `rust-analyzer`, `clangd`, `pyright-langserver` or `typescript-language-server` is on `PATH` for a language in the graph, the build adds compiler-resolved `lsp_resolved` call edges without `--lsp`. With no matching server the build is unchanged and prints no LSP progress line. `--no-lsp` or `GRAFT_NO_LSP=1` skips enrichment; `--lsp` is still accepted. Hook-driven background syncs and pre-query refreshes never start a language server.
+
 ## 0.3.0-beta.4 - 2026-09-25
 
 ### Fixed
