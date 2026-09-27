@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0-beta.1 - 2026-09-27
+
+### Added
+
+- **Reviewed graph-quality oracle.** The standalone `graph-quality <fixture-root> --oracle <manifest.json>` command verifies pinned source hashes, builds an isolated structural graph, and reports scoped TP, FP, FN, precision, recall, and exact mismatched facts. `--strict` fails on mismatches; ordinary graph-quality output is unchanged.
+- **Reproducible quality baseline.** A reviewed Go fixture tests same-name methods, recursion, interface and callback boundaries, and cold versus incremental builds. The baseline records local build/query latency, memory, and response bytes on pinned inputs without claiming repository-wide semantic accuracy.
+
+### Known limitation
+
+- The structural extractor still misses the statically named `Direct -> A.Save` call in the fixture. The oracle reports it as one FN; the existing `resolvedPct` metric is target resolution, not semantic precision.
+
 ## 0.3.0-rc.2 - 2026-09-27
 
 ### Changed
