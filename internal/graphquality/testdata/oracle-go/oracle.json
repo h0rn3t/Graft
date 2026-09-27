@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "sources": [
+    { "path": "a.go", "sha256": "0328eef8eb391da5550aa441efab93751df452426d09af2a6f03f0a7f60f64ee" },
+    { "path": "b.go", "sha256": "4138463af1742bee3533b19b5064accd2b240ef3e2a344dfe8229c4dff6d0cee" },
+    { "path": "dynamic.go", "sha256": "295c3b9970155fe9787208f8e09e9b7c88a578124adca2c7db1010c090bc462e" }
+  ],
+  "build": { "extensions": [".go"] },
+  "partitions": [
+    {
+      "name": "go-calls",
+      "language": "go",
+      "relation": "calls",
+      "files": ["a.go", "b.go"],
+      "expected": [
+        { "source": "a.go#Direct", "relation": "calls", "target": "a.go#A.Save" },
+        { "source": "a.go#Recur", "relation": "calls", "target": "a.go#Recur" },
+        { "source": "b.go#Left", "relation": "calls", "target": "b.go#Right" },
+        { "source": "b.go#Right", "relation": "calls", "target": "b.go#Left" }
+      ]
+    },
+    {
+      "name": "go-contains",
+      "language": "go",
+      "relation": "contains",
+      "files": ["a.go", "b.go", "dynamic.go"],
+      "expected": [
+        { "source": "a.go", "relation": "contains", "target": "a.go#A" },
+        { "source": "a.go", "relation": "contains", "target": "a.go#A.Save" },
+        { "source": "a.go", "relation": "contains", "target": "a.go#Direct" },
+        { "source": "a.go", "relation": "contains", "target": "a.go#Recur" },
+        { "source": "b.go", "relation": "contains", "target": "b.go#B" },
+        { "source": "b.go", "relation": "contains", "target": "b.go#B.Save" },
+        { "source": "b.go", "relation": "contains", "target": "b.go#Left" },
+        { "source": "b.go", "relation": "contains", "target": "b.go#Right" },
+        { "source": "dynamic.go", "relation": "contains", "target": "dynamic.go#Saver" },
+        { "source": "dynamic.go", "relation": "contains", "target": "dynamic.go#Use" }
+      ]
+    }
+  ],
+  "limitations": [
+    "Calls from dynamic.go are unassessed because interface dispatch and function values do not identify one static target.",
+    "The current structural extractor misses the statically named Direct -> A.Save call; the oracle reports it as FN."
+  ]
+}

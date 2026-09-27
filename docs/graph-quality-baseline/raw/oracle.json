@@ -1,0 +1,92 @@
+{
+  "structural": {
+    "graph": "/Users/eugeneshershen/Graft-1/internal/graphquality/testdata/oracle-go",
+    "nodes": 13,
+    "symbolNodes": 10,
+    "edges": 13,
+    "byKind": {
+      "file": 3,
+      "struct": 2,
+      "method": 2,
+      "function": 5,
+      "interface": 1
+    },
+    "byOrigin": {
+      "ast": 13
+    },
+    "byRelation": {
+      "contains": 10,
+      "calls": 3
+    },
+    "byConfidence": {
+      "extracted": 13
+    },
+    "resolution": {
+      "calls": 3,
+      "resolvedToNode": 3,
+      "resolvedPct": 100,
+      "unresolvedExternalImports": 0
+    },
+    "connectivity": {
+      "orphanSymbolNodes": 7,
+      "orphanPct": 70
+    },
+    "invariants": {
+      "ok": true,
+      "danglingEdges": 0,
+      "selfLoopCalls": 1,
+      "violations": 0,
+      "sample": []
+    }
+  },
+  "oracle": {
+    "partitions": [
+      {
+        "name": "go-calls",
+        "language": "go",
+        "relation": "calls",
+        "files": [
+          "a.go",
+          "b.go"
+        ],
+        "tp": 3,
+        "fp": 0,
+        "fn": 1,
+        "precision": 1,
+        "recall": 0.75,
+        "falsePositives": [],
+        "falseNegatives": [
+          {
+            "source": "a.go#Direct",
+            "relation": "calls",
+            "target": "a.go#A.Save"
+          }
+        ],
+        "duplicateActual": []
+      },
+      {
+        "name": "go-contains",
+        "language": "go",
+        "relation": "contains",
+        "files": [
+          "a.go",
+          "b.go",
+          "dynamic.go"
+        ],
+        "tp": 10,
+        "fp": 0,
+        "fn": 0,
+        "precision": 1,
+        "recall": 1,
+        "falsePositives": [],
+        "falseNegatives": [],
+        "duplicateActual": []
+      }
+    ],
+    "unassessedRelations": [],
+    "limitations": [
+      "Calls from dynamic.go are unassessed because interface dispatch and function values do not identify one static target.",
+      "The current structural extractor misses the statically named Direct -\u003e A.Save call; the oracle reports it as FN."
+    ]
+  }
+}
