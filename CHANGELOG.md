@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0-rc.1 - 2026-09-28
+
+### Changed
+
+- **`graft build` shows a progress bar on terminals.** When stderr is a terminal, the parsing line repaints in place with a bar and percent (`parsing 3/9: [██████░░░░░░░░░░░░░░]  33% src/store.ts`). Piped or redirected output keeps the plain `parsing i/n: file` line, so logs and scripts are unchanged.
+
 ## 0.4.0-beta.1 - 2026-09-27
 
 ### Added
