@@ -62,11 +62,16 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 	}
 
 	var onProgress func(index, total int, file string)
+	progressTTY := opts.workspaceChildName == "" && buildProgressEnabled(stderr)
 	if opts.workspaceChildName == "" {
 		onProgress = func(index, total int, file string) {
+			if progressTTY {
+				writeDiagnostic(stderr, "%s", formatBuildProgress(index, total, file))
+				return
+			}
 			runes := []rune(file)
-			if len(runes) > 50 {
-				runes = runes[:50]
+			if len(runes) > buildProgressLegacyWidth {
+				runes = runes[:buildProgressLegacyWidth]
 			}
 			writeDiagnostic(stderr, "\rparsing %d/%d: %-50s", index+1, total, string(runes))
 		}
