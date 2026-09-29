@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.4.0-rc.3 - 2026-09-29
+
+### Fixed
+
+- **`graft uninstall` and re-init remove Cursor's hooks.** Retraction covers
+  `.cursor/hooks.json` and the legacy `.cursor/hooks/graft-hooks.cjs` shim, so
+  `graft uninstall` and `graft init --agents <subset>` no longer leave live
+  graft hook entries in a committed config. Graft's entries go, foreign entries
+  and a user-chosen schema version stay, and the file is deleted once nothing
+  is left.
+- **`graft init --dry-run` lists what a run with the same flags writes.** The
+  plan honors `--no-mcp`, `--no-hooks` and `--no-global` instead of listing
+  every file regardless; Claude Code keeps its own MCP server and hooks, as in
+  a real run.
+- **`--agents` accepts comma-separated ids.** `--agents cursor,gemini` reads
+  like `--agents cursor gemini`, and an unknown id is still rejected before any
+  write.
+
 ## 0.4.0-rc.2 - 2026-09-29
 
 ### Changed
