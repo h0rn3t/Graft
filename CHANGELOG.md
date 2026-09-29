@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0-rc.2 - 2026-09-29
+
+### Changed
+
+- **Cursor wiring ships with the repository.** `.cursor/rules/graft.mdc`,
+  `.cursor/mcp.json` and `.cursor/hooks.json` are committed instead of
+  gitignored, so opening the repo in Cursor picks up the Graft instructions, MCP
+  server and hooks from a fresh clone without running `graft init` first. `graft
+  init` keeps the three files in sync idempotently and preserves hooks or MCP
+  servers it does not own.
+
 ## 0.4.0-rc.1 - 2026-09-28
 
 ### Changed
