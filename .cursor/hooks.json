@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "hooks": {
+    "postToolUse": [
+      {
+        "matcher": "Read|Grep|Glob|Search|Shell",
+        "command": "graft _hook cursor-post-tool"
+      }
+    ],
+    "afterMCPExecution": [
+      {
+        "command": "graft _hook cursor-mcp"
+      }
+    ],
+    "sessionEnd": [
+      {
+        "command": "graft _hook cursor-session-end"
+      }
+    ]
+  }
+}
