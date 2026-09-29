@@ -23,6 +23,25 @@ type initOptions struct {
 	contextDir                            string
 }
 
+// splitAgentIDs flattens --agents values into host ids: a value may hold
+// several ids separated by commas, so `--agents cursor,gemini` reads like
+// `--agents cursor gemini`. A nil input stays nil, which means the flag was
+// not given at all.
+func splitAgentIDs(values []string) []string {
+	if values == nil {
+		return nil
+	}
+	ids := make([]string, 0, len(values))
+	for _, value := range values {
+		for id := range strings.SplitSeq(value, ",") {
+			if id = strings.TrimSpace(id); id != "" {
+				ids = append(ids, id)
+			}
+		}
+	}
+	return ids
+}
+
 func runInit(parsed parsedFlags, stdout, stderr io.Writer) int {
 	dir := parsed.dir()
 	if parsed.bools["--list-agents"] {
@@ -38,7 +57,7 @@ func runInit(parsed parsedFlags, stdout, stderr io.Writer) int {
 		statusline: !parsed.bools["--no-statusline"], global: !parsed.bools["--no-global"],
 		allAgents: parsed.bools["--all-agents"], noAgents: parsed.bools["--no-agents"],
 		dryRun: parsed.bools["--dry-run"], yes: parsed.bools["--yes"],
-		agents: parsed.values["--agents"],
+		agents: splitAgentIDs(parsed.values["--agents"]),
 	}
 	opts.contextDir, _ = parsed.value("--dir")
 	repo, err := filepath.Abs(dir)
@@ -102,10 +121,11 @@ func initRepo(repo string, env hosts.Env, opts initOptions, stderr io.Writer) in
 	}
 	tty := isTerminal(os.Stderr)
 	if opts.dryRun {
-		writeDiagnostic(stderr, "%s\n", hosts.FormatPlan(plan, ids, repo, env.Home, tty))
+		filter := hosts.PlanOptions{MCP: opts.mcp, Hooks: opts.hooks, Global: opts.global}
+		writeDiagnostic(stderr, "%s\n", hosts.FormatPlan(plan, ids, repo, env.Home, filter, tty))
 		for _, child := range children {
 			childRepo := filepath.Join(repo, child)
-			writeDiagnostic(stderr, "\n— %s/ (workspace child)\n%s\n", child, hosts.FormatPlan(hosts.PlanInit(childRepo, env.Home, env.Launch, nil), ids, childRepo, env.Home, tty))
+			writeDiagnostic(stderr, "\n— %s/ (workspace child)\n%s\n", child, hosts.FormatPlan(hosts.PlanInit(childRepo, env.Home, env.Launch, nil), ids, childRepo, env.Home, filter, tty))
 		}
 		return 0
 	}

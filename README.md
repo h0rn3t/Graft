@@ -269,9 +269,9 @@ graft init
 
 | Прапорець | Дія |
 |---|---|
-| `--agents <ids...>` | підключити лише цих агентів, без запитання — ids: `agents`, `adal`, `cursor`, `gemini`, `grok`, `hermes`, `antigravity`, `copilot`, `kiro`, `windsurf`, `claude` |
+| `--agents <ids...>` | підключити лише цих агентів, без запитання — ids: `agents`, `adal`, `cursor`, `gemini`, `grok`, `hermes`, `antigravity`, `copilot`, `kiro`, `windsurf`, `claude`; можна через кому: `--agents cursor,gemini` |
 | `--yes`, `-y` | пропустити запитання й підключити всіх **знайдених** агентів |
-| `--dry-run` | надрукувати всі файли, яких торкнеться `init`, і вийти без запису |
+| `--dry-run` | надрукувати всі файли, яких торкнеться `init`, і вийти без запису — з урахуванням `--no-mcp`/`--no-hooks`/`--no-global`, як у справжнього запуску |
 | `--all-agents` | записати файли інструкцій для всіх відомих агентів, знайдених чи ні |
 | `--no-agents` | лише підключення Claude Code; інших агентів пропустити |
 | `--list-agents` | надрукувати відомі ids агентів і вийти |

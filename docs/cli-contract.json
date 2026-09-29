@@ -163,6 +163,7 @@
         "repo (hooks, unless --no-hooks; not affected by --no-global): .cursor/hooks.json hooks as `graft _hook <sub>`; legacy .cursor/hooks/graft-hooks.cjs deleted when graft wrote it",
         "home (antigravity, unless --no-global; not affected by --no-hooks): ~/.gemini/skills/graft/SKILL.md",
         "repo: <K>/wiring-stamp.json with version, host ids and global/mcp/hooks/statusline options",
+        "dry-run plan: the writes a run with these flags would make — --no-mcp and --no-hooks drop the other hosts' MCP registrations and hooks, --no-global every machine-wide write; Claude Code keeps its own MCP server and hooks",
         "process: `graft build .` child (300s timeout) when no graph exists and --no-build is absent; `graft --version` probe for the MCP launch command unless GRAFT_MCP_COMMAND is set",
         "workspace root: the parent first, then every workspace child gets the same wiring"
       ]
@@ -176,10 +177,10 @@
       "exit": { "0": "always; unparseable files are reported and left as-is" },
       "effects": [
         "none without -y (still probes `graft --version`)",
-        "-y: owned instruction files deleted with empty parents pruned, fenced sections (including the legacy brain block) removed, MCP keys and TOML tables removed, the Claude repo layer removed",
+        "-y: owned instruction files deleted with empty parents pruned, fenced sections (including the legacy brain block) removed, MCP keys and TOML tables removed, the Claude repo layer removed, graft's entries in the repo-level .cursor/hooks.json removed (the file kept while it holds other entries, deleted when nothing is left)",
         "-y, unless --no-global: ~/.claude* entries, Codex hooks, the Antigravity skill",
         "-y, unless --keep-cache: <R>/graft (hardcoded, ignores --dir/GRAFT_DIR) and the graft lines in .gitignore/.ignore",
-        "never removed: .cursor/hooks.json, .cursor/hooks/graft-hooks.cjs, <R>/.graft/config.json, the /.graft/ gitignore line, ~/.graft/*, legacy shims with content graft did not write"
+        "never removed: <R>/.graft/config.json, the /.graft/ gitignore line, ~/.graft/*, legacy shims with content graft did not write"
       ]
     },
     {

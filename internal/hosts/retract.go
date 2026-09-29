@@ -303,7 +303,11 @@ func (f *files) stripClaudeSettings(path string, apply bool) (RetractAction, err
 	return f.finishJSON(path, root, apply)
 }
 
-func (f *files) stripCodexHooks(path string, apply bool) (RetractAction, error) {
+// stripHooksConfig removes graft's entries from a hooks-only JSON config —
+// Codex's ~/.codex/hooks.json and Cursor's repo-local .cursor/hooks.json — and
+// deletes the file when nothing is left. A schema version graft wrote itself
+// goes with the last entry; any other one, and every other key, stays put.
+func (f *files) stripHooksConfig(path string, apply bool) (RetractAction, error) {
 	root, action, err := f.readRetractObject(path)
 	if action != "" {
 		return action, err
@@ -315,6 +319,11 @@ func (f *files) stripCodexHooks(path string, apply bool) (RetractAction, error) 
 	dropGraftHooks(root)
 	if jsonjs.Stringify(root, 0) == before {
 		return RetractAbsent, nil
+	}
+	if root.Len() == 1 {
+		if version, ok := mustGet(root, "version").(float64); ok && version == graftSchemaVersion {
+			root.Delete("version")
+		}
 	}
 	return f.finishJSON(path, root, apply)
 }
@@ -442,6 +451,15 @@ func (f *files) retractTargets(repo string, env Env, opts RetractOptions) []retr
 			return f.removeJSONKey(mcp.Path, mcp.TopKey, apply)
 		})
 	}
+	// Cursor's hooks are repo-local, so they are retracted with the repo
+	// targets whatever --no-global says.
+	if !exclude("cursor") {
+		for _, hook := range CursorHookTargets(repo) {
+			list.add(hook.HostID, hook.Path, hook.What, hook.Scope, func(apply bool) (RetractAction, error) { return f.stripHooksConfig(hook.Path, apply) })
+		}
+		shim := legacyCursorShim(repo)
+		list.add("cursor", shim, "legacy Node shim", ScopeRepo, func(apply bool) (RetractAction, error) { return f.retractLegacyShim(shim, apply) })
+	}
 	if !exclude("claude") {
 		f.addClaudeTargets(list, repo)
 	}
@@ -491,7 +509,7 @@ func (f *files) addGlobalTargets(list *targetList, home string, exclude func(str
 		for _, hook := range CodexHookTargets(home) {
 			shim := legacyCodexShim(home)
 			list.add(hook.HostID, shim, "legacy Node shim", ScopeGlobal, func(apply bool) (RetractAction, error) { return f.retractLegacyShim(shim, apply) })
-			list.add(hook.HostID, hook.Path, hook.What, ScopeGlobal, func(apply bool) (RetractAction, error) { return f.stripCodexHooks(hook.Path, apply) })
+			list.add(hook.HostID, hook.Path, hook.What, ScopeGlobal, func(apply bool) (RetractAction, error) { return f.stripHooksConfig(hook.Path, apply) })
 		}
 	}
 	if !exclude("antigravity") {
@@ -520,6 +538,11 @@ func keptPaths(repo string, env Env, exclude []string) map[string]bool {
 	}
 	if slices.Contains(exclude, "agents") {
 		for _, target := range CodexHookTargets(env.Home) {
+			kept[target.Path] = true
+		}
+	}
+	if slices.Contains(exclude, "cursor") {
+		for _, target := range CursorHookTargets(repo) {
 			kept[target.Path] = true
 		}
 	}

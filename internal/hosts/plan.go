@@ -96,3 +96,36 @@ func SelectedWrites(plans []HostPlan, ids []string) []PlannedWrite {
 	}
 	return writes
 }
+
+// PlanOptions are the init flags that decide which of a plan's writes a run
+// really makes; the zero value keeps nothing optional.
+//
+// Claude Code is wired as a whole — its MCP server and hooks are core wiring —
+// so only the other hosts answer to MCP and Hooks, and only Global spans all
+// of them.
+type PlanOptions struct {
+	MCP    bool
+	Hooks  bool
+	Global bool
+}
+
+// Suppresses reports whether a run with these options skips a planned write:
+// --no-global drops every machine-wide write, --no-mcp and --no-hooks the
+// other hosts' registrations.
+func (opts PlanOptions) Suppresses(write PlannedWrite) bool {
+	if !opts.Global && write.Scope == ScopeGlobal {
+		return true
+	}
+	if write.HostID == "claude" {
+		return false
+	}
+	if !opts.MCP && write.Kind == WriteMCP {
+		return true
+	}
+	return !opts.Hooks && write.Kind == WriteHook
+}
+
+// FilterWrites keeps the writes a run with these options would make.
+func FilterWrites(writes []PlannedWrite, opts PlanOptions) []PlannedWrite {
+	return slices.DeleteFunc(slices.Clone(writes), opts.Suppresses)
+}

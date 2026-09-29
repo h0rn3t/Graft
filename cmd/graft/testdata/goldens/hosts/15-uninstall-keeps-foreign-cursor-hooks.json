@@ -1,0 +1,53 @@
+{
+  "args": [
+    "uninstall",
+    "<REPO>",
+    "-y"
+  ],
+  "env": {
+    "DO_NOT_TRACK": "1",
+    "GRAFT_MCP_NPX": "1",
+    "HOME": "<HOME>",
+    "USERPROFILE": "<HOME>"
+  },
+  "gitDirs": [
+    "repo"
+  ],
+  "dirs": [
+    "home",
+    "home/.adal",
+    "home/.codeium/windsurf",
+    "home/.codex",
+    "home/.config/opencode",
+    "home/.cursor",
+    "home/.gemini/config",
+    "home/.grok",
+    "home/.hermes",
+    "home/.kiro",
+    "repo"
+  ],
+  "inputs": {},
+  "mutations": {
+    "writes": {
+      "repo/.cursor/hooks.json": "{\n  \"version\": 1,\n  \"hooks\": {\n    \"postToolUse\": [\n      {\n        \"command\": \"graft _hook cursor-post-tool\"\n      },\n      {\n        \"command\": \"echo mine\"\n      }\n    ]\n  }\n}\n"
+    },
+    "deletes": []
+  },
+  "status": 0,
+  "stdout": "",
+  "stderr": "kiro:\n  ⚠ removed: <REPO>/.kiro/settings/mcp.json — not valid JSON, left untouched (remove the graft entry by hand)\n\ncursor:\n  ~ removed: <REPO>/.cursor/hooks.json (postToolUse / afterMCPExecution / sessionEnd)\n\n⚠ 1 file(s) could not be parsed or removed and were left as-is — see above.\n",
+  "files": {
+    "home/.claude.json": "{\n  \"numStartups\": 3,\n  \"mcpServers\": {\n    \"mine\": {\n      \"command\": \"mine\"\n    }\n  }\n}\n",
+    "home/.codex/config.toml": "[mcp_servers.other]\ncommand = \"other\"\n",
+    "home/.codex/hooks.json": "{\n  \"hooks\": {\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"echo mine\"\n          }\n        ]\n      }\n    ]\n  },\n  \"custom\": 1\n}\n",
+    "home/.graft/update-check.json": "{\n  \"latest\": \"0.0.1\",\n  \"checkedAt\": 4102444800000\n}",
+    "repo/.claude/settings.json": "{\n  \"2\": \"numeric key\",\n  \"permissions\": {\n    \"allow\": [\n      \"Bash(npm test:*)\"\n    ],\n    \"deny\": [\n      \"Bash(rm:*)\"\n    ]\n  },\n  \"hooks\": {\n    \"Stop\": [\n      {\n        \"hooks\": [\n          {\n            \"type\": \"command\",\n            \"command\": \"echo done\"\n          }\n        ]\n      }\n    ]\n  },\n  \"statusLine\": {\n    \"type\": \"command\",\n    \"command\": \"my-statusline\"\n  }\n}\n",
+    "repo/.cursor/hooks.json": "{\n  \"version\": 1,\n  \"hooks\": {\n    \"postToolUse\": [\n      {\n        \"command\": \"echo mine\"\n      }\n    ]\n  }\n}\n",
+    "repo/.cursor/mcp.json": "{\n  \"mcpServers\": {\n    \"other\": {\n      \"command\": \"x\",\n      \"args\": [\n        \"1e3\",\n        1000,\n        0.1\n      ]\n    }\n  }\n}\n",
+    "repo/.github/workflows/ci.yml": "on: push\n",
+    "repo/.kiro/settings/mcp.json": "{ not json",
+    "repo/AGENTS.md": "# Team notes\n\nKeep PRs small.\n",
+    "repo/src/main.ts": "export function main() { return 1; }\n"
+  },
+  "checkFiles": true
+}

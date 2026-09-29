@@ -247,3 +247,62 @@ func TestRetractRemovesBothForms(t *testing.T) {
 		t.Errorf("Retract() removed %s (err = %v), want a file graft did not write kept", foreignShim, err)
 	}
 }
+
+// TestRetractRemovesCursorHooks checks Cursor's repo-local hook config: graft's
+// entries and the schema version it adds go, a user's entries stay, and a
+// config left without entries is deleted.
+func TestRetractRemovesCursorHooks(t *testing.T) {
+	repo, home := t.TempDir(), t.TempDir()
+	hooks := filepath.Join(repo, ".cursor", "hooks.json")
+	writeTestFile(t, hooks, `{"version":1,"hooks":{
+		"postToolUse":[
+			{"matcher":"Read","command":"graft _hook cursor-post-tool"},
+			{"matcher":"Shell","command":"echo mine"}
+		],
+		"sessionEnd":[{"command":"graft _hook cursor-session-end"}]}}`)
+	writeTestFile(t, legacyCursorShim(repo), testShim)
+
+	Retract(repo, Env{Home: home, Launch: binLaunch}, RetractOptions{Apply: true})
+
+	got := readTestFile(t, hooks)
+	if strings.Contains(got, "_hook") || !strings.Contains(got, `"echo mine"`) {
+		t.Errorf("Retract() cursor hooks = %s, want graft entries gone and the user entry kept", got)
+	}
+	if _, err := os.Lstat(legacyCursorShim(repo)); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Retract() left the Cursor shim (err = %v), want the legacy shim deleted", err)
+	}
+
+	empty := t.TempDir()
+	only := filepath.Join(empty, ".cursor", "hooks.json")
+	writeTestFile(t, only, `{"version":1,"hooks":{"sessionEnd":[{"command":"graft _hook cursor-session-end"}]}}`)
+	Retract(empty, Env{Home: t.TempDir(), Launch: binLaunch}, RetractOptions{Apply: true})
+	if _, err := os.Lstat(only); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("Retract() left %s (err = %v), want a hooks config of graft entries deleted", only, err)
+	}
+}
+
+// TestRetractKeepsForeignHooksConfigKeys checks that retraction takes back only
+// what graft wrote: a schema version the user chose themselves, and any other
+// key, survive the removal of graft's entries.
+func TestRetractKeepsForeignHooksConfigKeys(t *testing.T) {
+	repo, home := t.TempDir(), t.TempDir()
+	hooks := filepath.Join(repo, ".cursor", "hooks.json")
+	writeTestFile(t, hooks, `{"version":2,"hooks":{"sessionEnd":[{"command":"graft _hook cursor-session-end"}]},"mine":true}`)
+
+	Retract(repo, Env{Home: home, Launch: binLaunch}, RetractOptions{Apply: true})
+
+	value, err := jsonjs.Parse([]byte(readTestFile(t, hooks)))
+	if err != nil {
+		t.Fatalf("jsonjs.Parse(cursor hooks) error = %v, want nil", err)
+	}
+	root, _ := jsonjs.AsObject(value)
+	if _, ok := root.Get("hooks"); ok {
+		t.Errorf("Retract() cursor hooks = %s, want graft's hooks object gone", readTestFile(t, hooks))
+	}
+	if mine, _ := root.Get("mine"); mine != true {
+		t.Errorf("Retract() cursor hooks = %s, want the foreign key kept", readTestFile(t, hooks))
+	}
+	if version, _ := root.Get("version"); version != float64(2) {
+		t.Errorf("Retract() cursor hooks = %s, want the user's schema version kept", readTestFile(t, hooks))
+	}
+}

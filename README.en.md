@@ -269,9 +269,9 @@ With no TTY to prompt on — CI, a Dockerfile, a piped shell — `init` writes *
 
 | Flag | Effect |
 |---|---|
-| `--agents <ids...>` | wire only these, no prompt — ids: `agents`, `adal`, `cursor`, `gemini`, `grok`, `hermes`, `antigravity`, `copilot`, `kiro`, `windsurf`, `claude` |
+| `--agents <ids...>` | wire only these, no prompt — ids: `agents`, `adal`, `cursor`, `gemini`, `grok`, `hermes`, `antigravity`, `copilot`, `kiro`, `windsurf`, `claude`; comma-separated works too: `--agents cursor,gemini` |
 | `--yes`, `-y` | skip the prompt and wire every **detected** agent |
-| `--dry-run` | print every file `init` would touch, then exit without writing |
+| `--dry-run` | print every file `init` would touch, then exit without writing — filtered by `--no-mcp`/`--no-hooks`/`--no-global` exactly like a real run |
 | `--all-agents` | write instruction files for every known agent, detected or not |
 | `--no-agents` | Claude Code wiring only; skip other agents |
 | `--list-agents` | print the known agent ids and exit |
@@ -287,7 +287,6 @@ Selecting the `agents` host also touches your **user-level** Codex config, when 
 | Path | What changes |
 |---|---|
 | `~/.codex/config.toml` | registers the Graft MCP server (`[mcp_servers.graft]`) |
-| `~/.codex/hooks/graft/graft-hooks.cjs` | the post-edit hook shim |
 | `~/.codex/hooks.json` | a `PostToolUse` entry matching `Write\|Edit\|MultiEdit` |
 
 Both configs are user-level, so they apply to **every** repo you open with Codex, not just this one. The picker labels these `machine-wide`, `--dry-run` lists them in their own section, and `--no-global` skips them while still wiring `AGENTS.md`.

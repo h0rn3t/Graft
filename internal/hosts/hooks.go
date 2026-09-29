@@ -135,6 +135,10 @@ func (f *files) installCursorHooks(repo string) ([]ConfigWrite, error) {
 	return writes, nil
 }
 
+// graftSchemaVersion is the Cursor hooks schema version graft adds to a config
+// that carries none; retraction takes back exactly this value.
+const graftSchemaVersion = 1
+
 // mergeHookConfig replaces graft's entries in a hooks.json, keeping foreign
 // entries, and leaves a config of the wrong shape untouched. withVersion adds
 // Cursor's schema version when the file has none.
@@ -149,7 +153,7 @@ func (f *files) mergeHookConfig(id, path string, withVersion bool, entries []hoo
 	}
 	before := jsonjs.Stringify(root, 0)
 	if withVersion && !root.Has("version") {
-		root.Set("version", 1.0)
+		root.Set("version", float64(graftSchemaVersion))
 	}
 	hooks, ok := ensureObject(root, "hooks")
 	if !ok {

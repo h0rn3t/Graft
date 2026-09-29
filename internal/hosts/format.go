@@ -123,13 +123,16 @@ func FormatNonInteractiveHelp(detected []string) string {
 	return strings.Join(lines, "\n")
 }
 
-// FormatPlan renders the --dry-run output: repo writes, then machine-wide ones.
-func FormatPlan(plans []HostPlan, ids []string, repo, home string, tty bool) string {
+// FormatPlan renders the --dry-run output: repo writes, then machine-wide
+// ones. A write the given options suppress — another host's MCP registration
+// or hooks, or a machine-wide one under --no-global — is left out, so the plan
+// lists what a real run would touch.
+func FormatPlan(plans []HostPlan, ids []string, repo, home string, opts PlanOptions, tty bool) string {
 	dim, warn := plain, plain
 	if tty {
 		dim, warn = muted, amber
 	}
-	writes := SelectedWrites(plans, ids)
+	writes := FilterWrites(SelectedWrites(plans, ids), opts)
 	if len(writes) == 0 {
 		return "would write — nothing (no agents selected)"
 	}

@@ -8,8 +8,9 @@ Arguments:
 
 Options:
   --no-build         skip building the graph (wire files only)
-  --agents <ids...>  only these agents (agents, adal, cursor, gemini, grok,
-                     hermes, antigravity, copilot, kiro, windsurf, claude)
+  --agents <ids...>  only these agents — space- or comma-separated (agents,
+                     adal, cursor, gemini, grok, hermes, antigravity, copilot,
+                     kiro, windsurf, claude)
   --all-agents       write instruction files for every known agent, detected or
                      not
   --no-agents        Claude Code wiring only; skip other agents
