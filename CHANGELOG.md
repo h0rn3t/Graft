@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.0-rc.4 - 2026-10-03
+
+### Changed
+
+- **Oversized `graft read` failures are self-recoverable.** The error now
+  names the exact budget to retry with (`retry once with --budget N or
+  higher`), and the skill card, agent instructions and MCP tool descriptions
+  document the one-retry rule with fallback to reading the `file:line` range
+  directly, so agents recover from `needs N estimated tokens` instead of
+  stalling.
+
 ## 0.4.0-rc.3 - 2026-09-29
 
 ### Fixed
