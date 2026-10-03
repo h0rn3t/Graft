@@ -92,7 +92,7 @@ func runRead(opts callersOptions, stdout, stderr io.Writer) int {
 		if opts.mcp {
 			flag = "budget"
 		}
-		writeDiagnostic(stderr, "complete definition needs %d estimated tokens; increase %s (maximum 64000), or read the source range directly\n", required, flag)
+		writeDiagnostic(stderr, "complete definition needs %d estimated tokens; retry once with %s %d or higher (maximum 64000), or read the source range directly\n", required, flag, required)
 		return 1
 	}
 	addReadCallees(root, workspace, match, &result, budget, diagnostics.String(), opts.jsonOutput, sources)

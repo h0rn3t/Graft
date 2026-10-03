@@ -1,3 +1,4 @@
+<!-- graft:start -->
 ## Graft — repo context graph
 
 This repo is indexed in `graft/`: a prebuilt graph of every symbol, its exact
@@ -17,9 +18,6 @@ uncommitted edits; there is no need to run `graft build` after editing.
   or skeleton call is needed. Returns the complete source plus its
   same-directory callees. Use `path::name` or a node ID to disambiguate.
   Collect related definitions together with repeated `--also <symbol>`.
-  If it fails with `needs N estimated tokens`, retry the same symbol once
-  with `--budget N` or higher (maximum 64000); if it still exceeds budget,
-  read the `file:line` range directly.
 - `graft callers <symbol>`: exact call edges. `--direction out` for
   dependencies, `--depth 2` before a rename or signature change, `--depth all`
   before a multi-file refactor.
@@ -33,3 +31,4 @@ never the whole file. In a multi-repo workspace, hits carry `[scope/]`
 labels; narrow with `--in <scope>/`. With the graft MCP server connected, the
 same tools are `graft_find_code`, `graft_find_all`, `graft_file_api`,
 `graft_trace_calls`, `graft_read_symbol` and `graft_repo_map`.
+<!-- graft:end -->

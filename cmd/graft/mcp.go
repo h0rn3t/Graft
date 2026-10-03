@@ -125,13 +125,13 @@ var mcpTools = []mcpToolDefinition{
 	},
 	{
 		Name:        "graft_read_symbol",
-		Description: "Read a known symbol directly; no preceding search or file-API call is needed. Returns its complete source, current span and hash, plus its direct callees in the same directory. A name shared with testdata or test copies reads the production definition; a path::name in the wrong file falls back to the name.",
+		Description: "Read a known symbol directly; no preceding search or file-API call is needed. Returns its complete source, current span and hash, plus its direct callees in the same directory. A name shared with testdata or test copies reads the production definition; a path::name in the wrong file falls back to the name. If it fails with needs N estimated tokens, retry once with budget N or higher.",
 		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"symbol": map[string]any{"type": "string", "description": "case-sensitive exact name, node ID, or path::name; include the child prefix in a workspace"},
-				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "total estimated-token budget (UTF-16 length / 4), default 2000; callees fill what the definition leaves, oversized definitions fail without partial source"},
+				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "total estimated-token budget (UTF-16 length / 4), default 2000; callees fill what the definition leaves, oversized definitions fail without partial source; on needs-N-tokens error retry once with N or higher"},
 			},
 			"required": []string{"symbol"},
 		},
@@ -151,7 +151,7 @@ source files to locate and understand code — one call usually replaces several
 - graft_trace_calls — who calls it, what it calls, blast radius before a rename.
 - graft_repo_map — orientation in an unfamiliar repo.
 
-Use complete returned source as evidence without re-reading it. For a truncated hit, read its exact symbol with graft_read_symbol.
+Use complete returned source as evidence without re-reading it. For a truncated hit, read its exact symbol with graft_read_symbol. If graft_read_symbol fails with needs N tokens, retry once with budget N or higher (maximum 64000); if still too large, read the file:line range directly.
 
 Results already reflect uncommitted edits — the graph refreshes before each query.`
 
