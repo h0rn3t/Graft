@@ -630,6 +630,9 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		}
 		var text bytes.Buffer
 		writeSkeletonHuman(&text, result)
+		if result.Saved != nil {
+			recordQuerySavings(contextDir, text.Len(), result.Saved.BaselineChars)
+		}
 		return mcpResult{text: text.String(), isError: len(result.Entries) == 0 && result.Note != ""}
 	case "graft_trace_calls":
 		symbol := mcpString(args["symbol"])
@@ -668,7 +671,11 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		if result.TotalHits == 0 {
 			return mcpResult{text: grepZeroHitNote(result), isError: false}
 		}
-		return mcpResult{text: formatGrepResult(fitGrepResult(result, mcpGrepBudget)), isError: false}
+		text := formatGrepResult(fitGrepResult(result, mcpGrepBudget))
+		if result.Saved != nil {
+			recordQuerySavings(contextDir, len(text), result.Saved.BaselineChars)
+		}
+		return mcpResult{text: text, isError: false}
 	case "graft_repo_map":
 		maxDirs := 0
 		if value, ok := mcpNumber(args["max_dirs"]); ok && value > 0 {
@@ -681,7 +688,12 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		if err != nil {
 			return mcpResult{text: "no graph found — run `graft build` first", isError: true}
 		}
-		return mcpResult{text: graph.FormatRepoMap(graph.BuildRepoMap(*loaded, graph.RepoMapOptions{MaxDirs: maxDirs})), isError: false}
+		repoMap := graph.BuildRepoMap(*loaded, graph.RepoMapOptions{MaxDirs: maxDirs})
+		text := graph.FormatRepoMap(repoMap)
+		if repoMap.Saved != nil {
+			recordQuerySavings(contextDir, len(text), repoMap.Saved.BaselineChars)
+		}
+		return mcpResult{text: text, isError: false}
 	case "graft_check_freshness":
 		if _, workspace := graph.ReadWorkspaceChildren(contextDir); workspace {
 			return mcpWorkspaceCheckFreshness(root, contextDir)
@@ -750,6 +762,9 @@ func mcpTraceCalls(root, contextDir, symbol string, args map[string]any, cache *
 		body.WriteByte('\n')
 	}
 	text := strings.TrimRight(body.String(), "\n")
+	if saved := callersSavings(*loaded, results); saved != nil {
+		recordQuerySavings(contextDir, len(text), saved.BaselineChars)
+	}
 	return mcpResult{text: text, isError: false}
 }
 

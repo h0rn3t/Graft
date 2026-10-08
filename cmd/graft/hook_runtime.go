@@ -239,10 +239,12 @@ func classifyAndScoreHookUse(toolName, command string, payload any) hookToolUse 
 	return hookToolUse{Kind: kind, SavedTokens: saved}
 }
 
-// handleHookToolUse runs after a search tool call in Claude Code and nudges a
-// raw search over indexed code toward graft. Tool counts are not kept here:
-// they come from the transcript when the turn or subagent stops.
+// handleHookToolUse runs after a search or graft tool call in Claude Code. It
+// credits what graft queries saved to the session that made the call, and
+// nudges a raw search over indexed code toward graft. Tool counts are not kept
+// here: they come from the transcript when the turn or subagent stops.
 func handleHookToolUse(input hookInput, root string, stdout io.Writer) {
+	creditHookPendingSavings(root, hookSessionID(input))
 	if note := hookSearchNudge(input, root); note != "" {
 		emitHookContext(stdout, "PostToolUse", note)
 	}
@@ -372,14 +374,21 @@ func startHookSync(root string) bool {
 	return true
 }
 
-func handleHookStop(input hookInput, root string) {
-	id := hookSessionID(input)
+// creditHookPendingSavings moves the savings graft queries left in the pending
+// ledger into session id. The ledger is shared by every session in the repo,
+// so it is drained right after each tool call rather than only at Stop.
+func creditHookPendingSavings(root, id string) {
 	if saved := savings.DrainPending(hookCacheDir(root)); saved > 0 {
 		_ = updateHookSession(root, id, func(session *sessionState) bool {
 			session.SavedTokens += saved
 			return true
 		})
 	}
+}
+
+func handleHookStop(input hookInput, root string) {
+	id := hookSessionID(input)
+	creditHookPendingSavings(root, id)
 	// A subagent's own transcript is counted when it stops; the main
 	// transcript waits for the main agent's turn to end.
 	if input.string("hook_event_name") == "SubagentStop" {

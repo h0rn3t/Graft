@@ -75,9 +75,10 @@ func graftBlocks(binary, suffix string) []graftBlock {
 	return []graftBlock{
 		{event: "PostToolUse", blocks: []jsonjs.Value{
 			block("Write|Edit|MultiEdit", "post-edit", 10),
-			// Only search tools: the nudge is the one thing done per call. Tool
-			// counts come from the transcript when a turn or subagent stops.
-			block("Grep|Bash", "tool-savings", 8),
+			// Search tools get the nudge; graft's own tools and Bash credit query
+			// savings to the calling session. Tool counts come from the
+			// transcript when a turn or subagent stops.
+			block("Grep|Bash|mcp__graft__.*", "tool-savings", 8),
 		}},
 		{event: "UserPromptSubmit", blocks: []jsonjs.Value{block("", "prompt", 15)}},
 		{event: "SessionStart", blocks: []jsonjs.Value{block("", "session-start", 8)}},

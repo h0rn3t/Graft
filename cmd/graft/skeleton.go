@@ -29,7 +29,12 @@ func runSkeleton(opts callersOptions, stdout, stderr io.Writer) int {
 	if opts.jsonOutput {
 		return writeSkeletonJSON(stdout, stderr, result)
 	}
-	return writeSkeletonHuman(stdout, result)
+	out := &countingWriter{Writer: stdout}
+	code := writeSkeletonHuman(out, result)
+	if result.Saved != nil {
+		recordQuerySavings(contextDir, out.n, result.Saved.BaselineChars)
+	}
+	return code
 }
 
 func writeSkeletonJSON(stdout, stderr io.Writer, result graph.SkeletonResult) int {

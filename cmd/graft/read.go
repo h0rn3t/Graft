@@ -99,8 +99,16 @@ func runRead(opts callersOptions, stdout, stderr io.Writer) int {
 	if _, err := io.WriteString(stderr, diagnostics.String()); err != nil {
 		return 1
 	}
-	if _, err := io.WriteString(stdout, renderReadResult(result, opts.jsonOutput)); err != nil {
+	text = renderReadResult(result, opts.jsonOutput)
+	if _, err := io.WriteString(stdout, text); err != nil {
 		return 1
+	}
+	// The baseline is the definition's own file; inlined callees add nothing.
+	for _, node := range workspace.Loaded[match.child].Graph.Nodes {
+		if node.Kind == graph.Kind("file") && node.Path == match.node.Path && node.Chars != nil {
+			recordQuerySavings(contextDir, len(text), *node.Chars)
+			break
+		}
 	}
 	return 0
 }

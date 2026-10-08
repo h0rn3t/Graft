@@ -145,7 +145,7 @@ func TestMergeGraftSettingsNarrowsToolHookAndAddsSubagentStop(t *testing.T) {
 		return jsonjs.Stringify(value, 0)
 	}
 	got := hooks(merged)
-	for _, want := range []string{`"matcher":"Write"`, `echo user"`, `"matcher":"Grep|Bash"`, `"graft _hook stop"`, `echo user-subagent`} {
+	for _, want := range []string{`"matcher":"Write"`, `echo user"`, `"matcher":"Grep|Bash|mcp__graft__.*"`, `"graft _hook stop"`, `echo user-subagent`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("MergeGraftSettings(legacy hooks) hooks = %s, want %s", got, want)
 		}

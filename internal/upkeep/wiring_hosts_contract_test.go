@@ -231,7 +231,7 @@ func TestRewriteWiringUpgradesClaudeHooksKeepingUserHooks(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := string(data)
-	for _, want := range []string{`"echo user"`, `"matcher": "Grep|Bash"`, `"SubagentStop"`} {
+	for _, want := range []string{`"echo user"`, `"matcher": "Grep|Bash|mcp__graft__.*"`, `"SubagentStop"`} {
 		if !strings.Contains(got, want) {
 			t.Errorf("RewriteWiring(legacy claude settings) settings = %s, want %s", got, want)
 		}
