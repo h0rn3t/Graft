@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0-rc.5 - 2026-10-09
+
+### Fixed
+
+- **The statusline counts what every graft tool saved.** `graft_find_all`,
+  `graft_trace_calls`, `graft_repo_map`, `graft_file_api` and
+  `graft_read_symbol`, plus CLI `skeleton` and `read`, now record their savings
+  like `ask`, `grep`, `callers` and `map` already did, so a session that leans
+  on them no longer shows no `tok saved` at all.
+- **Savings land in the session that made the call, as soon as it returns.**
+  The Claude Code `tool-savings` hook now also runs after graft MCP tools
+  (matcher `Grep|Bash|mcp__graft__.*`) and credits the shared pending ledger
+  right away instead of at the end of the turn. The running total updates
+  mid-turn, and parallel sessions in one repository no longer pick up each
+  other's savings. Existing wiring is rewritten by upkeep on upgrade.
+
 ## 0.4.0-rc.4 - 2026-10-03
 
 ### Changed
