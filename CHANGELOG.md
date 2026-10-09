@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0-rc.5 - 2026-10-09
 
 ### Changed
 
