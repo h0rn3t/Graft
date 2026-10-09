@@ -1,9 +1,11 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"slices"
 	"strings"
 
@@ -203,6 +205,34 @@ func grepTruncationNote(result graph.GrepResult) string {
 		parts = append(parts, fmt.Sprintf("%d indexed file%s unreadable", result.Truncated.Files, pluralSuffix(result.Truncated.Files)))
 	}
 	return fmt.Sprintf("(truncated: %s — narrow with --in or refine the pattern)", strings.Join(parts, ", "))
+}
+
+// grepRemainderNote names the files holding the hits fitGrepResult dropped,
+// most hits first, so a capped answer still says where to narrow.
+func grepRemainderNote(full, fitted graph.GrepResult) string {
+	dropped := make(map[string]int)
+	for _, group := range full.Groups {
+		dropped[group.Path] += len(group.Hits)
+	}
+	for _, group := range fitted.Groups {
+		dropped[group.Path] -= len(group.Hits)
+	}
+	maps.DeleteFunc(dropped, func(_ string, count int) bool { return count <= 0 })
+	if len(dropped) == 0 {
+		return ""
+	}
+	paths := slices.SortedFunc(maps.Keys(dropped), func(a, b string) int {
+		return cmp.Or(cmp.Compare(dropped[b], dropped[a]), strings.Compare(a, b))
+	})
+	const shown = 8
+	parts := make([]string, 0, shown+1)
+	for _, path := range paths[:min(shown, len(paths))] {
+		parts = append(parts, fmt.Sprintf("%s (%d)", path, dropped[path]))
+	}
+	if len(paths) > shown {
+		parts = append(parts, fmt.Sprintf("%d more files", len(paths)-shown))
+	}
+	return "more hits in: " + strings.Join(parts, ", ") + " — narrow with in: one of these files or a tighter pattern"
 }
 
 func grepZeroHitNote(result graph.GrepResult) string {

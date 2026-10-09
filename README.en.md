@@ -302,10 +302,10 @@ Both configs are user-level, so they apply to **every** repo you open with Codex
 | Tool | Takes | What it's for |
 |---|---|---|
 | `graft_find_code` | a question | Ranked nodes with file:line, source inlined — usually the full answer, no follow-up read needed. |
-| `graft_read_symbol` | an exact symbol or `path::name` | Complete source, current span and source hash, plus same-directory callees within the budget. |
+| `graft_read_symbol` | an exact symbol or `path::name`, optionally `also` | Complete source, current span and source hash, plus same-directory callees within the budget; `also: [...]` reads up to eight symbols in one call under one budget. |
 | `graft_file_api` | a file path | Every signature in that file, no bodies — the API surface for a tenth of the tokens. |
 | `graft_trace_calls` | a symbol, optionally `to` | Who depends on it, or what it depends on with `direction: out`, N levels deep for blast radius; with `to`, the shortest call chain from one symbol to another. |
-| `graft_find_all` | a regex | Every hit, grouped by enclosing symbol, ranked by how coupled that symbol is. |
+| `graft_find_all` | a regex | Hits grouped by enclosing symbol, ranked by how coupled that symbol is; past about 2000 tokens the answer names the files holding the rest. |
 | `graft_repo_map` | nothing | A first look at an unfamiliar repo: directory clusters, hubs, hotspots. |
 | `graft_check_freshness` | nothing | Whether the local graph has drifted from the code. |
 
@@ -451,8 +451,8 @@ from 128 to 64000. A definition that does not fit returns an error with its
 required budget rather than partial source. Missing, unreadable, or changed
 source also returns an error; even `--no-refresh` never reads stale spans.
 
-For related definitions on the CLI, pass up to eight selectors using repeated
-`--also` flags.
+For related definitions, pass up to eight selectors: repeated `--also` flags on
+the CLI, or `also: [...]` beside `symbol` in MCP `graft_read_symbol`.
 Batch JSON is `{results: [...]}` with per-item `ok`, `covered`, `omitted`, or
 `error` statuses. Definitions are ordered by file/span; containing definitions
 come first and cover their children without repeating source. A missing or

@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`graft_read_symbol` reads several symbols in one call.** `also: [...]` takes
+  up to seven more selectors beside `symbol`, sharing its budget; a span inside
+  another requested definition comes once, as with CLI `--also`. Reading one
+  symbol per call cost a model round each.
+
+### Changed
+
+- **`graft_find_all` answers are capped near 2000 tokens** instead of about
+  10,000. Past the cap the answer names the files holding the remaining hits,
+  most first, so the next call narrows with `in:` rather than carrying a broad
+  pattern's tail through every later round.
+- **An MCP `in` that covers no indexed file widens instead of failing.**
+  `graft_find_code` and `graft_find_all` given such a prefix, often `graft/`
+  itself, search every indexed file and say so, instead of returning an error
+  that costs a round. Workspaces and the CLI keep the error.
+- On Claude Haiku 5.5 at medium effort, eight questions about this repository,
+  48 runs with graft against 120 without: graft now uses 19% fewer tokens and
+  costs 31% less than the runs without it (0.5.0-rc.2: 8% and 12%), in 26%
+  fewer model rounds; 47 of the 48 answers named every required symbol. Two
+  multi-file questions still read more tokens than without graft, at a lower
+  cost.
+
 ## 0.5.0-rc.2 - 2026-10-09
 
 ### Added

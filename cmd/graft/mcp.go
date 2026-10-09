@@ -103,7 +103,7 @@ var mcpTools = []mcpToolDefinition{
 	},
 	{
 		Name:        "graft_find_all",
-		Description: "Use instead of grep or rg on this repo's code: regex search over the graph's indexed files, hits grouped by innermost enclosing symbol and ranked by incoming-edge count (coupling) — which hit matters, not just where it is.",
+		Description: "Use instead of grep or rg on this repo's code: regex search over the graph's indexed files, hits grouped by innermost enclosing symbol and ranked by incoming-edge count (coupling) — which hit matters, not just where it is. An answer is capped near 2000 tokens; past the cap it names the files holding the rest, so narrow with in: one of them rather than widening the pattern.",
 		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
@@ -126,12 +126,13 @@ var mcpTools = []mcpToolDefinition{
 	},
 	{
 		Name:        "graft_read_symbol",
-		Description: "Read a known symbol directly; no preceding search or file-API call is needed. Returns its complete source, current span and hash, plus its direct callees in the same directory. A name shared with testdata or test copies reads the production definition; a path::name in the wrong file falls back to the name. If it fails with needs N estimated tokens, retry once with budget N or higher.",
+		Description: "Read a known symbol directly; no preceding search or file-API call is needed. Returns its complete source, current span and hash, plus its direct callees in the same directory. Several known symbols? Read them in ONE call: symbol plus also: [the others] (8 in all, one shared budget) — one call per symbol costs a model round each. A name shared with testdata or test copies reads the production definition; a path::name in the wrong file falls back to the name. If it fails with needs N estimated tokens, retry once with budget N or higher.",
 		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"symbol": map[string]any{"type": "string", "description": "case-sensitive exact name, node ID, or path::name; include the child prefix in a workspace"},
+				"also":   map[string]any{"type": "array", "maxItems": 7, "items": map[string]any{"type": "string"}, "description": "more known symbols to read in this same call, selected like symbol and sharing its budget; returns each definition without callees, and a span inside another one once"},
 				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "total estimated-token budget (UTF-16 length / 4), default 2000; callees fill what the definition leaves, oversized definitions fail without partial source; on needs-N-tokens error retry once with N or higher"},
 			},
 			"required": []string{"symbol"},
@@ -145,14 +146,14 @@ source files to locate and understand code — one call usually replaces several
 
 **If these tools are deferred (names shown, schemas withheld), load them all in ONE lookup:** ToolSearch "select:mcp__graft__graft_read_symbol,mcp__graft__graft_find_code,mcp__graft__graft_find_all,mcp__graft__graft_trace_calls,mcp__graft__graft_file_api,mcp__graft__graft_repo_map" — one round trip for the whole session. Never load them one at a time.
 
-- Known symbol: graft_read_symbol directly — complete source plus its same-directory callees. Do not search for it first.
+- Known symbol: graft_read_symbol directly — complete source plus its same-directory callees. Do not search for it first. Several known symbols: one graft_read_symbol call with also: [...].
 - Unknown location: graft_find_code with a focused question; use in when the path is known.
 - Known file, unknown symbol: graft_file_api — the file's whole API in ~200 tokens.
 - graft_find_all — when you need EVERY occurrence; a query is top-N and misses some.
 - graft_trace_calls — who calls it, what it calls, blast radius before a rename.
 - graft_repo_map — orientation in an unfamiliar repo.
 
-Use complete returned source as evidence without re-reading it. For a truncated hit, read its exact symbol with graft_read_symbol. If graft_read_symbol fails with needs N tokens, retry once with budget N or higher (maximum 64000); if still too large, read the file:line range directly.
+Use complete returned source as evidence without re-reading it. For truncated hits, read their exact symbols together in one graft_read_symbol call (also: [...]). If graft_read_symbol fails with needs N tokens, retry once with budget N or higher (maximum 64000); if still too large, read the file:line range directly.
 
 Results already reflect uncommitted edits — the graph refreshes before each query.`
 
@@ -512,10 +513,11 @@ func (c *mcpConnection) writeValue(value any) error {
 	return err
 }
 
-// mcpGrepBudget caps the bytes of hit groups in one graft_find_all answer.
-// Hosts refuse a tool result past about 25k tokens, and Cyrillic source costs
-// close to a token for every two bytes, so the cap leaves room below that.
-const mcpGrepBudget = 40_000
+// mcpGrepBudget caps the bytes of hit groups in one graft_find_all answer,
+// about the 2000 tokens the other tools default to. A result stays in the
+// agent's context for every later round, so a broad pattern's tail costs far
+// more than one narrower follow-up; grepRemainderNote says where that tail is.
+const mcpGrepBudget = 8_000
 
 type mcpResult struct {
 	text    string
@@ -542,6 +544,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		return mcpResult{text: "unknown tool: " + requestedName, isError: true}
 	}
 	var askOpts callersOptions
+	var readSymbols []string
 	if name == "graft_find_code" || name == "graft_read_symbol" {
 		// Checked before graph access, so a malformed call fails fast.
 		if name == "graft_find_code" && mcpString(args["query"]) == "" {
@@ -549,6 +552,22 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		}
 		if name == "graft_read_symbol" && strings.TrimSpace(mcpString(args["symbol"])) == "" {
 			return mcpResult{text: "graft_read_symbol requires a symbol", isError: true}
+		}
+		if value, exists := args["also"]; exists && name == "graft_read_symbol" {
+			also, ok := value.([]any)
+			if !ok {
+				return mcpResult{text: "also must be an array of symbol names", isError: true}
+			}
+			if len(also) > 0 {
+				readSymbols = []string{mcpString(args["symbol"])}
+			}
+			for _, item := range also {
+				selector, ok := item.(string)
+				if !ok {
+					return mcpResult{text: "also must be an array of symbol names", isError: true}
+				}
+				readSymbols = append(readSymbols, selector)
+			}
 		}
 		var err error
 		if askOpts, err = mcpAskOptions(args); err != nil {
@@ -599,7 +618,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 	case "graft_read_symbol":
 		var stdout, stderr bytes.Buffer
 		status := runRead(callersOptions{
-			command: "read", query: mcpString(args["symbol"]), root: root, rootSet: true,
+			command: "read", query: mcpString(args["symbol"]), symbols: readSymbols, root: root, rootSet: true,
 			contextDir: dirOverride, budget: askOpts.budget, queryNote: askOpts.queryNote,
 			queryCache: cache, mcp: true, noRefresh: true,
 		}, &stdout, &stderr)
@@ -610,12 +629,16 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		if value, ok := mcpNumber(args["limit"]); ok {
 			limit = int(value)
 		}
+		in, scopeNote := mcpScope(contextDir, mcpString(args["in"]), cache)
+		if scopeNote != "" {
+			askOpts.queryNote = strings.TrimSpace(askOpts.queryNote + "\n" + scopeNote)
+		}
 		// Typed options, never argv: a query such as "--dir=/x" stays a query.
 		return mcpRunCommand(runAsk, callersOptions{
 			command: "ask", query: query, root: root, rootSet: true, contextDir: dirOverride,
 			budget: askOpts.budget, intent: askOpts.intent, seen: askOpts.seen, references: askOpts.references,
 			queryNote: askOpts.queryNote,
-			limit:     strconv.Itoa(limit), source: true, full: args["full"] == true, in: mcpString(args["in"]), noRefresh: true,
+			limit:     strconv.Itoa(limit), source: true, full: args["full"] == true, in: in, noRefresh: true,
 			queryCache: cache, mcp: true,
 		})
 	case "graft_file_api":
@@ -661,11 +684,15 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		if _, workspace := graph.ReadWorkspaceChildren(contextDir); workspace {
 			return mcpWorkspaceGrep(root, contextDir, pattern, args)
 		}
+		in, scopeNote := mcpScope(contextDir, mcpString(args["in"]), cache)
+		if scopeNote != "" {
+			scopeNote += "\n"
+		}
 		// Typed options, never argv: a pattern such as "-i" stays a pattern,
 		// and the graph is the one this server was started on.
 		output := mcpRunCommand(runGrep, callersOptions{
 			command: "grep", query: pattern, root: root, rootSet: true, contextDir: dirOverride, jsonOutput: true,
-			ignoreCase: args["ignore_case"] == true, fixed: args["fixed"] == true, in: mcpString(args["in"]), noRefresh: true,
+			ignoreCase: args["ignore_case"] == true, fixed: args["fixed"] == true, in: in, noRefresh: true,
 			queryCache: cache,
 		})
 		if output.isError {
@@ -676,9 +703,13 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 			return mcpResult{text: err.Error(), isError: true, thrown: true}
 		}
 		if result.TotalHits == 0 {
-			return mcpResult{text: grepZeroHitNote(result), isError: false}
+			return mcpResult{text: scopeNote + grepZeroHitNote(result), isError: false}
 		}
-		text := formatGrepResult(fitGrepResult(result, mcpGrepBudget))
+		fitted := fitGrepResult(result, mcpGrepBudget)
+		text := scopeNote + formatGrepResult(fitted)
+		if note := grepRemainderNote(result, fitted); note != "" {
+			text += note + "\n"
+		}
 		if result.Saved != nil {
 			recordQuerySavings(contextDir, len(text), result.Saved.BaselineChars)
 		}
@@ -799,7 +830,11 @@ func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any) mcp
 	}
 	text := grepZeroHitNote(result)
 	if result.TotalHits > 0 {
-		text = formatGrepResult(fitGrepResult(result, mcpGrepBudget))
+		fitted := fitGrepResult(result, mcpGrepBudget)
+		text = formatGrepResult(fitted)
+		if note := grepRemainderNote(result, fitted); note != "" {
+			text += note + "\n"
+		}
 	}
 	if coverage != "" {
 		text += "\n" + coverage
@@ -914,6 +949,22 @@ func mcpWorkspaceCoverage(workspace graph.WorkspaceGraphs) string {
 		return ""
 	}
 	return fmt.Sprintf("%d of %d workspace repos have graphs; run graft build to cover %s", len(workspace.Loaded), len(workspace.Loaded)+len(workspace.Missing), strings.Join(workspace.Missing, ", "))
+}
+
+// mcpScope keeps an in prefix that covers an indexed file. One that covers
+// none — often graft/ itself, the graph's own directory — would cost the
+// agent a round for an error, so the search widens to every indexed file and
+// the note says so. A workspace, whose children own the paths, or a graph
+// that cannot be loaded keeps in for the query to judge.
+func mcpScope(contextDir, in string, cache *queryCache) (scope, note string) {
+	if _, workspace := graph.ReadWorkspaceChildren(contextDir); in == "" || workspace {
+		return in, ""
+	}
+	wiring, err := cache.loadGraph(contextDir)
+	if err != nil || graph.PrefixIndexed(*wiring, in) {
+		return in, ""
+	}
+	return "", fmt.Sprintf("[graft] nothing indexed under %q — searched every indexed file instead", in)
 }
 
 func mcpString(value any) string {

@@ -56,6 +56,12 @@ func scopesHereClause(scopes []ScopeV1) string {
 
 // assertPrefixIndexed rejects a normalized --in prefix no indexed node sits
 // under, with the TypeScript CLI's message.
+// PrefixIndexed reports whether at least one indexed node sits at or under
+// the --in prefix in, as the queries that reject an unindexed prefix judge it.
+func PrefixIndexed(graph GraphV1, in string) bool {
+	return assertPrefixIndexed(graph, normalizePathPrefix(in)) == nil
+}
+
 func assertPrefixIndexed(graph GraphV1, prefix string) error {
 	if prefix == "" {
 		return nil
