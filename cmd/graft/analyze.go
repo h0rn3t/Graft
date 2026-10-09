@@ -514,7 +514,7 @@ func runRoutes(opts callersOptions, stdout, stderr io.Writer) int {
 	}
 	var body strings.Builder
 	if len(routes) == 0 {
-		body.WriteString("no HTTP routes found (Go net/http, gin, echo, chi; Flask, FastAPI, Django; Express, NestJS; Spring)\n")
+		body.WriteString("no HTTP routes found (Go net/http, gin, echo, chi, Fiber; Flask, FastAPI, Django; Express, NestJS; Spring)\n")
 	} else {
 		fmt.Fprintf(&body, "%d HTTP routes\n", len(routes))
 	}

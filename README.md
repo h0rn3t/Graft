@@ -527,8 +527,9 @@ hotspots — change frequency in the last 500 commits × cyclomatic complexity
 стоїть за кожним кроком.
 
 **`graft routes`** перелічує HTTP-ендпоінти, оголошені в коді, і символи, які їх
-обробляють: реєстрації Go `net/http`, gin, echo і chi; Flask, FastAPI і Django;
-Express і NestJS; анотації Spring.
+обробляють: реєстрації Go `net/http`, gin, echo, chi і Fiber, зокрема у формі
+`Add(fiber.MethodPut, …)` і з групами маршрутів (`api := app.Group("/api")`,
+`r.Route` у chi); Flask, FastAPI і Django; Express і NestJS; анотації Spring.
 
 ```
 3 HTTP routes

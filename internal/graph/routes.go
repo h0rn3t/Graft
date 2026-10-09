@@ -2,6 +2,7 @@ package graph
 
 import (
 	"cmp"
+	"maps"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -30,20 +31,21 @@ type Route struct {
 }
 
 // routeCandidate is a cheap textual test for a file that may declare routes.
-var routeCandidate = regexp.MustCompile(`(?i)(get|post|put|patch|delete|head|options|all|any|route|handle(func)?|mapping|path)\s*\(`)
+var routeCandidate = regexp.MustCompile(`(?i)(get|post|put|patch|delete|head|options|connect|trace|all|any|add|route|handle(func)?|method(func)?|mapping|path)\s*\(`)
 
 // routeVerbs maps a registering call, decorator or annotation name, lower
 // case, onto its HTTP method.
 var routeVerbs = map[string]string{
 	"get": "GET", "post": "POST", "put": "PUT", "patch": "PATCH", "delete": "DELETE", "head": "HEAD", "options": "OPTIONS",
-	"all": "ANY", "any": "ANY", "handle": "ANY", "handlefunc": "ANY", "route": "GET", "api_route": "GET", "websocket": "WS",
+	"connect": "CONNECT", "trace": "TRACE", "all": "ANY", "any": "ANY", "add": "ANY", "handle": "ANY", "handlefunc": "ANY",
+	"method": "ANY", "methodfunc": "ANY", "route": "GET", "api_route": "GET", "websocket": "WS",
 	"getmapping": "GET", "postmapping": "POST", "putmapping": "PUT", "patchmapping": "PATCH", "deletemapping": "DELETE", "requestmapping": "ANY",
 }
 
 // goRouteCalls, pythonRouteDecorators and expressRouteCalls are the routeVerbs
 // names each framework family registers handlers with.
 var (
-	goRouteCalls          = []string{"get", "post", "put", "patch", "delete", "head", "options", "any", "handle", "handlefunc"}
+	goRouteCalls          = []string{"get", "post", "put", "patch", "delete", "head", "options", "connect", "trace", "all", "any", "add", "handle", "handlefunc", "method", "methodfunc"}
 	pythonRouteDecorators = []string{"get", "post", "put", "patch", "delete", "head", "options", "route", "api_route", "websocket"}
 	expressRouteCalls     = []string{"get", "post", "put", "patch", "delete", "head", "options", "all"}
 	nestRouteDecorators   = []string{"Get", "Post", "Put", "Patch", "Delete", "Head", "Options", "All"}
@@ -57,10 +59,10 @@ var httpClients = map[string]bool{
 }
 
 // FindRoutes lists the HTTP routes declared in production files under the in
-// prefix: Go net/http, gin, echo and chi registrations; Flask, FastAPI and
-// Django decorators and URL patterns; Express-style registrations and NestJS
-// decorators; Spring mapping annotations. A group prefix is applied for
-// NestJS controllers and Spring classes only.
+// prefix: Go net/http, gin, echo, chi and Fiber registrations; Flask, FastAPI
+// and Django decorators and URL patterns; Express-style registrations and
+// NestJS decorators; Spring mapping annotations. Group prefixes are applied for
+// Go route groups within a function, NestJS controllers and Spring classes.
 func FindRoutes(graph GraphV1, repoRoot, in string) ([]Route, error) {
 	prefix := normalizePathPrefix(in)
 	if in != "" {
@@ -84,7 +86,7 @@ func FindRoutes(graph GraphV1, repoRoot, in string) ([]Route, error) {
 		if err != nil || !readable || !routeCandidate.MatchString(source) {
 			continue // a file deleted or unreadable since the build declares nothing
 		}
-		scan := routeScan{file: file.Path, source: []byte(source), definitions: definitions}
+		scan := routeScan{file: file.Path, source: []byte(source), definitions: definitions, groups: make(map[string]string)}
 		if err := scan.parse(lang); err != nil {
 			continue
 		}
@@ -102,6 +104,9 @@ type routeScan struct {
 	source      []byte
 	definitions map[string][]NodeV1
 	routes      []Route
+	// groups maps a Go variable holding a route group to its path prefix, in
+	// the function being scanned.
+	groups map[string]string
 }
 
 func (scan *routeScan) parse(lang language) error {
@@ -119,10 +124,17 @@ func (scan *routeScan) parse(lang language) error {
 // visit walks the tree; group is the path prefix of the enclosing NestJS
 // controller or Spring class.
 func (scan *routeScan) visit(node *sitter.Node, lang language, group string) {
+	if lang == langGo {
+		if restore := scan.goScope(node); restore != nil {
+			defer restore()
+		}
+	}
 	typescript := lang == langTypeScript || lang == langTSX
 	switch kind := node.Kind(); {
 	case lang == langGo && kind == "call_expression":
 		scan.goRegistration(node)
+	case lang == langGo && (kind == "short_var_declaration" || kind == "assignment_statement"):
+		scan.goGroupAssignment(node)
 	case lang == langPython && kind == "decorated_definition":
 		scan.pythonDecorated(node)
 	case lang == langPython && kind == "call" && path.Base(scan.file) == "urls.py":
@@ -227,7 +239,8 @@ func (scan *routeScan) stringValue(node *sitter.Node) (string, bool) {
 }
 
 // goRegistration reads `mux.HandleFunc("GET /users/{id}", h.get)`,
-// `r.GET("/users", list)` and the like.
+// `r.GET("/users", list)`, `app.Add(fiber.MethodPut, "/users", update)` and
+// the like, under the prefix of the group the receiver holds.
 func (scan *routeScan) goRegistration(call *sitter.Node) {
 	function := call.ChildByFieldName("function")
 	if function == nil || function.Kind() != "selector_expression" {
@@ -238,19 +251,116 @@ func (scan *routeScan) goRegistration(call *sitter.Node) {
 	if !slices.Contains(goRouteCalls, verb) || len(arguments) < 2 {
 		return
 	}
+	method := routeVerbs[verb]
 	pattern, ok := scan.stringValue(arguments[0])
+	if explicit, named := scan.goMethodArgument(arguments[0]); named && len(arguments) >= 3 {
+		method = explicit // the method comes first: Add, Handle, Method
+		pattern, ok = scan.stringValue(arguments[1])
+	}
 	if !ok {
 		return
 	}
-	method := routeVerbs[verb]
 	if prefix, rest, found := strings.Cut(pattern, " "); found && prefix == strings.ToUpper(prefix) && strings.HasPrefix(rest, "/") {
 		method, pattern = prefix, rest // a Go 1.22 method pattern
 	}
 	if !strings.HasPrefix(pattern, "/") {
 		return
 	}
+	if group := scan.goPrefix(function.ChildByFieldName("operand")); group != "" {
+		pattern = joinRoute(group, pattern)
+	}
 	handler, handlerText := scan.handlerNamed(arguments[len(arguments)-1])
 	scan.add(method, pattern, call, handler, handlerText)
+}
+
+// goMethodArgument reads an HTTP method passed as an argument: the literal
+// "DELETE", or a constant such as http.MethodGet or fiber.MethodPut.
+func (scan *routeScan) goMethodArgument(argument *sitter.Node) (string, bool) {
+	if value, isString := scan.stringValue(argument); isString {
+		return value, value != "" && strings.Trim(value, "ABCDEFGHIJKLMNOPQRSTUVWXYZ") == ""
+	}
+	if argument.Kind() != "identifier" && argument.Kind() != "selector_expression" {
+		return "", false
+	}
+	name := scan.text(argument)
+	verb, ok := strings.CutPrefix(name[strings.LastIndexByte(name, '.')+1:], "Method")
+	return strings.ToUpper(verb), ok && verb != ""
+}
+
+// goPrefix is the path prefix of a route group expression: a variable bound
+// by goGroupAssignment or a chi Route closure, or an inline
+// `app.Group("/api")` call; "" for anything else.
+func (scan *routeScan) goPrefix(expression *sitter.Node) string {
+	switch {
+	case expression == nil:
+	case expression.Kind() == "identifier":
+		return scan.groups[scan.text(expression)]
+	case expression.Kind() == "call_expression":
+		if prefix, ok := scan.goGroupCall(expression); ok {
+			return prefix
+		}
+	}
+	return ""
+}
+
+// goGroupCall reads `x.Group("/api", ...)`, the prefix of the group it makes.
+func (scan *routeScan) goGroupCall(call *sitter.Node) (string, bool) {
+	function := call.ChildByFieldName("function")
+	if function == nil || function.Kind() != "selector_expression" || scan.text(function.ChildByFieldName("field")) != "Group" {
+		return "", false
+	}
+	arguments := namedChildren(call.ChildByFieldName("arguments"))
+	if len(arguments) == 0 {
+		return "", false
+	}
+	path, ok := scan.stringValue(arguments[0])
+	if !ok {
+		return "", false
+	}
+	return joinRoute(scan.goPrefix(function.ChildByFieldName("operand")), path), true
+}
+
+// goGroupAssignment records `api := app.Group("/api")` and its `=` form.
+func (scan *routeScan) goGroupAssignment(assignment *sitter.Node) {
+	names := namedChildren(assignment.ChildByFieldName("left"))
+	values := namedChildren(assignment.ChildByFieldName("right"))
+	for index, name := range names {
+		if index >= len(values) || name.Kind() != "identifier" || values[index].Kind() != "call_expression" {
+			continue
+		}
+		if prefix, ok := scan.goGroupCall(values[index]); ok {
+			scan.groups[scan.text(name)] = prefix
+		}
+	}
+}
+
+// goScope opens the route-group scope node starts, returning what restores
+// the enclosing one, or nil when node starts none. A function sees only the
+// groups it declares. chi's `r.Route("/articles", func(r chi.Router) {...})`
+// binds the closure's router to the prefix inside the closure only.
+func (scan *routeScan) goScope(node *sitter.Node) func() {
+	saved := scan.groups
+	switch node.Kind() {
+	case "function_declaration", "method_declaration":
+		scan.groups = make(map[string]string)
+	case "call_expression":
+		function := node.ChildByFieldName("function")
+		arguments := namedChildren(node.ChildByFieldName("arguments"))
+		if function == nil || function.Kind() != "selector_expression" || scan.text(function.ChildByFieldName("field")) != "Route" || len(arguments) < 2 {
+			return nil
+		}
+		path, isString := scan.stringValue(arguments[0])
+		closure := arguments[len(arguments)-1]
+		parameter := namedChildOfKind(closure.ChildByFieldName("parameters"), "parameter_declaration")
+		if !isString || closure.Kind() != "func_literal" || parameter == nil || parameter.ChildByFieldName("name") == nil {
+			return nil
+		}
+		scan.groups = maps.Clone(saved)
+		scan.groups[scan.text(parameter.ChildByFieldName("name"))] = joinRoute(scan.goPrefix(function.ChildByFieldName("operand")), path)
+	default:
+		return nil
+	}
+	return func() { scan.groups = saved }
 }
 
 // pythonDecorated reads `@app.get("/users")` and

@@ -159,6 +159,68 @@ func TestFindDeadCode(t *testing.T) {
 	}
 }
 
+func TestFindRoutesGoFrameworks(t *testing.T) {
+	root, graph := buildAnalysisRepo(t, map[string]string{
+		"go.mod": "module example.com/app\n",
+		"main.go": "package main\n\n" +
+			"func main() {\n" + // 3
+			"\tapp := fiber.New()\n" +
+			"\tapp.Get(\"/users/:id\", getUser)\n" + // 5
+			"\tapp.All(\"/any\", getUser)\n" +
+			"\tapp.Add(fiber.MethodPut, \"/users/:id\", update)\n" + // 7
+			"\tapp.Add(\"DELETE\", \"/users/:id\", update)\n" +
+			"\tapp.Connect(\"/tunnel\", getUser)\n" + // 9
+			"\tapi := app.Group(\"/api\")\n" +
+			"\tv1 := api.Group(\"/v1\")\n" + // 11
+			"\tv1.Get(\"/health\", func(c *fiber.Ctx) error { return nil })\n" +
+			"\tapp.Group(\"/admin\").Post(\"/login\", getUser)\n" + // 13
+			"\tapp.Use(\"/static\", getUser)\n" +
+			"}\n\n" +
+			"func chiRoutes(r chi.Router) {\n" + // 17
+			"\tr.Route(\"/articles\", func(r chi.Router) {\n" +
+			"\t\tr.Get(\"/\", getUser)\n" + // 19
+			"\t\tr.Method(\"PATCH\", \"/{id}\", getUser)\n" +
+			"\t})\n" + // 21
+			"\tr.Get(\"/ping\", getUser)\n" +
+			"}\n\n" + // 23
+			"func ginRoutes(g *gin.Engine) {\n" + // 25
+			"\tg.Handle(\"GET\", \"/ready\", getUser)\n" +
+			"\tapi.Get(\"/leak\", getUser)\n" + // 27: main's api group does not reach here
+			"}\n\n" +
+			"func getUser(c *fiber.Ctx) error { return nil }\n" + // 30
+			"func update(c *fiber.Ctx) error { return nil }\n",
+	})
+	routes, err := FindRoutes(graph, root, "")
+	if err != nil {
+		t.Fatalf("FindRoutes() error = %v, want nil", err)
+	}
+	got := make([]string, 0, len(routes))
+	for _, route := range routes {
+		handler := route.HandlerText
+		if route.Handler != nil {
+			handler = route.Handler.ID
+		}
+		got = append(got, fmt.Sprintf("%s %s :%d %s", route.Method, route.Path, route.Line, handler))
+	}
+	want := []string{
+		"POST /admin/login :13 main.go#getUser",
+		"ANY /any :6 main.go#getUser",
+		"GET /api/v1/health :12 inline function",
+		"GET /articles :19 main.go#getUser",
+		"PATCH /articles/{id} :20 main.go#getUser",
+		"GET /leak :27 main.go#getUser",
+		"GET /ping :22 main.go#getUser",
+		"GET /ready :26 main.go#getUser",
+		"CONNECT /tunnel :9 main.go#getUser",
+		"DELETE /users/:id :8 main.go#update",
+		"GET /users/:id :5 main.go#getUser",
+		"PUT /users/:id :7 main.go#update",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("FindRoutes(fiber, chi, gin) =\n%q\nwant\n%q", got, want)
+	}
+}
+
 func TestFindRoutes(t *testing.T) {
 	root, graph := buildAnalysisRepo(t, map[string]string{
 		"go.mod": "module example.com/app\n",

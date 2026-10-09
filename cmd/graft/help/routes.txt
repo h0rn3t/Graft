@@ -1,7 +1,8 @@
 Usage: graft routes [options] [dir]
 
-HTTP routes declared in the code and their handlers: Go net/http, gin, echo and
-chi; Flask, FastAPI and Django; Express and NestJS; Spring ($0, no LLM)
+HTTP routes declared in the code and their handlers, under their Go route-group,
+NestJS controller or Spring class prefix: Go net/http, gin, echo, chi and Fiber;
+Flask, FastAPI and Django; Express and NestJS; Spring ($0, no LLM)
 
 Arguments:
   dir           repository root (default: nearest ancestor with a graft/ index)

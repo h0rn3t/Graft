@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`graft routes` knows Fiber.** `All`, `Connect`, `Trace` and the
+  method-first `Add(fiber.MethodPut, "/users", h)` register routes, as do
+  gin's `Handle("GET", …)`, echo's `Add` and chi's `Method`, with the method
+  read from a string or an `http.Method*`-style constant.
+- **Go route groups prefix their routes.** `api := app.Group("/api")`, nested
+  groups, `app.Group("/admin").Post(…)` and chi's
+  `r.Route("/articles", func(r chi.Router) { … })` put their prefix on the
+  routes registered through them, within the function that declares the group.
+
 ## 0.5.0-rc.1 - 2026-10-09
 
 ### Added

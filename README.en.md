@@ -559,8 +559,10 @@ import or inheritance edge between them — or, with `--level file`, files that
 import each other, each with one shortest loop and the edge behind every step.
 
 **`graft routes`** lists the HTTP endpoints declared in the code and the symbols
-that handle them: Go `net/http`, gin, echo and chi registrations; Flask, FastAPI
-and Django; Express and NestJS; Spring mapping annotations.
+that handle them: Go `net/http`, gin, echo, chi and Fiber registrations,
+including `Add(fiber.MethodPut, …)`-style ones and route groups
+(`api := app.Group("/api")`, chi's `r.Route`); Flask, FastAPI and Django; Express
+and NestJS; Spring mapping annotations.
 
 ```
 3 HTTP routes
