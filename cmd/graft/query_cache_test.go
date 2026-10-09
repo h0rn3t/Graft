@@ -210,8 +210,8 @@ func TestMCPQueryCacheNoRefresh(t *testing.T) {
 		t.Fatal(err)
 	}
 	result = mcpCallWithCache(t.Context(), root, dir, "", "graft_find_code", args, &cache)
-	if !result.isError || !strings.Contains(result.text, "no graph found") {
-		t.Errorf("mcpCallWithCache(alpha) after graph removal = %+v, want missing graph error", result)
+	if result.isError || !strings.Contains(result.text, "no graph found") {
+		t.Errorf("mcpCallWithCache(alpha) after graph removal = %+v, want missing-graph guidance, not an error", result)
 	}
 }
 

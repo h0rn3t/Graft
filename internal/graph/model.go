@@ -45,6 +45,8 @@ type NodeV1 struct {
 	Variadic *bool   `json:"variadic,omitempty"`
 	// Complexity is the cyclomatic complexity of a function or method with a body.
 	Complexity *int `json:"complexity,omitempty"`
+	// Generated marks every node of a file whose header says a tool wrote it.
+	Generated bool `json:"generated,omitzero"`
 }
 
 // EdgeV1 is a version-one graph edge.

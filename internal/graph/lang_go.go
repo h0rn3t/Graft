@@ -5,6 +5,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"unicode"
 
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
@@ -206,8 +207,26 @@ func goTypeName(node *sitter.Node, source []byte) string {
 	return ""
 }
 
+// goAssumedPackageName is the name goimports assumes an unaliased import binds:
+// the path's last element, or the one before a major-version element such as
+// /v2, without a go- prefix and cut where an identifier ends, so
+// gopkg.in/yaml.v3 binds yaml and github.com/mattn/go-sqlite3 binds sqlite3.
+func goAssumedPackageName(importPath string) string {
+	name := path.Base(importPath)
+	if version, ok := strings.CutPrefix(name, "v"); ok && version != "" && strings.Trim(version, "0123456789") == "" {
+		if dir := path.Dir(importPath); dir != "." {
+			name = path.Base(dir)
+		}
+	}
+	name = strings.TrimPrefix(name, "go-")
+	if end := strings.IndexFunc(name, func(r rune) bool { return r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) }); end >= 0 {
+		name = name[:end]
+	}
+	return name
+}
+
 // collectGoPackages maps each import's local package name to its path: the
-// alias when there is one, else the path's last element. Blank and dot
+// alias when there is one, else the name goimports assumes. Blank and dot
 // imports bind no name.
 func (x *extractor) collectGoPackages(root *sitter.Node) map[string]string {
 	packages := make(map[string]string)
@@ -222,7 +241,7 @@ func (x *extractor) collectGoPackages(root *sitter.Node) map[string]string {
 		importPath := x.goImportSpecifier(node)
 		local := x.text(node.ChildByFieldName("name"))
 		if local == "" {
-			local = path.Base(importPath)
+			local = goAssumedPackageName(importPath)
 		}
 		if importPath != "" && local != "_" && local != "." {
 			packages[local] = importPath

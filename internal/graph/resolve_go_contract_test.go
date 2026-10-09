@@ -75,6 +75,64 @@ func TestResolveGoInterfacesAndPackageCalls(t *testing.T) {
 	}
 }
 
+func TestResolveGoImportsByAssumedName(t *testing.T) {
+	files := map[string]string{
+		"kit/kit.go": "package kit\n\nfunc New() int { return 1 }\n",
+		"cmd/main.go": "package main\n\nimport (\n\t\"example.com/kit/v2\"\n\t\"github.com/mattn/go-sqlite3\"\n" +
+			"\t\"gopkg.in/yaml.v3\"\n\t\"k8s.io/klog/v2\"\n)\n\n" +
+			"func main() {\n\tkit.New()\n\tyaml.Unmarshal(nil, nil)\n\tsqlite3.Version()\n\tklog.Info(\"x\")\n}\n",
+	}
+	edges, unresolved := resolveFiles(t, files, []goModule{{module: "example.com/app", dir: "."}, {module: "example.com/kit/v2", dir: "kit"}})
+	if want := (EdgeV1{Source: "cmd/main.go#main", Target: "kit/kit.go#New", Relation: "calls", Confidence: "inferred"}); !slices.Contains(edges, want) {
+		t.Errorf("resolveEdges(kit, main) has no %+v", want)
+	}
+	if want := (UnresolvedCalls{ExternalPackage: 3}); unresolved != want {
+		t.Errorf("resolveEdges(kit, main) unresolved = %+v, want %+v", unresolved, want)
+	}
+}
+
+func TestResolveGoMethodSetRules(t *testing.T) {
+	files := map[string]string{
+		"io.go": "package rw\n\n" +
+			"type Reader interface{ Read() (int, error) }\n\n" +
+			"type Closer interface{ Close() error }\n\n" +
+			"type Flusher interface {\n\tClose() error\n\tFlush()\n}\n\n" +
+			"type Both interface {\n\tCloser\n\tFlusher\n}\n",
+		"types.go": "package rw\n\n" +
+			"type One struct{}\n\nfunc (One) Read() int { return 0 }\n\n" +
+			"type Two struct{}\n\nfunc (Two) Read() (n int, err error) { return 0, nil }\n\n" +
+			"type A struct{}\n\nfunc (A) Close() error { return nil }\n\n" +
+			"type B struct{}\n\nfunc (B) Close() error { return nil }\n\n" +
+			"type Tied struct {\n\tA\n\tB\n}\n\n" +
+			"type Deep struct{ B }\n\n" +
+			"type Shallow struct {\n\tA\n\tDeep\n}\n\n" +
+			"type OnlyFlush struct{}\n\nfunc (OnlyFlush) Flush() {}\n\n" +
+			"type File struct{ A }\n\nfunc (File) Flush() {}\n",
+	}
+	edges, _ := resolveFiles(t, files, nil)
+	implements := func(source, target string) bool {
+		return slices.Contains(edges, EdgeV1{Source: source, Target: target, Relation: "implements", Confidence: "inferred"})
+	}
+	for _, tc := range []struct {
+		source, target string
+		want           bool
+		why            string
+	}{
+		{"types.go#Two", "io.go#Reader", true, "two results match (int, error)"},
+		{"types.go#One", "io.go#Reader", false, "one result does not match two"},
+		{"types.go#A", "io.go#Closer", true, "its own Close"},
+		{"types.go#Tied", "io.go#Closer", false, "A and B promote Close at the same depth"},
+		{"types.go#Shallow", "io.go#Closer", true, "A's Close is shallower than Deep's B.Close"},
+		{"types.go#A.Close", "io.go#Closer.Close", true, "the shallower method implements Close"},
+		{"types.go#File", "io.go#Both", true, "Both requires Close once, from either interface"},
+		{"types.go#OnlyFlush", "io.go#Both", false, "Close shared by Closer and Flusher is still required"},
+	} {
+		if got := implements(tc.source, tc.target); got != tc.want {
+			t.Errorf("resolveEdges(io.go, types.go) %s implements %s = %t, want %t: %s", tc.source, tc.target, got, tc.want, tc.why)
+		}
+	}
+}
+
 func TestResolveGoEmbedsExternalInterface(t *testing.T) {
 	files := map[string]string{
 		"rw.go": "package rw\n\nimport \"io\"\n\n" +

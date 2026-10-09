@@ -45,21 +45,25 @@ func writeReadFixture(t *testing.T, root string) {
 func TestReadSymbolContract(t *testing.T) {
 	root := t.TempDir()
 	writeReadFixture(t, root)
+	// A selector that resolves no single definition fails the CLI, while MCP
+	// answers with the guidance: only a malformed request is an MCP error.
 	for _, tc := range []struct {
-		selector string
-		want     string
-		wantErr  bool
+		selector   string
+		want       string
+		wantErr    bool
+		wantMCPErr bool
 	}{
-		{"alpha", "return 1;", false},
-		{"src/one.ts::alpha", "return 1;", false},
-		{"src/one.ts#alpha", "return 1;", false},
-		{"src/two.ts::shared", "return 2;", false},
-		{"shared", "ambiguous", true},
-		{"Alpha", "no exact symbol", true},
-		{"wrong.alpha", "no exact symbol", true},
-		{"src/two.ts::alpha", "alpha is not in src/two.ts; resolved by name", false},
-		{"src/one.ts", "no exact symbol", true},
-		{"", "requires a", true},
+		{selector: "alpha", want: "return 1;"},
+		{selector: "src/one.ts::alpha", want: "return 1;"},
+		{selector: "src/one.ts#alpha", want: "return 1;"},
+		{selector: "src/two.ts::shared", want: "return 2;"},
+		{selector: "shared", want: "ambiguous", wantErr: true},
+		{selector: "Alpha", want: "no exact symbol", wantErr: true},
+		{selector: "Alpha", want: "(Did you mean alpha?)", wantErr: true},
+		{selector: "wrong.alpha", want: "(Did you mean alpha?)", wantErr: true},
+		{selector: "src/two.ts::alpha", want: "alpha is not in src/two.ts; resolved by name"},
+		{selector: "src/one.ts", want: "no exact symbol", wantErr: true},
+		{selector: "", want: "requires a", wantErr: true, wantMCPErr: true},
 	} {
 		t.Run(tc.selector, func(t *testing.T) {
 			var out, diagnostic bytes.Buffer
@@ -68,8 +72,8 @@ func TestReadSymbolContract(t *testing.T) {
 				t.Errorf("run(read %q) = (%d, %q, %q), want error %t and %q", tc.selector, status, out.String(), diagnostic.String(), tc.wantErr, tc.want)
 			}
 			result := mcpCall(t.Context(), root, filepath.Join(root, "graft"), "", "graft_read_symbol", map[string]any{"symbol": tc.selector})
-			if result.isError != tc.wantErr || !strings.Contains(result.text, tc.want) {
-				t.Errorf("mcpCall(read %q) = %+v, want error %t and %q", tc.selector, result, tc.wantErr, tc.want)
+			if result.isError != tc.wantMCPErr || !strings.Contains(result.text, tc.want) {
+				t.Errorf("mcpCall(read %q) = %+v, want error %t and %q", tc.selector, result, tc.wantMCPErr, tc.want)
 			}
 			if tc.wantErr && (out.Len() != 0 || strings.Contains(result.text, "return 1")) {
 				t.Errorf("read(%q) leaked source on error: %q, %+v", tc.selector, out.String(), result)
@@ -89,6 +93,23 @@ func TestReadSymbolContract(t *testing.T) {
 	wantCode := "export function alpha() {\n  return 1;\n}"
 	if result.Code != wantCode || result.Pointer != "src/one.ts:L1-L3" || result.SourceHash != sourcefiles.Hash(wantCode) || result.ID != "src/one.ts#alpha" {
 		t.Errorf("read(alpha) = %+v, want exact code, current span, ID and matching hash", result)
+	}
+}
+
+func TestReadSymbolOverBudget(t *testing.T) {
+	root := t.TempDir()
+	writeReadFixture(t, root)
+	big := "export function big() {\n" + strings.Repeat("  console.log(\"one line of a long definition\");\n", 200) + "}\n"
+	if err := os.WriteFile(filepath.Join(root, "src", "big.ts"), []byte(big), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var out, diagnostic bytes.Buffer
+	if status := run([]string{"read", "big", root, "--budget", "128"}, &out, &diagnostic); status != 1 || !strings.Contains(diagnostic.String(), "retry once with --budget") {
+		t.Errorf("run(read big --budget 128) = (%d, %q), want 1 and the budget it needs", status, diagnostic.String())
+	}
+	result := mcpCall(t.Context(), root, filepath.Join(root, "graft"), "", "graft_read_symbol", map[string]any{"symbol": "big", "budget": float64(128)})
+	if result.isError || !strings.Contains(result.text, "retry once with budget") || strings.Contains(result.text, "console.log") {
+		t.Errorf("mcpCall(read big, budget 128) = %+v, want an answer naming the budget it needs, without partial source", result)
 	}
 }
 
@@ -152,15 +173,14 @@ func TestReadSymbolWorkspace(t *testing.T) {
 	for _, tc := range []struct {
 		selector string
 		want     string
-		wantErr  bool
 	}{
-		{"alpha", "ambiguous", true},
-		{"api/src/one.ts::alpha", "api/src/one.ts:L1-L3", false},
-		{"web/src/one.ts#alpha", "web/src/one.ts:L1-L3", false},
+		{"alpha", "ambiguous"},
+		{"api/src/one.ts::alpha", "api/src/one.ts:L1-L3"},
+		{"web/src/one.ts#alpha", "web/src/one.ts:L1-L3"},
 	} {
 		result := mcpCall(t.Context(), root, filepath.Join(root, "graft"), "", "graft_read_symbol", map[string]any{"symbol": tc.selector})
-		if result.isError != tc.wantErr || !strings.Contains(result.text, tc.want) {
-			t.Errorf("read(workspace %q) = %+v, want error %t and %q", tc.selector, result, tc.wantErr, tc.want)
+		if result.isError || !strings.Contains(result.text, tc.want) {
+			t.Errorf("read(workspace %q) = %+v, want an answer containing %q", tc.selector, result, tc.want)
 		}
 	}
 }
@@ -292,8 +312,8 @@ func TestMCPReadRefreshBudgetBoundary(t *testing.T) {
 			t.Fatal(err)
 		}
 		result = mcpCall(t.Context(), root, filepath.Join(root, "graft"), "", "graft_read_symbol", args)
-		if !result.isError {
-			t.Errorf("MCP read(padding=%d, budget=%d) = %d tokens, want oversized-answer error", padding, tokens-1, savings.Tokens(savings.Length(result.text)))
+		if result.isError || !strings.Contains(result.text, "complete definition needs") || strings.Contains(result.text, "return 3") {
+			t.Errorf("MCP read(padding=%d, budget=%d) = %+v, want the budget it needs and no source", padding, tokens-1, result)
 		}
 	}
 }

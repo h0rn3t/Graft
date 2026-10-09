@@ -515,7 +515,11 @@ func (c *mcpConnection) writeValue(value any) error {
 const mcpGrepBudget = 8_000
 
 type mcpResult struct {
-	text    string
+	text string
+	// isError marks a malformed request or a fault. An expected miss — no
+	// graph yet, a name the graph does not hold, a budget too small — is an
+	// answer that says what to try next: after one or two error results an
+	// agent stops calling the server for the rest of its session.
 	isError bool
 	// thrown marks a failure the TypeScript tool raises as an exception; its
 	// catch answers with the message alone, dropping any refresh note.
@@ -606,7 +610,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		return mcpResult{text: context.Cause(ctx).Error(), isError: true, thrown: true}
 	}
 	if name != "graft_check_freshness" && !mcpGraphAvailable(contextDir) {
-		return mcpResult{text: "no graph found — run `graft build` first", isError: true}
+		return mcpResult{text: "no graph found — run `graft build` first"}
 	}
 
 	switch name {
@@ -644,7 +648,8 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		// Skeleton never federates: at a workspace root it reports the missing
 		// graph through its own note, as the TypeScript tool does.
 		result := graph.SkeletonResult{File: file, Entries: make([]graph.SkeletonEntry, 0), Note: "no wiring graph — run `graft build` first"}
-		if loaded, err := cache.loadGraph(contextDir); err == nil {
+		loaded, err := cache.loadGraph(contextDir)
+		if err == nil {
 			result = graph.Skeleton(*loaded, file)
 		}
 		var text bytes.Buffer
@@ -652,7 +657,8 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		if result.Saved != nil {
 			recordQuerySavings(contextDir, text.Len(), result.Saved.BaselineChars)
 		}
-		return mcpResult{text: text.String(), isError: len(result.Entries) == 0 && result.Note != ""}
+		// A graph that is there but does not load is a fault, not a miss.
+		return mcpResult{text: text.String(), isError: err != nil && !errors.Is(err, os.ErrNotExist)}
 	case "graft_trace_calls":
 		symbol := mcpString(args["symbol"])
 		if symbol == "" {
@@ -758,10 +764,10 @@ func mcpTraceCalls(root, contextDir, symbol string, args map[string]any, cache *
 	}
 	matches, err := graph.ResolveSymbol(*loaded, symbol, graph.ResolveSymbolOptions{In: mcpString(args["in"])})
 	if err != nil {
-		return mcpResult{text: err.Error(), isError: true, thrown: true}
+		return mcpResult{text: err.Error()}
 	}
 	if len(matches) == 0 {
-		return mcpResult{text: "no symbol \"" + symbol + "\" in the graph — check spelling or run `graft build`", isError: true}
+		return mcpResult{text: "no symbol \"" + symbol + "\" in the graph — check spelling or run `graft build`" + similarSymbols(symbol, *loaded)}
 	}
 	depth := mcpDepthValue(args["depth"])
 	results := make([]callersResult, len(matches))
@@ -806,11 +812,11 @@ func mcpWorkspaceTraceCalls(root, contextDir, symbol string, args map[string]any
 	if mcpString(args["direction"]) == "out" {
 		direction = graph.DirectionOut
 	}
-	text, found, err := federateCallers(root, contextDir, symbol, direction, mcpDepthValue(args["depth"]), mcpString(args["in"]))
+	text, _, err := federateCallers(root, contextDir, symbol, direction, mcpDepthValue(args["depth"]), mcpString(args["in"]))
 	if err != nil {
 		return mcpResult{text: err.Error(), isError: true, thrown: true}
 	}
-	return mcpResult{text: text, isError: !found}
+	return mcpResult{text: text}
 }
 
 func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any) mcpResult {
@@ -852,7 +858,7 @@ func mcpTracePath(contextDir, symbol, to string, args map[string]any, cache *que
 	}
 	result, err := findPath(*loaded, symbol, to, mcpString(args["in"]), depth)
 	if err != nil {
-		return mcpResult{text: err.Error(), isError: true}
+		return mcpResult{text: err.Error()}
 	}
 	return mcpResult{text: result.text()}
 }

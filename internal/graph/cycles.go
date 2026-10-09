@@ -35,7 +35,7 @@ func DependencyCycles(graph GraphV1, level, in string) ([]Cycle, error) {
 	byID := nodeIndex(graph)
 	keyOf := func(id string) (string, bool) {
 		node, ok := byID[id]
-		if !ok || IsCopyPath(node.Path) || (in != "" && !pathUnderPrefix(node.Path, prefix)) {
+		if !ok || IsCopy(*node) || (in != "" && !pathUnderPrefix(node.Path, prefix)) {
 			return "", false
 		}
 		if level == "file" {

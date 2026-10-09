@@ -349,7 +349,7 @@ func runCallers(opts callersOptions, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if len(matches) == 0 {
-		writeDiagnostic(stderr, "✗ no symbol \"%s\" in the graph — check spelling or run graft build\n", opts.query)
+		writeDiagnostic(stderr, "✗ no symbol \"%s\" in the graph — check spelling or run graft build%s\n", opts.query, similarSymbols(opts.query, *loaded))
 		return 1
 	}
 
@@ -557,6 +557,32 @@ func writeJSON(w, stderr io.Writer, query string, wiring graph.GraphV1, results 
 		return 1
 	}
 	return 0
+}
+
+// similarSymbols suggests the symbol names in graphs closest to the name query
+// selects, for a lookup that found nothing: most such misses are a typo or the
+// wrong case. A file path gets no suggestion.
+func similarSymbols(query string, graphs ...graph.GraphV1) string {
+	for _, separator := range []string{"::", "#"} {
+		if _, name, ok := strings.CutLast(query, separator); ok {
+			query = name
+		}
+	}
+	if strings.Contains(query, "/") {
+		return ""
+	}
+	if _, name, ok := strings.CutLast(query, "."); ok {
+		query = name
+	}
+	var names []string
+	for _, wiring := range graphs {
+		for _, node := range wiring.Nodes {
+			if node.Kind != "file" {
+				names = append(names, node.Name)
+			}
+		}
+	}
+	return suggestSimilar(query, names)
 }
 
 func writeDiagnostic(w io.Writer, format string, args ...any) {

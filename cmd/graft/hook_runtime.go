@@ -36,7 +36,17 @@ const (
 	// results, so the cap is generous; a payload past it is dropped whole
 	// rather than cut into invalid JSON.
 	hookInputLimit = 64 << 20
+	// hookContextMaxChars keeps hook output inside the 10,000 characters
+	// Claude Code shows the model inline; past that it shows a 2 KB preview of
+	// a file the model has to read back.
+	hookContextMaxChars = 9000
 )
+
+// hookEnvelopePattern matches a prompt Claude Code writes itself: a background
+// task's notification, or a subagent's report handed back to its parent, under
+// at most a one-line preamble such as "Another Claude session sent a message:".
+// A question that mentions or quotes one of these tags is still the user's.
+var hookEnvelopePattern = regexp.MustCompile(`(?s)\A(?:[^<\n][^\n]*:\n)?<(?:task-notification|agent-message)[\s>].*</(?:task-notification|agent-message)>`)
 
 var hookPatchFilePattern = regexp.MustCompile(`(?m)^\*\*\*\s+(?:Add|Update)\s+File:\s+(.+?)\s*$`)
 
@@ -109,6 +119,10 @@ func emitHookContext(stdout io.Writer, event, context string) {
 			AdditionalContext string `json:"additionalContext"`
 		} `json:"hookSpecificOutput"`
 	}{}
+	const cut = "\n… (cut at the hook output limit)"
+	if savings.Length(context) > hookContextMaxChars {
+		context = hookTruncateUTF16(context, hookContextMaxChars-savings.Length(cut)) + cut
+	}
 	payload.HookSpecificOutput.HookEventName = event
 	payload.HookSpecificOutput.AdditionalContext = context
 	data, err := jsonv2.Marshal(payload, nil)
@@ -651,7 +665,7 @@ func askHookGraph(ctx context.Context, root, contextDir, prompt, scope string) (
 
 func handleHookPrompt(ctx context.Context, input hookInput, root string, stdout, stderr io.Writer) {
 	prompt := strings.TrimSpace(input.string("prompt"))
-	if savings.Length(prompt) < hookMinPromptChars {
+	if savings.Length(prompt) < hookMinPromptChars || hookEnvelopePattern.MatchString(prompt) {
 		return
 	}
 	contextDir := hookContextDir(root)

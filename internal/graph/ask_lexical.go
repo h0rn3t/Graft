@@ -43,6 +43,12 @@ func IsCopyPath(path string) bool {
 	return askTestPathPattern.MatchString(path)
 }
 
+// IsCopy reports whether node is testdata, fixture, generated, vendored or
+// test code: by its path, or by its file's generated-code header.
+func IsCopy(node NodeV1) bool {
+	return node.Generated || IsCopyPath(node.Path)
+}
+
 // askScores is a string→number Map that iterates in insertion order.
 type askScores struct {
 	ids    []string
@@ -978,8 +984,14 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 	compare := localeCompare()
 	q := askUniqueTerms(query)
 	wantsTests := askWantsTestsPattern.MatchString(query) || askTestPathPattern.MatchString(prefix)
+	generated := make(map[string]bool)
+	for _, node := range wiring.Nodes {
+		if node.Generated {
+			generated[node.Path] = true
+		}
+	}
 	testFactor := func(path string) float64 {
-		if !wantsTests && askTestPathPattern.MatchString(path) {
+		if !wantsTests && (generated[path] || askTestPathPattern.MatchString(path)) {
 			return askTestPenalty
 		}
 		return 1

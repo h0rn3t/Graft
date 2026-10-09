@@ -46,8 +46,8 @@ func TestMCPServerSpeaksOfficialSDK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CallTool() error = %v", err)
 	}
-	if !result.IsError {
-		t.Error("CallTool() IsError = false, want true for an unbuilt repo")
+	if result.IsError {
+		t.Error("CallTool() IsError = true, want guidance, not an error, for an unbuilt repo")
 	}
 	if len(result.Content) != 1 {
 		t.Fatalf("CallTool() returned %d content items, want 1", len(result.Content))
@@ -236,8 +236,8 @@ func TestRunMCPAcceptsLegacyCallBeforeInitialize(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &response); err != nil {
 		t.Fatalf("runMCP() response = %q, JSON error = %v", stdout.String(), err)
 	}
-	if !response.Result.IsError || len(response.Result.Content) != 1 || response.Result.Content[0].Text != "no graph found — run `graft build` first" {
-		t.Errorf("runMCP() result = %#v, want legacy soft error", response.Result)
+	if response.Result.IsError || len(response.Result.Content) != 1 || response.Result.Content[0].Text != "no graph found — run `graft build` first" {
+		t.Errorf("runMCP() result = %#v, want missing-graph guidance, not an error", response.Result)
 	}
 }
 
@@ -382,7 +382,6 @@ func TestMCPWorkspaceRoutesContract(t *testing.T) {
 			name:        "call tracing reports a missing symbol across children",
 			tool:        "graft_trace_calls",
 			args:        map[string]any{"symbol": "absent"},
-			wantError:   true,
 			wantPhrases: []string{"no symbol \"absent\" in any of the 2 workspace repo(s)", "2 of 3 workspace repos have graphs; run graft build to cover missing"},
 		},
 		{

@@ -501,9 +501,11 @@ func suggestSimilar(word string, candidates []string) string {
 	if len(candidates) == 0 {
 		return ""
 	}
+	seen := make(map[string]bool, len(candidates))
 	unique := make([]string, 0, len(candidates))
 	for _, candidate := range candidates {
-		if !slices.Contains(unique, candidate) {
+		if !seen[candidate] {
+			seen[candidate] = true
 			unique = append(unique, candidate)
 		}
 	}

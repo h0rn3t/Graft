@@ -77,7 +77,7 @@ func MostComplex(graph GraphV1, in string) ([]NodeV1, error) {
 	}
 	var functions []NodeV1
 	for _, node := range graph.Nodes {
-		if node.Complexity != nil && !IsCopyPath(node.Path) && (in == "" || pathUnderPrefix(node.Path, prefix)) {
+		if node.Complexity != nil && !IsCopy(node) && (in == "" || pathUnderPrefix(node.Path, prefix)) {
 			functions = append(functions, node)
 		}
 	}

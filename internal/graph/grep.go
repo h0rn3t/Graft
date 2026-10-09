@@ -64,6 +64,8 @@ type GrepGroup struct {
 	Path     string         `json:"path"`
 	InDegree int            `json:"inDegree"`
 	Hits     []GrepHit      `json:"hits"`
+	// Generated marks a group in a file whose header says a tool wrote it.
+	Generated bool `json:"generated,omitzero"`
 }
 
 // GrepTruncated records indexed files and matching lines that were not collected.
@@ -144,7 +146,7 @@ func Grep(wiring GraphV1, repoRoot, pattern string, opts GrepOptions) (GrepResul
 			result.TotalHits++
 			symbol := grepEnclosingSymbol(symbols, lineIndex+1)
 			key := "file:" + file.Path
-			group := GrepGroup{Path: file.Path, Hits: make([]GrepHit, 0)}
+			group := GrepGroup{Path: file.Path, Hits: make([]GrepHit, 0), Generated: file.Generated}
 			if symbol != nil {
 				key = symbol.ID
 				ref := grepSymbolRef(*symbol)
@@ -170,7 +172,7 @@ func Grep(wiring GraphV1, repoRoot, pattern string, opts GrepOptions) (GrepResul
 	// Copies (testdata, fixtures, generated, vendored) follow production code;
 	// every hit is still reported.
 	copied := func(group GrepGroup) int {
-		if askTestPathPattern.MatchString(group.Path) {
+		if group.Generated || askTestPathPattern.MatchString(group.Path) {
 			return 1
 		}
 		return 0

@@ -159,7 +159,7 @@ var grepCopyPattern = regexp.MustCompile(`(?i)test|spec|fixture|mock|vendor|gene
 // generated and vendored code) are only counted, unless the pattern asks for
 // them.
 func fitGrepResult(result graph.GrepResult, budget int) graph.GrepResult {
-	isCopy := func(group graph.GrepGroup) bool { return graph.IsCopyPath(group.Path) }
+	isCopy := func(group graph.GrepGroup) bool { return group.Generated || graph.IsCopyPath(group.Path) }
 	production := slices.DeleteFunc(slices.Clone(result.Groups), isCopy)
 	if len(production) > 0 && len(production) < len(result.Groups) && !grepCopyPattern.MatchString(result.Pattern) {
 		for _, group := range result.Groups {
@@ -229,8 +229,10 @@ func grepTruncationNote(result graph.GrepResult) string {
 // most hits first, so a capped answer still says where to narrow.
 func grepRemainderNote(full, fitted graph.GrepResult) string {
 	dropped := make(map[string]int)
+	generated := make(map[string]bool)
 	for _, group := range full.Groups {
 		dropped[group.Path] += len(group.Hits)
+		generated[group.Path] = group.Generated
 	}
 	for _, group := range fitted.Groups {
 		dropped[group.Path] -= len(group.Hits)
@@ -240,7 +242,7 @@ func grepRemainderNote(full, fitted graph.GrepResult) string {
 		return ""
 	}
 	copyRank := func(path string) int {
-		if graph.IsCopyPath(path) {
+		if generated[path] || graph.IsCopyPath(path) {
 			return 1
 		}
 		return 0

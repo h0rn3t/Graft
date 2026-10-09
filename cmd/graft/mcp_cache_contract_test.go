@@ -67,8 +67,8 @@ func TestMCPGraphOnlyCache(t *testing.T) {
 				t.Fatal(err)
 			}
 			got = mcpCallWithCache(t.Context(), root, dir, "", tc.tool, tc.args, &cache)
-			if !got.isError || !strings.Contains(got.text, "no graph found") {
-				t.Errorf("mcpCallWithCache(%s) after deletion = %+v, want missing graph", tc.tool, got)
+			if got.isError || !strings.Contains(got.text, "no graph found") {
+				t.Errorf("mcpCallWithCache(%s) after deletion = %+v, want a missing-graph answer, not an error", tc.tool, got)
 			}
 		})
 	}

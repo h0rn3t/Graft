@@ -78,7 +78,7 @@ func runRead(opts callersOptions, stdout, stderr io.Writer) int {
 	match, note, err := resolveReadSelector(workspace, opts.query, budget, opts.mcp)
 	if err != nil {
 		writeDiagnostic(stderr, "%v\n", err)
-		return 1
+		return readMissStatus(opts)
 	}
 	result, err := readMatchSource(root, workspace, match, note, sources)
 	if err != nil {
@@ -93,7 +93,7 @@ func runRead(opts callersOptions, stdout, stderr io.Writer) int {
 			flag = "budget"
 		}
 		writeDiagnostic(stderr, "complete definition needs %d estimated tokens; retry once with %s %d or higher (maximum 64000), or read the source range directly\n", required, flag, required)
-		return 1
+		return readMissStatus(opts)
 	}
 	addReadCallees(root, workspace, match, &result, budget, diagnostics.String(), opts.jsonOutput, sources)
 	if _, err := io.WriteString(stderr, diagnostics.String()); err != nil {
@@ -111,6 +111,16 @@ func runRead(opts callersOptions, stdout, stderr io.Writer) int {
 		}
 	}
 	return 0
+}
+
+// readMissStatus is the status of a read that resolved no single definition or
+// would not fit its budget. The CLI fails; over MCP the guidance is the answer,
+// since an agent that gets errors for names it guessed stops calling graft.
+func readMissStatus(opts callersOptions) int {
+	if opts.mcp {
+		return 0
+	}
+	return 1
 }
 
 type readMatch struct {
@@ -156,7 +166,7 @@ func resolveReadSelector(workspace graph.WorkspaceGraphs, selector string, budge
 	}
 	slices.SortFunc(matches, func(a, b readMatch) int { return strings.Compare(a.id, b.id) })
 	if len(matches) > 1 {
-		production := slices.DeleteFunc(slices.Clone(matches), func(m readMatch) bool { return graph.IsCopyPath(m.node.Path) })
+		production := slices.DeleteFunc(slices.Clone(matches), func(m readMatch) bool { return graph.IsCopy(m.node) })
 		if len(production) == 1 {
 			var copies []string
 			for _, m := range matches {
@@ -177,6 +187,13 @@ func resolveReadSelector(workspace graph.WorkspaceGraphs, selector string, budge
 	message := "no exact symbol; use graft grep or graft skeleton to find its name"
 	if mcp {
 		message = "no exact symbol; use graft_find_all or graft_file_api to find its name"
+	}
+	if len(matches) == 0 {
+		graphs := make([]graph.GraphV1, 0, len(workspace.Loaded))
+		for _, child := range workspace.Loaded {
+			graphs = append(graphs, child.Graph)
+		}
+		message += similarSymbols(selector, graphs...)
 	}
 	if len(matches) > 1 {
 		message = fmt.Sprintf("ambiguous symbol (%d matches); select an exact node ID:", len(matches))
@@ -251,7 +268,7 @@ func addReadCallees(root string, workspace graph.WorkspaceGraphs, match readMatc
 		}
 		seen[edge.Target] = true
 		callee, ok := nodes[edge.Target]
-		if !ok || callee.Kind == "file" || callee.Span == "" || path.Dir(callee.Path) != dir || graph.IsCopyPath(callee.Path) {
+		if !ok || callee.Kind == "file" || callee.Span == "" || path.Dir(callee.Path) != dir || graph.IsCopy(callee) {
 			continue
 		}
 		if start, end, ok := spanLines(callee.Span); ok && callee.Path == match.node.Path && start >= from && end <= to {

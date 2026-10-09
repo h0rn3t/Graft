@@ -80,7 +80,7 @@ func FindDeadCode(graph GraphV1, repoRoot, in string) ([]DeadSymbol, error) {
 	var candidates []NodeV1
 	names := make(map[string]bool)
 	for _, node := range graph.Nodes {
-		if (node.Kind != "function" && node.Kind != "method") || used[node.ID] || IsCopyPath(node.Path) ||
+		if (node.Kind != "function" && node.Kind != "method") || used[node.ID] || IsCopy(node) ||
 			(in != "" && !pathUnderPrefix(node.Path, prefix)) || deadEntryPoint(node) {
 			continue
 		}

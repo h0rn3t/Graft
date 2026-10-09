@@ -127,7 +127,6 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 		return RefreshResult{Drift: drift, Note: note}
 	}
 	defer release()
-	latest := drift
 	if drift != nil {
 		fingerprint, err = ReadFingerprint(outDir, ExtractorID)
 		if err != nil {
@@ -143,7 +142,6 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 			}
 			return RefreshResult{Note: seedNote}
 		}
-		latest = now
 	}
 	if fingerprint != nil {
 		options.Source.OnlyDirs = slices.Clone(fingerprint.OnlyDirs)
@@ -162,7 +160,7 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 		)}
 	}
 	if prior, err := Read(WiringPath(outDir)); err == nil {
-		carryOverLSPEdges(&built.Graph, prior.Edges, latest)
+		carryOverLSPEdges(&built.Graph, *prior)
 	}
 	if _, err := Write(built.Graph, outDir); err != nil {
 		return RefreshResult{Drift: drift, Note: fmt.Sprintf("graph refresh skipped: %v", err)}
@@ -192,34 +190,35 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 
 // carryOverLSPEdges keeps the compiler-resolved call edges of a graph built
 // with --lsp, which a refresh does not recompute. An edge survives when both
-// ends still exist and the calling file is not in drift; without a drift
-// record nothing is known to be unchanged, so nothing is kept.
-func carryOverLSPEdges(graph *GraphV1, prior []EdgeV1, drift *Drift) {
-	if drift == nil {
-		return
-	}
-	changed := make(map[string]struct{}, len(drift.Changed)+len(drift.Added))
-	for _, path := range slices.Concat(drift.Changed, drift.Added) {
-		changed[path] = struct{}{}
+// ends still exist and the calling file's content hash is the one it had in
+// the prior graph. The hash, not the drift record, decides: after an extractor
+// upgrade every file is re-parsed with no drift known, yet most are unchanged.
+func carryOverLSPEdges(graph *GraphV1, prior GraphV1) {
+	priorHash := make(map[string]string)
+	for _, node := range prior.Nodes {
+		if node.Kind == "file" {
+			priorHash[node.Path] = node.BodyHash
+		}
 	}
 	pathOf := make(map[string]string, len(graph.Nodes))
+	unchanged := make(map[string]bool)
 	for _, node := range graph.Nodes {
 		pathOf[node.ID] = node.Path
+		if node.Kind == "file" && node.BodyHash != "" && priorHash[node.Path] == node.BodyHash {
+			unchanged[node.Path] = true
+		}
 	}
 	existing := make(map[string]struct{}, len(graph.Edges))
 	for _, edge := range graph.Edges {
 		existing[edge.Source+"\x00"+string(edge.Relation)+"\x00"+edge.Target] = struct{}{}
 	}
-	for _, edge := range prior {
+	for _, edge := range prior.Edges {
 		if edge.Confidence != "lsp_resolved" {
 			continue
 		}
 		sourcePath, sourceOK := pathOf[edge.Source]
 		_, targetOK := pathOf[edge.Target]
-		if !sourceOK || !targetOK {
-			continue
-		}
-		if _, dirty := changed[sourcePath]; dirty {
+		if !sourceOK || !targetOK || !unchanged[sourcePath] {
 			continue
 		}
 		key := edge.Source + "\x00" + string(edge.Relation) + "\x00" + edge.Target

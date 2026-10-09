@@ -79,7 +79,7 @@ func FindRoutes(graph GraphV1, repoRoot, in string) ([]Route, error) {
 	var routes []Route
 	for _, file := range graph.Nodes {
 		lang, _, ok := languageOf(file.Path)
-		if file.Kind != "file" || !ok || IsCopyPath(file.Path) || (in != "" && !pathUnderPrefix(file.Path, prefix)) {
+		if file.Kind != "file" || !ok || IsCopy(file) || (in != "" && !pathUnderPrefix(file.Path, prefix)) {
 			continue
 		}
 		source, readable, err := sourcefiles.Read(filepath.Join(repoRoot, filepath.FromSlash(file.Path)))

@@ -161,8 +161,17 @@ func TestMCPTraceCallsTo(t *testing.T) {
 	if got.isError || !strings.Contains(got.text, "main → NewStore · 1 steps") {
 		t.Errorf("mcpCall(graft_trace_calls, to) = %#v, want the one-step path", got)
 	}
+	// An unknown name is an answer that says what to try, not an error.
 	got = mcpCall(t.Context(), root, contextDir, "", "graft_trace_calls", map[string]any{"symbol": "main", "to": "missing"})
-	if !got.isError || !strings.Contains(got.text, `no symbol "missing"`) {
-		t.Errorf("mcpCall(graft_trace_calls, to missing) = %#v, want an unknown-symbol error", got)
+	if got.isError || !strings.Contains(got.text, `no symbol "missing"`) {
+		t.Errorf("mcpCall(graft_trace_calls, to missing) = %#v, want an unknown-symbol answer", got)
+	}
+	got = mcpCall(t.Context(), root, contextDir, "", "graft_trace_calls", map[string]any{"symbol": "main", "to": "NewStor"})
+	if got.isError || !strings.Contains(got.text, "(Did you mean NewStore?)") {
+		t.Errorf("mcpCall(graft_trace_calls, to NewStor) = %#v, want NewStore suggested", got)
+	}
+	got = mcpCall(t.Context(), root, contextDir, "", "graft_trace_calls", map[string]any{"symbol": "NewStor"})
+	if got.isError || !strings.Contains(got.text, `no symbol "NewStor"`) || !strings.Contains(got.text, "(Did you mean NewStore?)") {
+		t.Errorf("mcpCall(graft_trace_calls, NewStor) = %#v, want an unknown-symbol answer suggesting NewStore", got)
 	}
 }

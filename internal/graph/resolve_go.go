@@ -86,36 +86,67 @@ func (ix *resolveIndex) addGoImplements(nodes []NodeV1, edges []EdgeV1, add func
 		return
 	}
 
-	// methodSet is a type's own methods plus those promoted from the types it
-	// embeds, the shallower one winning; complete is false when an embedded
-	// type is not a graph node or the embedding is deeper than depth.
-	var methodSet func(id string, depth int) (map[string]NodeV1, bool)
-	methodSet = func(id string, depth int) (map[string]NodeV1, bool) {
-		set := maps.Clone(own[id])
-		if set == nil {
-			set = make(map[string]NodeV1)
+	// member is a method in a method set, with the embedding depth that
+	// promotes it; tied marks a name two embeddings promote at that depth.
+	type member struct {
+		method NodeV1
+		depth  int
+		tied   bool
+	}
+	// members is a type's own methods plus those promoted from the types it
+	// embeds, the shallowest winning; complete is false when an embedded type
+	// is not a graph node or the embedding is deeper than depth.
+	var members func(id string, depth int) (map[string]member, bool)
+	members = func(id string, depth int) (map[string]member, bool) {
+		set := make(map[string]member, len(own[id]))
+		for name, method := range own[id] {
+			set[name] = member{method: method}
 		}
+		promoted := make(map[string]member)
 		complete := true
 		for _, embedded := range embeds[id] {
 			if _, ok := ix.byID[embedded]; !ok || depth == 0 {
 				complete = false
 				continue
 			}
-			promoted, promotedComplete := methodSet(embedded, depth-1)
-			complete = complete && promotedComplete
-			for name, method := range promoted {
-				if _, shadowed := set[name]; !shadowed {
-					set[name] = method
+			inner, innerComplete := members(embedded, depth-1)
+			complete = complete && innerComplete
+			for name, candidate := range inner {
+				candidate.depth++
+				switch current, seen := promoted[name]; {
+				case !seen || candidate.depth < current.depth:
+					promoted[name] = candidate
+				case candidate.depth == current.depth:
+					current.tied = true
+					promoted[name] = current
 				}
+			}
+		}
+		for name, candidate := range promoted {
+			if _, shadowed := set[name]; !shadowed {
+				set[name] = candidate
 			}
 		}
 		return set, complete
 	}
-	const maxEmbedDepth = 3
+	// methodSet flattens members. A concrete type loses a tied name, as the
+	// selector would be ambiguous in Go; an interface keeps it, since embedded
+	// interfaces may repeat a method.
+	methodSet := func(id string, interfaceType bool) (map[string]NodeV1, bool) {
+		const maxEmbedDepth = 3
+		all, complete := members(id, maxEmbedDepth)
+		set := make(map[string]NodeV1, len(all))
+		for name, candidate := range all {
+			if interfaceType || !candidate.tied {
+				set[name] = candidate.method
+			}
+		}
+		return set, complete
+	}
 	sets := make(map[string]map[string]NodeV1, len(concrete))
 	withMethod := make(map[string][]NodeV1) // method name → concrete types that have it
 	for _, node := range concrete {
-		set, _ := methodSet(node.ID, maxEmbedDepth)
+		set, _ := methodSet(node.ID, false)
 		sets[node.ID] = set
 		for name := range set {
 			withMethod[name] = append(withMethod[name], node)
@@ -123,7 +154,7 @@ func (ix *resolveIndex) addGoImplements(nodes []NodeV1, edges []EdgeV1, add func
 	}
 
 	for _, iface := range interfaces {
-		required, complete := methodSet(iface.ID, maxEmbedDepth)
+		required, complete := methodSet(iface.ID, true)
 		if !complete || len(required) == 0 {
 			continue
 		}
@@ -186,9 +217,85 @@ func goSatisfies(set, required map[string]NodeV1, typeDir, interfaceDir string) 
 		if !ok || got.Arity == nil || want.Arity == nil || *got.Arity != *want.Arity || (got.Variadic != nil) != (want.Variadic != nil) {
 			return false
 		}
+		gotResults, gotRead := goResultCount(got.Signature)
+		wantResults, wantRead := goResultCount(want.Signature)
+		if gotRead && wantRead && gotResults != wantResults {
+			return false
+		}
 		if !goExported(name) && typeDir != interfaceDir {
 			return false
 		}
 	}
 	return true
+}
+
+// goResultCount counts the results a Go function, method or interface method
+// signature declares: `(n int, err error)` and `(a, b int)` are two each. read
+// is false for a signature it cannot follow, which then matches any count.
+func goResultCount(signature *string) (count int, read bool) {
+	if signature == nil {
+		return 0, false
+	}
+	var code strings.Builder
+	for line := range strings.Lines(*signature) {
+		text, _, _ := strings.Cut(line, "//")
+		code.WriteString(text)
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(code.String()), "func"))
+	if strings.HasPrefix(rest, "(") { // a method's receiver
+		if rest, _, read = goGroup(rest); !read {
+			return 0, false
+		}
+	}
+	open := strings.IndexAny(rest, "([")
+	if open < 0 {
+		return 0, false
+	}
+	rest = rest[open:]
+	if strings.HasPrefix(rest, "[") { // type parameters
+		if rest, _, read = goGroup(rest); !read {
+			return 0, false
+		}
+	}
+	if !strings.HasPrefix(rest, "(") {
+		return 0, false
+	}
+	if rest, _, read = goGroup(rest); !read { // parameters
+		return 0, false
+	}
+	results := strings.TrimSpace(rest)
+	if !strings.HasPrefix(results, "(") {
+		return min(len(results), 1), true
+	}
+	after, commas, read := goGroup(results)
+	if !read {
+		return 0, false
+	}
+	if strings.TrimSpace(results[1:len(results)-len(after)-1]) == "" {
+		return 0, true
+	}
+	return commas + 1, true
+}
+
+// goGroup reads the bracketed group text opens with: it returns what follows
+// the matching close and the commas directly inside the group, or read false
+// when the group never closes.
+func goGroup(text string) (after string, commas int, read bool) {
+	depth := 0
+	for index, r := range text {
+		switch r {
+		case '(', '[', '{':
+			depth++
+		case ')', ']', '}':
+			depth--
+			if depth == 0 {
+				return text[index+1:], commas, true
+			}
+		case ',':
+			if depth == 1 {
+				commas++
+			}
+		}
+	}
+	return "", 0, false
 }

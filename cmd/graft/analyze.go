@@ -123,7 +123,7 @@ func findPath(loaded graph.GraphV1, from, to, in string, depth int) (pathResult,
 			return result, err
 		}
 		if len(matches) == 0 {
-			return result, fmt.Errorf("no symbol \"%s\" in the graph — check spelling or run graft build", query)
+			return result, fmt.Errorf("no symbol \"%s\" in the graph — check spelling or run graft build%s", query, similarSymbols(query, loaded))
 		}
 		ends[index] = matches
 	}
