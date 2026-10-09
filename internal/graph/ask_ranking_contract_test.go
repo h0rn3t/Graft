@@ -2,6 +2,7 @@ package graph
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -20,6 +21,26 @@ func TestAskDistinctiveTerm(t *testing.T) {
 		}
 		if result.Distinctive != want {
 			t.Errorf("Ask(%q).Distinctive = %q, want %q", query, result.Distinctive, want)
+		}
+	}
+}
+
+func TestAskTermsSplitsIdentifiers(t *testing.T) {
+	tests := []struct {
+		text string
+		want []string
+	}{
+		{"inputUSDPerMtok", []string{"input", "usd", "per", "mtok"}},
+		{"HTTPServer", []string{"http", "server"}},
+		{"parseJSONBody", []string{"pars", "json", "body"}},
+		{"readTimeout", []string{"read", "timeout"}},
+		{"IDs", []string{"ids"}},
+		{"URLs", []string{"url"}},
+		{"XMLId", []string{"xmlid"}},
+	}
+	for _, tt := range tests {
+		if got := askTerms(tt.text); !slices.Equal(got, tt.want) {
+			t.Errorf("askTerms(%q) = %q, want %q", tt.text, got, tt.want)
 		}
 	}
 }

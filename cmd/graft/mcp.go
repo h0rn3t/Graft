@@ -60,12 +60,12 @@ var mcpTools = []mcpToolDefinition{
 			"type": "object",
 			"properties": map[string]any{
 				"query":  map[string]any{"type": "string", "description": "what you want to understand, in plain words"},
-				"limit":  map[string]any{"type": "number", "description": "max ranked matches before edit context (default 5)"},
-				"full":   map[string]any{"type": "boolean", "description": "inline whole definition spans within budget instead of default ≤8-line source excerpts"},
-				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "total response budget in estimated tokens (UTF-16 length / 4), default 2000"},
-				"intent": map[string]any{"type": "string", "enum": []string{"lookup", "edit"}, "description": "edit includes bounded direct callers, dependencies and related tests"},
-				"seen":   map[string]any{"type": "array", "maxItems": 256, "items": map[string]any{"type": "string"}, "description": "opt in to content references: [] returns refs; pass prior refs to omit unchanged source; omit this field to restore ordinary source"},
-				"in":     map[string]any{"type": "string", "description": "narrow to nodes under this path prefix, filtered before scoring (segment-aware, like scopeOf)"},
+				"limit":  map[string]any{"type": "number", "description": "max ranked matches (default 5)"},
+				"full":   map[string]any{"type": "boolean", "description": "inline whole definitions instead of ≤8-line excerpts"},
+				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "response budget in estimated tokens, default 2000"},
+				"intent": map[string]any{"type": "string", "enum": []string{"lookup", "edit"}, "description": "edit adds direct callers, dependencies and tests"},
+				"seen":   map[string]any{"type": "array", "maxItems": 256, "items": map[string]any{"type": "string"}, "description": "content refs: [] returns refs; prior refs omit unchanged source"},
+				"in":     map[string]any{"type": "string", "description": "only nodes under this path prefix"},
 			},
 			"required": []string{"query"},
 		},
@@ -87,29 +87,29 @@ var mcpTools = []mcpToolDefinition{
 	},
 	{
 		Name:        "graft_trace_calls",
-		Description: "Structural edges for a symbol, over call/reference/import/implements/extends ($0, no LLM). Defaults to direct callers (who depends on it). Set direction:\"out\" for callees (what it calls); set depth>1 (or depth:\"all\" for the full closure) to walk transitively for the full blast radius — every source that breaks if it changes. Run before a multi-file refactor to find ALL affected files. Set to:<symbol> instead for the shortest call chain from symbol to that one, interface calls continuing to their implementations.",
+		Description: "Structural edges for a symbol: direct callers by default (who depends on it), direction:\"out\" for callees. depth>1, or \"all\", walks the transitive blast radius — every source that breaks if it changes; run it before a multi-file refactor. to:<symbol> instead returns the shortest call chain between the two, through interface implementations.",
 		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"symbol":    map[string]any{"type": "string", "description": "bare name, qualified (Class.method), or package-qualified (pkg.Fn); a file path also works"},
-				"direction": map[string]any{"type": "string", "enum": []string{"in", "out"}, "description": "\"in\" (default) = callers/dependents; \"out\" = callees/dependencies"},
-				"depth":     map[string]any{"description": "transitive walk depth for blast radius (default 1 = direct edges only); pass \"all\" for the full connected closure — every source that would be affected. With to: the longest chain to try (default 10)"},
-				"in":        map[string]any{"type": "string", "description": "narrow matches to nodes at or under this repo-relative path prefix, e.g. server/src"},
-				"to":        map[string]any{"type": "string", "description": "a second symbol: return the shortest chain of calls, references and imports from symbol to it, instead of edges"},
+				"symbol":    map[string]any{"type": "string", "description": "name, Class.method or pkg.Fn; a file path works too"},
+				"direction": map[string]any{"type": "string", "enum": []string{"in", "out"}, "description": "\"in\" (default) callers, \"out\" callees"},
+				"depth":     map[string]any{"description": "walk depth (default 1); \"all\" for the full closure; with to: the longest chain to try (default 10)"},
+				"in":        map[string]any{"type": "string", "description": "only nodes under this path prefix, e.g. server/src"},
+				"to":        map[string]any{"type": "string", "description": "second symbol: the shortest chain from symbol to it, instead of edges"},
 			},
 			"required": []string{"symbol"},
 		},
 	},
 	{
 		Name:        "graft_find_all",
-		Description: "Use instead of grep or rg on this repo's code: regex search over the graph's indexed files, hits grouped by innermost enclosing symbol and ranked by incoming-edge count (coupling) — which hit matters, not just where it is. An answer is capped near 2000 tokens; past the cap it names the files holding the rest, so narrow with in: one of them rather than widening the pattern.",
+		Description: "Use instead of grep or rg on this repo's code: regex over the indexed files, hits grouped by enclosing symbol and ranked by coupling (incoming edges). Answers stop near 2000 tokens and name the files holding the rest, tests and copies included; narrow with in: one of them rather than widening the pattern.",
 		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"pattern":     map[string]any{"type": "string", "description": "regex pattern (or literal string with fixed: true)"},
-				"in":          map[string]any{"type": "string", "description": "narrow to files at or under this repo-relative path prefix, e.g. server/src"},
+				"in":          map[string]any{"type": "string", "description": "only files under this path prefix, e.g. server/src"},
 				"ignore_case": map[string]any{"type": "boolean", "description": "case-insensitive match"},
 				"fixed":       map[string]any{"type": "boolean", "description": "treat pattern as a literal string, not a regex"},
 			},
@@ -126,14 +126,14 @@ var mcpTools = []mcpToolDefinition{
 	},
 	{
 		Name:        "graft_read_symbol",
-		Description: "Read a known symbol directly; no preceding search or file-API call is needed. Returns its complete source, current span and hash, plus its direct callees in the same directory. Several known symbols? Read them in ONE call: symbol plus also: [the others] (8 in all, one shared budget) — one call per symbol costs a model round each. A name shared with testdata or test copies reads the production definition; a path::name in the wrong file falls back to the name. If it fails with needs N estimated tokens, retry once with budget N or higher.",
+		Description: "Read a known symbol directly, no search or file API first: its complete source, span and hash, plus its callees in the same directory. Several known symbols? Read them in ONE call: symbol plus also: [the others] (8 in all, one shared budget) — each extra call costs a model round. Production definitions win over test copies. On \"needs N estimated tokens\", retry once with budget N or higher.",
 		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
-				"symbol": map[string]any{"type": "string", "description": "case-sensitive exact name, node ID, or path::name; include the child prefix in a workspace"},
-				"also":   map[string]any{"type": "array", "maxItems": 7, "items": map[string]any{"type": "string"}, "description": "more known symbols to read in this same call, selected like symbol and sharing its budget; returns each definition without callees, and a span inside another one once"},
-				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "total estimated-token budget (UTF-16 length / 4), default 2000; callees fill what the definition leaves, oversized definitions fail without partial source; on needs-N-tokens error retry once with N or higher"},
+				"symbol": map[string]any{"type": "string", "description": "exact name, node ID or path::name (child prefix in a workspace)"},
+				"also":   map[string]any{"type": "array", "maxItems": 7, "items": map[string]any{"type": "string"}, "description": "more symbols for this call, sharing its budget, without callees"},
+				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "estimated-token budget, default 2000; callees fill what the definitions leave"},
 			},
 			"required": []string{"symbol"},
 		},
@@ -142,20 +142,15 @@ var mcpTools = []mcpToolDefinition{
 
 const mcpInstructionsText = `This repo is indexed by graft: a prebuilt graph of every symbol, its file:line
 span, and who calls what. Use these tools instead of grep, rg, find or reading
-source files to locate and understand code — one call usually replaces several.
+source files; one call usually replaces several.
 
-**If these tools are deferred (names shown, schemas withheld), load them all in ONE lookup:** ToolSearch "select:mcp__graft__graft_read_symbol,mcp__graft__graft_find_code,mcp__graft__graft_find_all,mcp__graft__graft_trace_calls,mcp__graft__graft_file_api,mcp__graft__graft_repo_map" — one round trip for the whole session. Never load them one at a time.
+**If these tools are deferred (names shown, schemas withheld), load them all in ONE lookup:** ToolSearch "select:mcp__graft__graft_read_symbol,mcp__graft__graft_find_code,mcp__graft__graft_find_all,mcp__graft__graft_trace_calls,mcp__graft__graft_file_api,mcp__graft__graft_repo_map".
 
-- Known symbol: graft_read_symbol directly — complete source plus its same-directory callees. Do not search for it first. Several known symbols: one graft_read_symbol call with also: [...].
-- Unknown location: graft_find_code with a focused question; use in when the path is known.
-- Known file, unknown symbol: graft_file_api — the file's whole API in ~200 tokens.
-- graft_find_all — when you need EVERY occurrence; a query is top-N and misses some.
-- graft_trace_calls — who calls it, what it calls, blast radius before a rename.
-- graft_repo_map — orientation in an unfamiliar repo.
+- Known symbols: graft_read_symbol, several in one call with also: [...]. Do not search for them first.
+- Unknown location: graft_find_code; in: when the path is known.
+- Known file: graft_file_api. Every occurrence: graft_find_all. Callers, callees, blast radius: graft_trace_calls. Orientation: graft_repo_map.
 
-Use complete returned source as evidence without re-reading it. For truncated hits, read their exact symbols together in one graft_read_symbol call (also: [...]). If graft_read_symbol fails with needs N tokens, retry once with budget N or higher (maximum 64000); if still too large, read the file:line range directly.
-
-Results already reflect uncommitted edits — the graph refreshes before each query.`
+Use returned source as evidence without re-reading it; read truncated hits together in one graft_read_symbol call (also: [...]). Results reflect uncommitted edits.`
 
 // runMCP serves the retrieval tools over newline-delimited JSON-RPC 2.0 until
 // stdin ends or ctx is done.

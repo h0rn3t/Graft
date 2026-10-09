@@ -118,6 +118,37 @@ func ClaudeWired(repo string) bool {
 	return false
 }
 
+// ClaudeMCPWired reports whether Claude Code registers graft's MCP server for
+// repo: in the repo's .mcp.json, or in home's .claude.json at user scope or
+// for this project.
+func ClaudeMCPWired(repo, home string) bool {
+	read := func(path string) jsonjs.Value {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return nil
+		}
+		value, _ := jsonjs.Parse(data)
+		return value
+	}
+	has := func(value jsonjs.Value, keys ...string) bool {
+		for _, key := range keys {
+			object, ok := jsonjs.AsObject(value)
+			if !ok || object == nil {
+				return false
+			}
+			if value, ok = object.Get(key); !ok {
+				return false
+			}
+		}
+		return true
+	}
+	if has(read(filepath.Join(repo, ".mcp.json")), "mcpServers", "graft") {
+		return true
+	}
+	user := read(filepath.Join(home, ".claude.json"))
+	return has(user, "mcpServers", "graft") || has(user, "projects", repo, "mcpServers", "graft")
+}
+
 // IsGraftAllowEntry reports whether a Bash allowlist entry is one graft wrote.
 func IsGraftAllowEntry(entry jsonjs.Value) bool {
 	return graftAllowEntry.MatchString(jsonjs.String(entry))

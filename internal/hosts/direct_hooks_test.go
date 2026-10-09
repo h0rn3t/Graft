@@ -1,6 +1,7 @@
 package hosts
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -304,5 +305,46 @@ func TestRetractKeepsForeignHooksConfigKeys(t *testing.T) {
 	}
 	if version, _ := root.Get("version"); version != float64(2) {
 		t.Errorf("Retract() cursor hooks = %s, want the user's schema version kept", readTestFile(t, hooks))
+	}
+}
+
+func TestClaudeMCPWiredContract(t *testing.T) {
+	const graftServer = `{"command":"graft","args":["mcp"]}`
+	tests := []struct {
+		name       string
+		mcpJSON    string // the repo's .mcp.json, "" for none
+		claudeJSON string // home's .claude.json with REPO for the repo path, "" for none
+		wantWired  bool
+	}{
+		{name: "nothing registered"},
+		{name: "repo .mcp.json", mcpJSON: `{"mcpServers":{"graft":` + graftServer + `}}`, wantWired: true},
+		{name: "repo .mcp.json with another server", mcpJSON: `{"mcpServers":{"other":` + graftServer + `}}`},
+		{name: "user scope", claudeJSON: `{"mcpServers":{"graft":` + graftServer + `}}`, wantWired: true},
+		{name: "this project's scope", claudeJSON: `{"projects":{"REPO":{"mcpServers":{"graft":` + graftServer + `}}}}`, wantWired: true},
+		{name: "another project's scope", claudeJSON: `{"projects":{"/elsewhere":{"mcpServers":{"graft":` + graftServer + `}}}}`},
+		{name: "invalid JSON", mcpJSON: `{"mcpServers":`, claudeJSON: `not json`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo, home := t.TempDir(), t.TempDir()
+			if tt.mcpJSON != "" {
+				if err := os.WriteFile(filepath.Join(repo, ".mcp.json"), []byte(tt.mcpJSON), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if tt.claudeJSON != "" {
+				data, err := json.Marshal(repo)
+				if err != nil {
+					t.Fatal(err)
+				}
+				content := strings.ReplaceAll(tt.claudeJSON, `"REPO"`, string(data))
+				if err := os.WriteFile(filepath.Join(home, ".claude.json"), []byte(content), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if got := ClaudeMCPWired(repo, home); got != tt.wantWired {
+				t.Errorf("ClaudeMCPWired(.mcp.json %q, .claude.json %q) = %t, want %t", tt.mcpJSON, tt.claudeJSON, got, tt.wantWired)
+			}
+		})
 	}
 }

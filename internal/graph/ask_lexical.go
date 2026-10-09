@@ -1589,7 +1589,7 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 		}
 	}
 	// Suggest the word as the query spelled it, not its folded stem.
-	for _, word := range askTokenSeparator.Split(strings.ToLower(askCamelBoundary.ReplaceAllString(query, "$1 $2")), -1) {
+	for _, word := range askTokenSeparator.Split(strings.ToLower(askSplitWords(query)), -1) {
 		if word != "" && AskFold(word) == result.Distinctive {
 			result.Distinctive = word
 			break

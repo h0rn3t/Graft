@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **A Claude Code session with graft's MCP server starts with one line.**
+  When the repo's `.mcp.json`, or `~/.claude.json` at user or project scope,
+  registers graft's MCP server, the session-start hook sends a short note on
+  the MCP tools instead of the CLI guide and the repo map; the server's own
+  instructions already carry the tool guide. Other hosts, and Claude Code
+  without the server, keep the full orientation.
+- **Shorter MCP instructions and tool descriptions.** With the session note,
+  every model call carries about 3,800 fewer characters (≈950 tokens), keeping
+  the hints that change how a model works: batch reads with `also:`, no search
+  for a known symbol, one tool per need.
+- **`graft_find_all` counts tests and copies instead of listing them** while
+  production code matches: hits in tests, testdata, fixtures, generated and
+  vendored code go into the closing note with a count per file, production
+  files first, unless the pattern itself asks for tests or copies. In this
+  repository, whose testdata mirrors its own source, they were 38% of
+  `graft_find_all` output.
+- **Identifiers split at acronyms.** Ranked search reads `inputUSDPerMtok` as
+  input, USD, per, Mtok and `HTTPServer` as HTTP, server, while `IDs` and
+  `URLs` stay whole, so a question about the statusline's dollar amount finds
+  `inputUSDPerMtok`. The ask index format and the extractor version
+  (`go-v14`) changed: the first query after upgrading re-parses the
+  repository once.
+- Graft against the same eight questions without it: on Claude Haiku 5.5 at
+  medium effort (48 runs against 144), 37% fewer tokens and 50% lower cost
+  (0.5.0-rc.4: 37% and 48%); on Claude Sonnet 5.5 at low effort (24 runs
+  each), 9% fewer tokens and 15% lower cost (0.5.0-rc.4: 4% and 20%); on
+  Claude Opus 5.5 at low effort (24 runs each), 27% fewer tokens and 32% lower
+  cost (0.5.0-rc.4: 18% and 33%). Every answer named every required symbol.
+  Questions that one grep for a rare word answers still read more tokens with
+  graft on the larger models: two on Opus, one on Sonnet.
+
 ## 0.5.0-rc.4 - 2026-10-09
 
 ### Added

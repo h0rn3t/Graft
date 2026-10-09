@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -111,8 +112,44 @@ func TestRunHookUserShimStaysSilentWhenProjectIsWired(t *testing.T) {
 				args = append(args, "--user")
 			}
 			status := runWithInput(args, strings.NewReader(payload), &out, &diagnostic)
-			if status != 0 || strings.Contains(out.String(), "repo map") != tc.want {
+			if status != 0 || strings.Contains(out.String(), "This repo is indexed by graft") != tc.want {
 				t.Errorf("%v (GRAFT_HOOK_SHIM=%q) = (%d, %q, %q), want orientation %t", args, tc.shim, status, out.String(), diagnostic.String(), tc.want)
+			}
+		})
+	}
+}
+
+func TestHookSessionStartOrientationFollowsClaudeMCP(t *testing.T) {
+	home := hookHomeDir
+	t.Cleanup(func() { hookHomeDir = home })
+	hookHomeDir = func() string { return t.TempDir() }
+	tests := []struct {
+		name          string
+		claudeProject bool
+		mcpJSON       string
+		want, notWant string
+	}{
+		{name: "Claude Code with graft's MCP server", claudeProject: true, mcpJSON: `{"mcpServers":{"graft":{"command":"graft","args":["mcp"]}}}`, want: "graft_find_code", notWant: "repo map"},
+		{name: "Claude Code without it", claudeProject: true, want: "repo map", notWant: "graft_find_code"},
+		{name: "another host with .mcp.json", mcpJSON: `{"mcpServers":{"graft":{"command":"graft","args":["mcp"]}}}`, want: "repo map", notWant: "graft_find_code"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			writeHookYieldFile(t, filepath.Join(hookContextDir(root), "INDEX.md"), "# repo map\n")
+			if tt.mcpJSON != "" {
+				writeHookYieldFile(t, filepath.Join(root, ".mcp.json"), tt.mcpJSON)
+			}
+			t.Setenv("CLAUDE_PROJECT_DIR", "")
+			if tt.claudeProject {
+				t.Setenv("CLAUDE_PROJECT_DIR", root)
+			}
+			t.Setenv("GRAFT_HOOK_SHIM", "")
+			var out bytes.Buffer
+			payload := `{"session_id":"s","hook_event_name":"SessionStart","cwd":` + strconv.Quote(root) + `}`
+			runHook(t.Context(), "session-start", false, "", strings.NewReader(payload), &out, &bytes.Buffer{})
+			if got := out.String(); !strings.Contains(got, tt.want) || strings.Contains(got, tt.notWant) {
+				t.Errorf("runHook(session-start) = %q, want %q and not %q", got, tt.want, tt.notWant)
 			}
 		})
 	}

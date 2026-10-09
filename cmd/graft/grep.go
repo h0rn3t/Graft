@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -149,9 +150,26 @@ func formatGrepResult(result graph.GrepResult) string {
 	return strings.TrimRight(output.String(), "\n") + "\n"
 }
 
+// grepCopyPattern marks a pattern that itself asks for tests or copies.
+var grepCopyPattern = regexp.MustCompile(`(?i)test|spec|fixture|mock|vendor|generated`)
+
 // fitGrepResult keeps the top-ranked hits whose rendered groups fit in budget
 // bytes and counts the rest as truncated, leaving result itself untouched.
+// While production code matches, tests and copies (testdata, fixtures,
+// generated and vendored code) are only counted, unless the pattern asks for
+// them.
 func fitGrepResult(result graph.GrepResult, budget int) graph.GrepResult {
+	isCopy := func(group graph.GrepGroup) bool { return graph.IsCopyPath(group.Path) }
+	production := slices.DeleteFunc(slices.Clone(result.Groups), isCopy)
+	if len(production) > 0 && len(production) < len(result.Groups) && !grepCopyPattern.MatchString(result.Pattern) {
+		for _, group := range result.Groups {
+			if isCopy(group) {
+				result.TotalHits -= len(group.Hits)
+				result.Truncated.Hits += len(group.Hits)
+			}
+		}
+		result.Groups = production
+	}
 	used := 0
 	for index, group := range result.Groups {
 		used += len(grepGroupHeader(group)) + 2
@@ -221,8 +239,15 @@ func grepRemainderNote(full, fitted graph.GrepResult) string {
 	if len(dropped) == 0 {
 		return ""
 	}
+	copyRank := func(path string) int {
+		if graph.IsCopyPath(path) {
+			return 1
+		}
+		return 0
+	}
+	// Production files first, so a test tree's tally cannot hide them.
 	paths := slices.SortedFunc(maps.Keys(dropped), func(a, b string) int {
-		return cmp.Or(cmp.Compare(dropped[b], dropped[a]), strings.Compare(a, b))
+		return cmp.Or(cmp.Compare(copyRank(a), copyRank(b)), cmp.Compare(dropped[b], dropped[a]), strings.Compare(a, b))
 	})
 	const shown = 8
 	parts := make([]string, 0, shown+1)

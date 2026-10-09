@@ -305,7 +305,7 @@ Both configs are user-level, so they apply to **every** repo you open with Codex
 | `graft_read_symbol` | an exact symbol or `path::name`, optionally `also` | Complete source, current span and source hash, plus same-directory callees within the budget; `also: [...]` reads up to eight symbols in one call under one budget. |
 | `graft_file_api` | a file path | Every signature in that file, no bodies — the API surface for a tenth of the tokens. |
 | `graft_trace_calls` | a symbol, optionally `to` | Who depends on it, or what it depends on with `direction: out`, N levels deep for blast radius; with `to`, the shortest call chain from one symbol to another. |
-| `graft_find_all` | a regex | Hits grouped by enclosing symbol, ranked by how coupled that symbol is; past about 2000 tokens the answer names the files holding the rest. |
+| `graft_find_all` | a regex | Hits grouped by enclosing symbol, ranked by how coupled that symbol is; past about 2000 tokens the answer names the files holding the rest. While production code matches, tests and copies (testdata, fixtures, generated, vendored) are only counted per file, unless the pattern asks for them. |
 | `graft_repo_map` | nothing | A first look at an unfamiliar repo: directory clusters, hubs, hotspots. |
 | `graft_check_freshness` | nothing | Whether the local graph has drifted from the code. |
 
@@ -325,7 +325,7 @@ Where a CLI agent supports user-level `hooks.json`, `init` also installs Graft's
 
 - **a live statusline** — graph size, freshness, context usage, and a stale warning when the code has moved ahead of the graph
 - **auto-sync** — every graft query brings the graph up to date first, so an answer always describes the code as it is right now, uncommitted edits included. A query refreshes only what it reads; the markdown under `graft/` is refreshed by the background rebuild at the end of a turn that touched code. Both are structural and `$0` — auto-sync never calls the LLM on its own
-- **context on tap** — each prompt pulls the matching nodes into the session; editing a file surfaces what depends on it ("blast radius"); new sessions start with the repo map
+- **context on tap** — each prompt pulls the matching nodes into the session; editing a file surfaces what depends on it ("blast radius"); new sessions start with the repo map, or, when Claude Code runs graft's MCP server, with one line pointing at its tools, which the server's own instructions already describe
 
 <p align="center">
   <img src="assets/graft-hooks-demo.gif" alt="How Claude Code hooks wire graft in: install, graft init, then the hooks loop (session start, user prompt, post tool use, stop) keeps the graph built, read, and committed automatically" width="820"/>

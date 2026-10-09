@@ -30,9 +30,10 @@ func askOrderedCounts(text string) askBag {
 	return bag
 }
 
-// AskIndexVersion is the ask index format. Version 2 stores terms folded by
-// AskFold; an index of any other version is treated as absent.
-const AskIndexVersion = 2
+// AskIndexVersion is the ask index format. Version 3 stores terms folded by
+// AskFold, with acronyms split from the words they start; an index of any
+// other version is treated as absent.
+const AskIndexVersion = 3
 
 // WriteAskIndex stores the lexical body tokens omitted from the persisted graph.
 func WriteAskIndex(outDir string, graph GraphV1) error {

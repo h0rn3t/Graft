@@ -730,6 +730,12 @@ func runHook(ctx context.Context, event string, user bool, shim string, stdin io
 		index, err := os.ReadFile(filepath.Join(hookContextDir(root), "INDEX.md"))
 		if err == nil {
 			orientation := formatHookOrientation(string(index), 1500, hookStaleBanner(hookIndexFreshness(root)))
+			// Claude Code shows the MCP server's own instructions, which carry
+			// the tool guide; the CLI guide and repo map would repeat it on
+			// every turn.
+			if os.Getenv("CLAUDE_PROJECT_DIR") != "" && hosts.ClaudeMCPWired(root, hookHomeDir()) {
+				orientation = formatHookMCPOrientation(hookStaleBanner(hookIndexFreshness(root)))
+			}
 			if len(lines) > 0 {
 				orientation = strings.Join(lines, "\n") + "\n\n" + orientation
 			}

@@ -24,6 +24,7 @@ var (
 	askStructuralOutgoing = regexp.MustCompile(strings.ReplaceAll(`\b(callee|callees|what\s+does\s+\w+\s+call|calls\s+what|imports?|depends\s+on)\b`, `\s`, jsSpaceClass))
 	askSubjectSeparator   = regexp.MustCompile(`[^A-Za-z0-9_.]+`)
 	askCamelBoundary      = regexp.MustCompile(`([a-z0-9])([A-Z])`)
+	askAcronymBoundary    = regexp.MustCompile(`([A-Z]+)([A-Z][a-z]{2})`)
 	askTokenSeparator     = regexp.MustCompile(`[^a-z0-9]+`)
 )
 
@@ -443,12 +444,20 @@ func askTermCounts(text string) map[string]int {
 	return counts
 }
 
-// askTerms tokenizes like the TypeScript ask: camelCase split, lower-cased, cut
-// on non-alphanumerics, one-letter tokens and stop words dropped, order kept.
-// Each term is then folded with AskFold, so the index and the query share one
-// vocabulary.
+// askSplitWords puts a space at each word boundary inside an identifier:
+// before an upper-case letter that follows a lower-case one or a digit, and
+// between an acronym and a following word of three or more letters, so
+// inputUSDPerMtok reads as input USD Per Mtok while IDs and URLs stay whole.
+func askSplitWords(text string) string {
+	return askCamelBoundary.ReplaceAllString(askAcronymBoundary.ReplaceAllString(text, "$1 $2"), "$1 $2")
+}
+
+// askTerms tokenizes like the TypeScript ask: identifiers split into words,
+// lower-cased, cut on non-alphanumerics, one-letter tokens and stop words
+// dropped, order kept. Each term is then folded with AskFold, so the index and
+// the query share one vocabulary.
 func askTerms(text string) []string {
-	text = askCamelBoundary.ReplaceAllString(text, "$1 $2")
+	text = askSplitWords(text)
 	// JavaScript lower-cases U+0130 to "i" plus a combining dot, which then
 	// splits the token; Go maps it to a bare "i".
 	text = strings.ReplaceAll(text, "\u0130", "i\u0307")

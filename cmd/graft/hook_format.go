@@ -24,6 +24,7 @@ const (
 		"  In a monorepo, add --in <path>/ to ask/grep/callers to scope to one sub-project; hits are labeled [scope/].\n" +
 		"  Already know the file or symbol to change? Go straight to it: graft grep \"<symbol>\", read the span, edit. Save ask for when you don't yet know where the code lives.\n" +
 		"  Refactor, rename, or multi-file change? Run graft callers <sym> --depth all FIRST to map every connected file; editing the primary file and stopping is the classic miss (platform siblings, a new file to extract).\n"
+	hookOrientationMCPDirective = "[graft] This repo is indexed by graft. Before Grep or Read, use its MCP tools: graft_find_code to locate code, graft_read_symbol (also: [...]) for symbols you can name, graft_find_all for every occurrence, graft_trace_calls for callers and blast radius. Pick the ONE tool that fits and act on its answer; most tasks need a single call. If it isn't enough, switch to the tool that fits the next need; don't call the same tool again and again or re-ask a question reworded. Without the MCP tools, the graft CLI does the same: graft ask --source, graft read, graft grep, graft callers."
 )
 
 type hookFreshness struct {
@@ -54,6 +55,16 @@ func hookStaleBanner(freshness *hookFreshness) string {
 		return ""
 	}
 	return fmt.Sprintf("⚠ graft's index may be ahead of your working tree: %d of %d indexed files are not on disk (branch switch or uncommitted move?). If graft names a path that isn't there, don't chase it — `graft grep` the symbol to find where it lives now; run `graft build` to refresh.", freshness.Missing, freshness.Total)
+}
+
+// formatHookMCPOrientation is the session-start note for a host that already
+// shows graft's MCP instructions: one line pointing at the tools.
+func formatHookMCPOrientation(staleNote string) string {
+	banner := ""
+	if staleNote != "" {
+		banner = staleNote + "\n\n"
+	}
+	return banner + hookOrientationMCPDirective
 }
 
 func formatHookOrientation(index string, budget int, staleNote string) string {
