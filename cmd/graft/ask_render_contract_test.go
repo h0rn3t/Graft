@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"slices"
 	"strings"
 	"testing"
 
@@ -227,21 +226,54 @@ func TestAskCompactSourceMatchesInflectedQuery(t *testing.T) {
 	}
 }
 
-func TestTierWithinScopes(t *testing.T) {
-	scope := func(name string) *string { return &name }
-	hits := []graph.AskHit{
-		{Title: "a1", Scope: scope("api"), NameTerms: 1},
-		{Title: "b1", Scope: scope("web"), NameTerms: 0},
-		{Title: "a2", Scope: scope("api"), NameTerms: 2},
-		{Title: "b2", Scope: scope("web"), NameTerms: 2},
-		{Title: "a3", Scope: scope("api"), NameTerms: 2},
+func TestSetAskMethodsContract(t *testing.T) {
+	node := func(path, name, kind, span, owner string) graph.NodeV1 {
+		n := graph.NodeV1{ID: path + "#" + name, Name: name, Kind: graph.Kind(kind), Path: path, Span: span}
+		if owner != "" {
+			n.Owner = &owner
+		}
+		return n
 	}
-	tierWithinScopes(hits)
-	var got []string
-	for _, hit := range hits {
-		got = append(got, hit.Title)
+	nodes := []graph.NodeV1{
+		node("pkg/cache.go", "cache.go", "file", "L1-L40", ""),
+		node("pkg/cache.go", "queryCache", "struct", "L3-L6", ""),
+		node("pkg/cache.go", "load", "method", "L8-L10", "queryCache"),
+		node("pkg/cache_extra.go", "snapshot", "method", "L2-L20", "queryCache"),
+		node("other/cache.go", "drop", "method", "L5-L7", "queryCache"), // another package's queryCache
+		node("pkg/cache.go", "sameFile", "function", "L30-L35", ""),
+		node("pkg/big.go", "Big", "struct", "L1-L2", ""),
+		node("java/Worker.java", "Worker", "class", "L1-L1", ""),
+		node("java/Worker.java", "run", "method", "L1-L1", "Worker"),
 	}
-	if want := []string{"a2", "b2", "a3", "b1", "a1"}; !slices.Equal(got, want) {
-		t.Errorf("tierWithinScopes() order = %v, want %v", got, want)
+	for i := range 12 {
+		nodes = append(nodes, node("pkg/big.go", fmt.Sprintf("m%02d", i), "method", fmt.Sprintf("L%d-L%d", 10+i, 10+i), "Big"))
+	}
+	tests := []struct {
+		name    string
+		title   string
+		pointer string
+		want    string
+	}{
+		{name: "type with methods across its package", title: "queryCache · struct", pointer: "pkg/cache.go:L3-L6", want: "load L8-L10 · snapshot pkg/cache_extra.go:L2-L20"},
+		{name: "long list keeps ten", title: "Big · struct", pointer: "pkg/big.go:L1-L2", want: "m00 L10-L10 · m01 L11-L11 · m02 L12-L12 · m03 L13-L13 · m04 L14-L14 · m05 L15-L15 · m06 L16-L16 · m07 L17-L17 · m08 L18-L18 · m09 L19-L19 · +2 more"},
+		{name: "one-line class", title: "Worker · class", pointer: "java/Worker.java:L1-L1", want: "run L1-L1"},
+		{name: "method on the class line", title: "run · method", pointer: "java/Worker.java:L1-L1", want: ""},
+		{name: "function", title: "sameFile · function", pointer: "pkg/cache.go:L30-L35", want: ""},
+		{name: "method", title: "load · method", pointer: "pkg/cache.go:L8-L10", want: ""},
+		{name: "file", title: "cache.go · file", pointer: "pkg/cache.go", want: ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			hits := []graph.AskHit{{Kind: "symbol", Title: tt.title, Pointer: tt.pointer}}
+			setAskMethods(graph.GraphV1{Nodes: nodes}, hits)
+			if hits[0].Methods != tt.want {
+				t.Errorf("setAskMethods(%q %q).Methods = %q, want %q", tt.title, tt.pointer, hits[0].Methods, tt.want)
+			}
+		})
+	}
+	hit := graph.AskHit{Kind: "symbol", Title: "queryCache · struct", Pointer: "pkg/cache.go:L3-L6", Methods: "load L8-L10"}
+	text := formatAskText(graph.AskResult{Mode: "lexical", Hits: []graph.AskHit{hit}}, true)
+	if !strings.Contains(text, "\n   methods: load L8-L10\n") {
+		t.Errorf("formatAskText(type hit) = %q, want a methods line under the pointer", text)
 	}
 }

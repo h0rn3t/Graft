@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **A type hit lists its methods.** A struct, class or interface in
+  `graft_find_code` or `graft ask --source` text gets a `methods:` line with up
+  to ten names and their spans, including methods in other files of its
+  package, so the next `graft_read_symbol` names them instead of guessing or
+  calling `graft_file_api` first.
+
+### Changed
+
+- **A file that answers the question fills several places.** After the top
+  hit, ranked search takes hits by score, each discounted by 10% for every hit
+  its file already placed, instead of one hit per file in turn. Asked about Go
+  route groups, it now returns `goGroupCall`, `goPrefix` and `joinRoute` from
+  `routes.go`, where it returned one `routes.go` hit beside seven weak matches
+  from other files. A file's own node, which carries no code, waits behind
+  that file's symbols, in workspaces too.
+- **Common words in a name no longer lift it.** The name-coverage tiers from
+  0.2.0 counted every query word a name matched, so `goTypeName` led a
+  question that said "Go" and "name". They are gone. On 88 queries Claude
+  Haiku 5.5 sent while benchmarking, the expected symbols among the hits rose
+  from 24% to 50%; asked by its doc sentence without its name, a documented
+  function is among the top eight hits 96% of the time, up from 38%.
+- On Claude Haiku 5.5 at medium effort, the same eight questions, 72 runs with
+  graft against 144 without: graft now uses 37% fewer tokens and costs 48%
+  less than the runs without it (0.5.0-rc.3 against the same runs: 18% and
+  31%), in 4.6 model rounds against 7.4. Every question now reads fewer tokens
+  than without graft, and all 72 answers named every required symbol.
+
 ## 0.5.0-rc.3 - 2026-10-09
 
 ### Added

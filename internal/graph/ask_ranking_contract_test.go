@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -78,6 +79,13 @@ func TestAskRankingContract(t *testing.T) {
 		helperCallers = append(helperCallers, caller)
 		helperEdges = append(helperEdges, traversalEdge(caller.ID, "src/hook.go#hookContextDir", "calls"))
 	}
+	// Words like "name" and "file" fill a real repository's bodies, which is
+	// what keeps their weight low.
+	var genericBodies []NodeV1
+	for i := range 12 {
+		id := fmt.Sprintf("src/util%d.go#util%d", i, i)
+		genericBodies = append(genericBodies, body(node(id, fmt.Sprintf("util%d", i), "function", fmt.Sprintf("src/util%d.go", i)), "returns the name of a file"))
+	}
 	tests := []struct {
 		name  string
 		nodes []NodeV1
@@ -125,6 +133,29 @@ func TestAskRankingContract(t *testing.T) {
 			},
 			query: "invoice totals",
 			order: [][]string{{"run · function"}},
+		},
+		{
+			name: "a file's own node waits behind the file's symbols",
+			nodes: []NodeV1{
+				body(node("src/routes.go", "routes.go", "file", "src/routes.go"), "route group prefix routes groups prefixes"),
+				body(node("src/routes.go#joinRoute", "joinRoute", "function", "src/routes.go"), "joins a group prefix and a route"),
+				node("src/other.go#parseFlags", "parseFlags", "function", "src/other.go"),
+			},
+			query: "route group prefix",
+			order: [][]string{{"joinRoute"}, {"routes.go · file"}},
+		},
+		{
+			name: "a file that answers the query fills places before weak files",
+			nodes: append([]NodeV1{
+				body(node("src/routes.go#goGroupCall", "goGroupCall", "method", "src/routes.go"), "reads the route group prefix of a Group call"),
+				body(node("src/routes.go#goGroupAssignment", "goGroupAssignment", "method", "src/routes.go"), "records the route group prefix a variable holds"),
+				body(node("src/routes.go#joinRoute", "joinRoute", "function", "src/routes.go"), "joins a route group prefix and a route path"),
+				node("src/lang.go#goTypeName", "goTypeName", "function", "src/lang.go"),
+				node("src/files.go#fileName", "fileName", "function", "src/files.go"),
+				node("src/names.go#goName", "goName", "function", "src/names.go"),
+			}, genericBodies...),
+			query: "go route group prefix, name the file",
+			order: [][]string{{"goGroupCall", "goGroupAssignment", "joinRoute"}, {"goTypeName", "fileName", "goName"}},
 		},
 		{
 			name: "production outranks an equal-coverage testdata copy",

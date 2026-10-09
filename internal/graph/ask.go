@@ -47,14 +47,17 @@ type AskOptions struct {
 	NoGraphRank bool
 	// Index supplies the build-time token sidecar for a slim persisted graph.
 	Index *AskIndex
-	// FileFirst controls whether lexical results emit one leader per file before
-	// sibling spans. Nil preserves the CLI default of true.
+	// FileFirst controls whether lexical results spread across files rather
+	// than follow score order alone. Nil preserves the CLI default of true.
 	FileFirst *bool
 	// FileComplement enables bounded union evidence from lexical symbols in one
 	// file. The default is enabled whenever the file-first default is active.
 	FileComplement bool
-	// FileTopLock controls whether the exact baseline top hit leads the result.
-	// Nil follows FileFirst, matching the TypeScript retrieval contract.
+	// FileTopLock controls whether the baseline top hit's file leads the
+	// result, with the top hit first unless it is the file's own node and the
+	// file has symbols; the other hits then follow by score, each discounted
+	// for the hits its file already placed. Without it, every file places one
+	// leader before any sibling. Nil follows FileFirst.
 	FileTopLock *bool
 	// IncludeRankingMetadata exposes internal file queues for workspace fusion.
 	IncludeRankingMetadata bool
@@ -91,15 +94,15 @@ type AskHit struct {
 	Code  string  `json:"code,omitempty"`
 	// SourceHash tracks revisions without exposing internal graph metadata.
 	SourceHash string `json:"-"`
+	// Methods lists a type hit's methods for text output, "name L1-L9" joined
+	// by " · "; it is not part of the JSON contract.
+	Methods string `json:"-"`
 	// ContentRef identifies source delivered to callers using opt-in deduplication.
 	ContentRef string `json:"contentRef,omitempty"`
 	Unchanged  bool   `json:"unchanged,omitempty"`
 	// ScopeAfterCode serializes scope after code: a workspace hit gains its
 	// scope by object spread, which appends a key the child hit lacked.
 	ScopeAfterCode bool `json:"-"`
-	// NameTerms counts the distinct query terms the hit's name matches, the
-	// name-coverage tier; it stays zero on downranked paths (tests, copies).
-	NameTerms int `json:"-"`
 }
 
 // MarshalJSON keeps the TypeScript key order, including a workspace hit's

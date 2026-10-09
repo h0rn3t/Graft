@@ -1,7 +1,6 @@
 package graph
 
 import (
-	"cmp"
 	"maps"
 	"math"
 	"regexp"
@@ -13,16 +12,21 @@ import (
 )
 
 // The lexical ranking combines bounded file ranking, comparable-scope fusion,
-// personalized PageRank, and name-coverage tiers over the final selection. It
+// personalized PageRank, and a score-ordered selection across file queues. It
 // started as a bit-for-bit port of the TypeScript ranking and has since moved
-// on (inflection folding, tiers); the Go goldens and ranking tests now pin it.
-// Floating-point sums still run in insertion order and sorts stay stable, and
-// each product that feeds a sum is wrapped in float64() so the compiler cannot
-// fuse it into an FMA, which keeps scores reproducible across platforms.
+// on (inflection folding, the file selection); the Go goldens and ranking
+// tests now pin it. Floating-point sums still run in insertion order and sorts
+// stay stable, and each product that feeds a sum is wrapped in float64() so the
+// compiler cannot fuse it into an FMA, which keeps scores reproducible across
+// platforms.
 
 const (
 	askRescueFloorTS = 0.15
 	askGraphWeightTS = 0.5
+	// askFileDecay discounts a hit once for every hit its file already placed:
+	// a file that answers the query fills several places, and the next file
+	// takes over once its scores fall that far behind.
+	askFileDecay = 0.9
 )
 
 var (
@@ -853,27 +857,79 @@ func askRankScopesAndFuse(scopes []string, ops askScopeOps, compare func(a, b st
 
 // ── file-selection.ts ────────────────────────────────────────────────────────
 
-func askRoundRobinQueues(queues [][]*AskHit, limit float64) []*AskHit {
-	capacity := JSQueueCap(limit)
+// askFileQueue is one file's hits in display order: hits holds those known so
+// far, and more, until it is called, materializes the file's whole queue.
+type askFileQueue struct {
+	hits []*AskHit
+	more func() []*AskHit
+}
+
+// askSelectAcrossFiles orders the hits of per-file queues. Each step takes the
+// queue head whose score, discounted by askFileDecay for every hit its file
+// already placed, is highest; a tie goes to the earlier queue. With lead set,
+// the first queue's head goes first whatever its score. A file's own node
+// carries no code, so it waits behind the file's symbols. A capacity below
+// zero sets no cap.
+func askSelectAcrossFiles(queues []askFileQueue, lead bool, isFile func(*AskHit) bool, capacity int) []*AskHit {
 	out := make([]*AskHit, 0)
 	if capacity == 0 {
 		return out
 	}
-	for depth := 0; capacity < 0 || len(out) < capacity; depth++ {
-		added := false
-		for _, queue := range queues {
-			if depth >= len(queue) {
+	taken := make([]int, len(queues))
+	// settle materializes queue i around the hits it already placed and moves
+	// file nodes behind the symbols still to come.
+	settle := func(i int) {
+		queue := &queues[i]
+		if queue.more != nil {
+			placed := queue.hits[:taken[i]]
+			hits := slices.Clone(placed)
+			for _, hit := range queue.more() {
+				if !slices.ContainsFunc(placed, func(other *AskHit) bool { return sameAskHit(*other, *hit) }) {
+					hits = append(hits, hit)
+				}
+			}
+			queue.hits, queue.more = hits, nil
+		}
+		slices.SortStableFunc(queue.hits[taken[i]:], func(a, b *AskHit) int {
+			switch {
+			case isFile(a) == isFile(b):
+				return 0
+			case isFile(a):
+				return 1
+			}
+			return -1
+		})
+	}
+	if lead && len(queues) > 0 {
+		settle(0)
+		if len(queues[0].hits) > 0 {
+			out = append(out, queues[0].hits[0])
+			taken[0] = 1
+		}
+	}
+	for capacity < 0 || len(out) < capacity {
+		best, bestScore := -1, 0.0
+		for i := range queues {
+			if taken[i] == len(queues[i].hits) && queues[i].more != nil {
+				settle(i)
+			}
+			if taken[i] == len(queues[i].hits) {
 				continue
 			}
-			out = append(out, queue[depth])
-			added = true
-			if capacity >= 0 && len(out) >= capacity {
-				break
+			score := queues[i].hits[taken[i]].Score * math.Pow(askFileDecay, float64(taken[i]))
+			if best < 0 || score > bestScore {
+				best, bestScore = i, score
 			}
 		}
-		if !added {
-			break
+		if best < 0 {
+			return out
 		}
+		if isFile(queues[best].hits[taken[best]]) && queues[best].more != nil {
+			settle(best) // one of the file's symbols may lead instead
+			continue
+		}
+		out = append(out, queues[best].hits[taken[best]])
+		taken[best]++
 	}
 	return out
 }
@@ -982,6 +1038,7 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 	matchedOf := make(map[*AskHit]float64)
 	matchedStrongOf := make(map[*AskHit]float64)
 	selectionGroupOf := make(map[*AskHit]string)
+	fileNodeHits := make(map[*AskHit]bool)
 
 	byID := make(map[string]NodeV1, len(wiring.Nodes))
 	for _, node := range wiring.Nodes {
@@ -1014,15 +1071,15 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 			hit.Doc = *doc
 		}
 		hit.Scope = scope
+		if node.Kind == Kind("file") {
+			fileNodeHits[hit] = true
+		}
 		if doc, ok := docsByID[id]; ok {
 			matchedOf[hit] = askMatchedIDFShare(q, []map[string]int{doc.name, doc.path, doc.body}, idf, defaultIDF)
 			if node.Kind == Kind("file") {
 				matchedStrongOf[hit] = 0
 			} else {
 				matchedStrongOf[hit] = askMatchedIDFShare(q, []map[string]int{doc.name}, idf, defaultIDF)
-				if testFactor(node.Path) == 1 {
-					hit.NameTerms = len(askMatchedStrongTerms(q, doc.name).terms)
-				}
 			}
 		} else {
 			matchedOf[hit], matchedStrongOf[hit] = 0, 0
@@ -1450,91 +1507,54 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 	slices.SortStableFunc(unlockedGroups, func(a, b askGroupTS) int {
 		return scoreOrder(a.hits[0], b.hits[0])
 	})
-	projectedGroups := unlockedGroups
-	lockedGroupKey := ""
-	locked := false
-	if fileTopLock && fileFirst && len(baselineScored) > 0 {
-		baselineTop := baselineScored[0]
-		key := groupOf(baselineTop, "locked:top")
-		lockedGroupKey, locked = key, true
-		var existing *askGroupTS
-		for index := range unlockedGroups {
-			if unlockedGroups[index].key == key {
-				existing = &unlockedGroups[index]
-				break
-			}
-		}
-		var baselineQueue []*AskHit
-		if includeRankingMetadata || limit > float64(len(unlockedGroups)) {
-			if queue, ok := baselineQueueByGroup[key]; ok {
-				baselineQueue = queue()
-			} else {
-				for _, hit := range baselineScored {
-					if groupOf(hit, "") == key {
-						baselineQueue = append(baselineQueue, hit)
-					}
-				}
-			}
-		}
-		var lockedGroup askGroupTS
-		if existing != nil {
-			lockedGroup = *existing
-			lockedGroup.hits = []*AskHit{baselineTop}
-			for _, hit := range baselineQueue {
-				if !sameAskHit(*hit, *baselineTop) {
-					lockedGroup.hits = append(lockedGroup.hits, hit)
-				}
-			}
-		} else {
-			lockedGroup = askGroupTS{key: key, hits: []*AskHit{baselineTop}, coverage: matchedOf[baselineTop], coverageStrong: matchedStrongOf[baselineTop]}
-			if len(baselineQueue) > 0 {
-				lockedGroup.hits = baselineQueue
-			}
-		}
-		projectedGroups = []askGroupTS{lockedGroup}
-		for _, group := range unlockedGroups {
-			if group.key != key {
-				projectedGroups = append(projectedGroups, group)
-			}
-		}
-	}
-	if fileTopLock && fileFirst && !includeRankingMetadata && limit > float64(len(projectedGroups)) {
-		expanded := make([]askGroupTS, 0, len(projectedGroups))
-		for _, group := range projectedGroups {
-			if !locked || group.key != lockedGroupKey {
-				if queue, ok := fileQueueByGroup[group.key]; ok {
-					group.hits = queue()
-				}
-			}
-			expanded = append(expanded, group)
-		}
-		projectedGroups = expanded
-	}
 	var selected []*AskHit
 	switch {
 	case fileTopLock && fileFirst:
-		queues := make([][]*AskHit, 0, len(projectedGroups))
-		for _, group := range projectedGroups {
-			queues = append(queues, group.hits)
+		// The baseline top's file leads with its whole queue; every other file
+		// starts from its leader and is materialized only when it is reached.
+		queues := make([]askFileQueue, 0, len(unlockedGroups)+1)
+		lockedKey := ""
+		if len(baselineScored) > 0 {
+			baselineTop := baselineScored[0]
+			lockedKey = groupOf(baselineTop, "locked:top")
+			var fileHits []*AskHit
+			if queue, ok := baselineQueueByGroup[lockedKey]; ok {
+				fileHits = queue()
+			} else {
+				for _, hit := range baselineScored {
+					if groupOf(hit, "") == lockedKey {
+						fileHits = append(fileHits, hit)
+					}
+				}
+			}
+			hits := []*AskHit{baselineTop}
+			for _, hit := range fileHits {
+				if !sameAskHit(*hit, *baselineTop) {
+					hits = append(hits, hit)
+				}
+			}
+			queues = append(queues, askFileQueue{hits: hits})
 		}
-		selected = askRoundRobinQueues(queues, math.Inf(1))
+		for _, group := range unlockedGroups {
+			if group.key == lockedKey {
+				continue
+			}
+			queue := askFileQueue{hits: group.hits}
+			if !includeRankingMetadata {
+				queue.more = fileQueueByGroup[group.key]
+			}
+			queues = append(queues, queue)
+		}
+		isFile := func(hit *AskHit) bool { return fileNodeHits[hit] }
+		selected = askSelectAcrossFiles(queues, lockedKey != "", isFile, JSQueueCap(limit))
 	case fileFirst:
 		groups := make([]string, 0, len(scored))
 		for index, hit := range scored {
 			groups = append(groups, groupOf(hit, "ungrouped:"+strconv.Itoa(index)))
 		}
-		selected = askFileFirstRoundRobin(groups, scored, math.Inf(1))
+		selected = askFileFirstRoundRobin(groups, scored, limit)
 	default:
-		selected = slices.Clone(scored)
-	}
-	// Name-coverage tiers: the round-robin runs unbounded, a stable sort puts
-	// hits whose names match more query terms first, and only then is the
-	// selection cut, so file diversity and score order hold within each tier.
-	slices.SortStableFunc(selected, func(left, right *AskHit) int {
-		return cmp.Compare(right.NameTerms, left.NameTerms)
-	})
-	if capacity := JSQueueCap(limit); fileFirst && capacity >= 0 {
-		selected = selected[:min(capacity, len(selected))]
+		selected = scored
 	}
 	var top *AskHit
 	if len(selected) > 0 {

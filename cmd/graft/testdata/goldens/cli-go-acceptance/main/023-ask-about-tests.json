@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "1. testStore · function\n   src/store.test.ts:L2-L2\n   function testStore()\n\n2. openStore · function\n   src/store.ts:L7-L7\n   function openStore(): Store\n\n3. storeKeys · function\n   src/store_util.ts:L2-L2\n   function storeKeys(): string[]\n\n4. Store · class\n   src/store.ts:L2-L6\n   class Store\n\n5. src/app.tsx (file)\n\n6. src/format.js (file)\n\n7. src/store.test.ts (file)\n\n8. src/store.ts (file)\n",
+  "stdout": "1. testStore · function\n   src/store.test.ts:L2-L2\n   function testStore()\n\n2. src/store.test.ts (file)\n\n3. openStore · function\n   src/store.ts:L7-L7\n   function openStore(): Store\n\n4. storeKeys · function\n   src/store_util.ts:L2-L2\n   function storeKeys(): string[]\n\n5. src/store_util.ts (file)\n\n6. Store · class\n   src/store.ts:L2-L6\n   class Store\n\n7. put · method\n   src/store.ts:L5-L5\n   put(key: string, value: string): void\n\n8. App · function\n   src/app.tsx:L2-L2\n   function App()\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

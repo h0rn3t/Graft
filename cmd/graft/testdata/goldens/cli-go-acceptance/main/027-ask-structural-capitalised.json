@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "1. encode_twice · function\n   native/codec.c:L3-L3\n   int encode_twice(int value) { return encode(encode(value)); }\n\n2. encode · function\n   native/codec.h:L1-L1\n   int encode(int value);\n\n3. encode · function\n   native/codec.c:L2-L2\n   int encode(int value) { return value + 1; }\n",
+  "stdout": "1. encode_twice · function\n   native/codec.c:L3-L3\n   int encode_twice(int value) { return encode(encode(value)); }\n\n2. encode · function\n   native/codec.c:L2-L2\n   int encode(int value) { return value + 1; }\n\n3. encode · function\n   native/codec.h:L1-L1\n   int encode(int value);\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

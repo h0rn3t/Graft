@@ -11,7 +11,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "1. encode_twice · function\n   native/codec.c:L3-L3\n\n```\nint encode_twice(int value) { return encode(encode(value)); }\n```\n\n2. encode · function\n   native/codec.h:L1-L1\n\n```\nint encode(int value);\n```\n",
+  "stdout": "1. encode_twice · function\n   native/codec.c:L3-L3\n\n```\nint encode_twice(int value) { return encode(encode(value)); }\n```\n\n2. encode · function\n   native/codec.c:L2-L2\n\n```\nint encode(int value) { return value + 1; }\n```\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

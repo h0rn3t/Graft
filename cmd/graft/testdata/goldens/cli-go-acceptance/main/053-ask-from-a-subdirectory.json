@@ -8,7 +8,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "1. normalize · function\n   py/util.py:L1-L2\n\n```\ndef normalize(text):\n    return text.strip().lower()\n```\n\n2. handle · method\n   py/service.py:L4-L5\n\n```\n    def handle(self, text):\n        return normalize(self.prefix(text))\n```\n\n3. py/service.py (file)\n\n4. Service · class\n   py/service.py:L3-L8\n\n```\nclass Service:\n    def handle(self, text):\n        return normalize(self.prefix(text))\n\n    def prefix(self, text):\n        return 'svc:' + text\n```\n\n5. prefix · method\n   py/service.py:L7-L8\n\n```\n    def prefix(self, text):\n        return 'svc:' + text\n```\n",
+  "stdout": "1. normalize · function\n   py/util.py:L1-L2\n\n```\ndef normalize(text):\n    return text.strip().lower()\n```\n\n2. handle · method\n   py/service.py:L4-L5\n\n```\n    def handle(self, text):\n        return normalize(self.prefix(text))\n```\n\n3. Service · class\n   py/service.py:L3-L8\n   methods: handle L4-L5 · prefix L7-L8\n\n```\nclass Service:\n    def handle(self, text):\n        return normalize(self.prefix(text))\n\n    def prefix(self, text):\n        return 'svc:' + text\n```\n\n4. prefix · method\n   py/service.py:L7-L8\n\n```\n    def prefix(self, text):\n        return 'svc:' + text\n```\n\n5. py/service.py (file)\n",
   "stderr": "[graft] no graft/ here — answering from <REPO>/graft\n",
   "files": {},
   "checkFiles": false

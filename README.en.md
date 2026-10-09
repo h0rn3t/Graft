@@ -420,7 +420,8 @@ graft --version, -v                  # print the installed version
 `ask` prefers production code over fixture, generated, and vendored copies;
 explicit category queries or `--in` paths still retrieve those copies.
 Source excerpts keep up to eight lines, including query matches with exact
-line numbers. `--full` expands definitions within the shared `--budget`
+line numbers. A struct, class or interface hit lists its methods with their
+spans, up to ten, so the next read can name them. `--full` expands definitions within the shared `--budget`
 (default 2000, range 128–64000 estimated tokens, measured as UTF-16 length / 4).
 The result limit applies to ranked matches; edit intent can add up to six
 directly related symbols. JSON metadata counts toward this budget too.

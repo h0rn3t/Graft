@@ -165,6 +165,54 @@ func setAskSourceHashes(wiring graph.GraphV1, hits []graph.AskHit) {
 	}
 }
 
+// setAskMethods names each type hit's methods, the ones the graph records for
+// that type in its package directory, so the next read can ask for them
+// directly. A long list keeps its first ten.
+func setAskMethods(wiring graph.GraphV1, hits []graph.AskHit) {
+	const shown = 10
+	type owner struct{ dir, name string }
+	methods := make(map[owner][]graph.NodeV1)
+	for _, node := range wiring.Nodes {
+		if node.Owner != nil {
+			key := owner{filepath.Dir(node.Path), *node.Owner}
+			methods[key] = append(methods[key], node)
+		}
+	}
+	if len(methods) == 0 {
+		return
+	}
+	// Keyed by title as well as pointer: a one-line class shares its span with
+	// the methods written on that line.
+	types := make(map[string]graph.NodeV1)
+	for _, node := range wiring.Nodes {
+		if node.Owner == nil && node.Kind != "file" {
+			types[node.Name+" · "+string(node.Kind)+"\x00"+node.Path+":"+node.Span] = node
+		}
+	}
+	for i := range hits {
+		node, ok := types[hits[i].Title+"\x00"+hits[i].Pointer]
+		if !ok {
+			continue
+		}
+		members := methods[owner{filepath.Dir(node.Path), node.Name}]
+		if len(members) == 0 {
+			continue
+		}
+		names := make([]string, 0, min(len(members), shown)+1)
+		for _, member := range members[:min(len(members), shown)] {
+			location := member.Span
+			if member.Path != node.Path {
+				location = member.Path + ":" + member.Span
+			}
+			names = append(names, member.Name+" "+location)
+		}
+		if len(members) > shown {
+			names = append(names, fmt.Sprintf("+%d more", len(members)-shown))
+		}
+		hits[i].Methods = strings.Join(names, " · ")
+	}
+}
+
 func addWorkspaceEditContext(root string, opts callersOptions, result *graph.AskResult) {
 	if len(result.Hits) == 0 {
 		return

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -75,6 +74,7 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 	}
 	if opts.source {
 		setAskSourceHashes(*loaded, result.Hits)
+		setAskMethods(*loaded, result.Hits)
 		inlineAskHits(root, askCruxByPointer(*loaded), result.Hits, opts.full, opts.query)
 		if !opts.full {
 			expandNamedAskHit(root, result.Hits, opts.query, budget)
@@ -328,18 +328,19 @@ func runWorkspaceAsk(root, contextDir string, children []string, opts callersOpt
 			}
 		}
 	}
+	fileNode := func(hit graph.AskHit) int {
+		if strings.HasSuffix(hit.Title, " · file") {
+			return 1
+		}
+		return 0
+	}
 	projectedHits := make([][]graph.AskHit, 0, len(projectedGroups))
 	for _, group := range projectedGroups {
+		// A file's own node carries no code: it waits behind the file's symbols.
+		slices.SortStableFunc(group.hits, func(a, b graph.AskHit) int { return cmp.Compare(fileNode(a), fileNode(b)) })
 		projectedHits = append(projectedHits, group.hits)
 	}
-	// Name-coverage tiers hold within each child scope: the fused order runs
-	// unbounded, each scope's hits are reordered in the positions it holds,
-	// and only then is the answer cut to the limit.
-	hits := workspaceRoundRobin(projectedHits, math.Inf(1))
-	tierWithinScopes(hits)
-	if capacity := graph.JSQueueCap(limit); capacity >= 0 {
-		hits = hits[:min(capacity, len(hits))]
-	}
+	hits := workspaceRoundRobin(projectedHits, limit)
 	result := graph.AskResult{Query: opts.query, Mode: "empty", Hits: hits, Distinctive: distinctive}
 	if len(hits) > 0 {
 		result.Mode = "lexical"
@@ -473,29 +474,6 @@ func workspaceRoundRobin(groups [][]graph.AskHit, limit float64) []graph.AskHit 
 		}
 		if !added {
 			return selected
-		}
-	}
-}
-
-// tierWithinScopes orders each scope's hits by name coverage, most query terms
-// first, while every scope keeps the positions it holds in the fused answer.
-func tierWithinScopes(hits []graph.AskHit) {
-	positions := make(map[string][]int)
-	for i, hit := range hits {
-		scope := ""
-		if hit.Scope != nil {
-			scope = *hit.Scope
-		}
-		positions[scope] = append(positions[scope], i)
-	}
-	for _, indexes := range positions {
-		scoped := make([]graph.AskHit, len(indexes))
-		for j, i := range indexes {
-			scoped[j] = hits[i]
-		}
-		slices.SortStableFunc(scoped, func(left, right graph.AskHit) int { return cmp.Compare(right.NameTerms, left.NameTerms) })
-		for j, i := range indexes {
-			hits[i] = scoped[j]
 		}
 	}
 }
@@ -667,6 +645,9 @@ func formatAskText(result graph.AskResult, mcp bool) string {
 			}
 			if hit.Doc != "" {
 				lines = append(lines, "   "+hit.Doc)
+			}
+			if hit.Methods != "" {
+				lines = append(lines, "   methods: "+hit.Methods)
 			}
 			if hit.Code != "" {
 				lines = append(lines, "", "```", askExcerptText(hit.Code, mcp), "```")

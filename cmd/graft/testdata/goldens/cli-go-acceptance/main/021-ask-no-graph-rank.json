@@ -8,7 +8,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "1. Worker · class\n   java/Worker.java:L1-L1\n   class Worker\n\n2. compute · method\n   java/Worker.java:L1-L1\n   int compute()\n\n3. java/Worker.java (file)\n\n4. run · method\n   java/Worker.java:L1-L1\n   int run()\n",
+  "stdout": "1. Worker · class\n   java/Worker.java:L1-L1\n   class Worker\n\n2. compute · method\n   java/Worker.java:L1-L1\n   int compute()\n\n3. run · method\n   java/Worker.java:L1-L1\n   int run()\n\n4. java/Worker.java (file)\n",
   "stderr": "",
   "files": {},
   "checkFiles": false
