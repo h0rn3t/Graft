@@ -78,7 +78,8 @@ func TestResolveEdgesContract(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			raw := []rawEdge{{source: "a.ts#Child", relation: "extends", name: "Base", file: "a.ts"}, tt.raw}
-			got := resolveEdges(nodes, raw, tt.modules)[1:]
+			edges, _ := resolveEdges(nodes, raw, tt.modules)
+			got := edges[1:]
 			if len(got) == 0 && len(tt.want) == 0 {
 				return
 			}

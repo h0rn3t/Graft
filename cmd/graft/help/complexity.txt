@@ -1,0 +1,16 @@
+Usage: graft complexity [options] [dir]
+
+Most complex functions by cyclomatic complexity ($0, no LLM). With --threshold,
+lists those above it and exits 1 when there are any — a CI gate
+
+Arguments:
+  dir              repository root (default: nearest ancestor with a graft/
+                   index)
+
+Options:
+  -n, --limit <n>  how many functions to list (default 20)
+  --threshold <n>  list every function above n and exit 1 if there is one
+  --in <path>      narrow to nodes at or under this path prefix
+  --json           output as JSON
+  --no-refresh     skip the freshness check — answer from the graph as-is
+  -h, --help       display help for command

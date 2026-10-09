@@ -86,10 +86,12 @@ type resolveIndex struct {
 	// keyed by its last segment: `users` finds `app.users`.
 	sqlTypesBySegment map[string][]NodeV1
 	family            map[string]string
+	unresolved        UnresolvedCalls
 }
 
-// resolveEdges turns raw edge intents into GraphV1 edges (resolve.ts resolveEdges).
-func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) []EdgeV1 {
+// resolveEdges turns raw edge intents into GraphV1 edges (resolve.ts
+// resolveEdges) and counts the calls it could not bind.
+func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) ([]EdgeV1, UnresolvedCalls) {
 	ix := resolveIndex{
 		byID: make(map[string]NodeV1, len(nodes)), globalName: make(map[string][]NodeV1),
 		perFileName: make(map[string]map[string][]NodeV1), ownerMethod: make(map[string][]NodeV1),
@@ -156,7 +158,11 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) []Ed
 			continue
 		}
 		if edge.relation == "extends" {
-			ix.classParents[source.Name] = append(ix.classParents[source.Name], edge.name)
+			parent := edge.name
+			if strings.HasSuffix(edge.file, ".go") { // methods are owned by `Type`, never `pkg.Type`
+				parent = parent[strings.LastIndexByte(parent, '.')+1:]
+			}
+			ix.classParents[source.Name] = append(ix.classParents[source.Name], parent)
 		}
 	}
 
@@ -176,6 +182,8 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) []Ed
 			add(edge.source, edge.targetID, "contains", "extracted")
 		case edge.relation == "imports" && edge.specifier != "":
 			add(edge.source, ix.resolveImportTarget(edge), "imports", "extracted")
+		case edge.relation == "extends" && strings.HasSuffix(edge.file, ".go"):
+			ix.resolveGoEmbed(edge, add)
 		case edge.relation == "extends" || edge.relation == "implements":
 			kinds := []Kind{"class", "interface"}
 			if edge.relation == "implements" {
@@ -192,7 +200,8 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) []Ed
 			ix.resolveCall(edge, add)
 		}
 	}
-	return edges
+	ix.addGoImplements(nodes, edges, add)
+	return edges, ix.unresolved
 }
 
 func (ix *resolveIndex) resolveImportTarget(edge rawEdge) string {
@@ -253,12 +262,18 @@ func (ix *resolveIndex) resolveReference(edge rawEdge, add func(string, string, 
 }
 
 func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relation, Confidence)) {
+	if edge.specifier != "" && strings.HasSuffix(edge.file, ".go") {
+		ix.resolveGoPackageCall(edge, add)
+		return
+	}
 	if edge.viaMember {
 		if edge.recvType == "" {
+			ix.unresolved.ReceiverUnknown++
 			return
 		}
 		hit := ix.resolveTypedMember(edge.recvType, edge.name, edge.file, edge.argCount)
 		if hit.ambiguous {
+			ix.unresolved.MemberAmbiguous++
 			return
 		}
 		if hit.id != "" {
@@ -266,6 +281,7 @@ func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relat
 			return
 		}
 		if !edge.implicitSelf {
+			ix.unresolved.MemberNotInGraph++
 			return
 		}
 	}
@@ -282,10 +298,17 @@ func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relat
 	}
 	hit, ok := ix.resolveName(edge.name, edge.file, kinds)
 	if !ok && pyExtension.MatchString(edge.file) {
-		hit, ok = ix.resolveName(edge.name, edge.file, []Kind{"class"})
+		if class, found := ix.resolveName(edge.name, edge.file, []Kind{"class"}); found || class.ambiguous {
+			hit, ok = class, found
+		}
 	}
-	if ok {
+	switch {
+	case ok:
 		add(edge.source, hit.id, "calls", hit.confidence)
+	case hit.ambiguous:
+		ix.unresolved.NameAmbiguous++
+	default:
+		ix.unresolved.NameNotInGraph++
 	}
 }
 
@@ -303,7 +326,8 @@ func ownerFromMethodID(id string) string {
 }
 
 // resolveName matches a bare name: a unique same-file node is `extracted`, a
-// unique reachable node elsewhere is `inferred`, anything else is unresolved.
+// unique reachable node elsewhere is `inferred`, anything else is unresolved,
+// and marked ambiguous when several nodes match.
 func (ix *resolveIndex) resolveName(name, file string, kinds []Kind) (resolved, bool) {
 	var local []NodeV1
 	for _, node := range ix.perFileName[file][name] {
@@ -314,16 +338,18 @@ func (ix *resolveIndex) resolveName(name, file string, kinds []Kind) (resolved, 
 	if len(local) == 1 {
 		return resolved{id: local[0].ID, confidence: "extracted"}, true
 	}
+	// An unqualified Go identifier names a declaration of its own package.
+	goFile := strings.HasSuffix(file, ".go")
 	var global []NodeV1
 	for _, node := range ix.globalName[name] {
-		if slices.Contains(kinds, node.Kind) && ix.reachable(file, node.Path) {
+		if slices.Contains(kinds, node.Kind) && ix.reachable(file, node.Path) && (!goFile || path.Dir(node.Path) == path.Dir(file)) {
 			global = append(global, node)
 		}
 	}
 	if len(global) == 1 {
 		return resolved{id: global[0].ID, confidence: "inferred"}, true
 	}
-	return resolved{}, false
+	return resolved{ambiguous: len(global) > 1}, false
 }
 
 // narrowByArity keeps the overloads a call of argCount arguments can reach, or
@@ -372,6 +398,12 @@ func (ix *resolveIndex) resolveTypedMember(recvType, name, file string, argCount
 				}
 				if index := slices.IndexFunc(candidates, func(c NodeV1) bool { return c.Path == file }); index >= 0 {
 					return resolved{id: candidates[index].ID, confidence: "extracted"}
+				}
+				// Go: one copy of the method in the caller's own package wins.
+				if local := slices.DeleteFunc(slices.Clone(candidates), func(c NodeV1) bool {
+					return !strings.HasSuffix(file, ".go") || path.Dir(c.Path) != path.Dir(file)
+				}); len(local) == 1 {
+					return resolved{id: local[0].ID, confidence: "inferred"}
 				}
 				return resolved{ambiguous: true}
 			}

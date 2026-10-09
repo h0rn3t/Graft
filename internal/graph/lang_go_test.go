@@ -32,7 +32,7 @@ func TestGoGenericReceiverOwnsMethod(t *testing.T) {
 			t.Errorf("extractFile(%q) %s owner = %v, want %q", "stack.go", want.id, owner, want.owner)
 		}
 	}
-	edges := resolveEdges(got.nodes, got.rawEdges, nil)
+	edges, _ := resolveEdges(got.nodes, got.rawEdges, nil)
 	for _, want := range []EdgeV1{
 		{Source: "stack.go#Stack.Twice", Target: "stack.go#Stack.Push", Relation: "calls", Confidence: "extracted"},
 		{Source: "stack.go#build", Target: "stack.go#Stack.Push", Relation: "calls", Confidence: "extracted"},

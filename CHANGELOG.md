@@ -1,5 +1,67 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Code-health and architecture commands.** `graft path <from> <to>` prints
+  the shortest chain of calls, references and imports between two symbols, a
+  call into an interface method continuing to its implementations. `graft dead`
+  lists functions and methods nothing calls, as high (unexported, name used
+  nowhere else), medium (exported) or, with `--all`, low confidence with a
+  reason; entry points and interface implementations are never listed.
+  `graft complexity` ranks functions by cyclomatic complexity, and
+  `--threshold N` exits 1 when one exceeds N, for CI. `graft hotspots` ranks
+  files by recent git commits × summed complexity. `graft cycles` finds
+  dependency cycles between directories or, with `--level file`, files.
+  `graft routes` lists HTTP routes and their handlers for Go net/http, gin,
+  echo and chi, Flask, FastAPI and Django, Express and NestJS, and Spring.
+  Every one refreshes the graph first and takes `--in` and `--json`.
+- **`graft_trace_calls` takes `to`.** With a second symbol the MCP tool answers
+  with the shortest call chain instead of edges, the same answer as `graft path`.
+- **The graph records complexity.** Every function and method with a body
+  carries its cyclomatic complexity, in all eight languages.
+- **Go interfaces have methods and implementations.** An interface's methods
+  are graph nodes, embedded structs and interfaces are `extends` edges, and a
+  type `implements` each in-repo interface whose method set it has — names and
+  arity compared, so those edges are `inferred`. Interfaces that embed a type
+  outside the graph are skipped rather than guessed.
+- **The build counts the calls it could not bind.** `meta.unresolvedCalls` in
+  `wiring.json` holds counts by reason — receiver type unknown, member or name
+  ambiguous or not in the graph, external package — and `graph-quality`
+  reports them, so resolver gaps can be measured.
+- **`graft callers --json` hits carry their edge `confidence`.**
+- **The reviewed oracle assesses `implements`.** The Go fixture gains a
+  `go-implements` partition, and `Saver.Save` joins its `go-contains` facts.
+- **Reviewed tough-case fixtures for Python, TypeScript and Java.** Each pins
+  its current score: the known gaps — `super` and module-alias calls, a
+  factory's return type, `new` in TypeScript, class-qualified Java calls,
+  method-level `implements` outside Go — are listed in the manifests, so the
+  resolver fix that closes one shows up as a test change.
+
+### Changed
+
+- **Go calls resolve across packages without a language server.** `pkg.F()`
+  resolves through the file's imports, and typed parameters, `var x pkg.T` and
+  `x := pkg.NewT()` give `x.M()` its receiver. On graft's own source the static
+  pass binds 4,453 calls instead of 3,048. With gopls installed, `graft build`
+  ends with about the same calls as before — gopls had been finding these, and
+  now resolves 168 instead of 1,622 — but the edges no longer depend on a
+  language server, and they survive the refresh before each query, which keeps
+  no language-server edge for a file that changed.
+- **An unqualified Go name resolves only within its own package.** A bare call
+  no longer binds to a same-named function of another package, and a copy of
+  the code elsewhere in the tree (testdata) no longer makes a package's own
+  calls ambiguous.
+- The extractor version is `go-v13`; the first build after upgrading re-parses
+  every file once.
+
+### Fixed
+
+- **`Direct -> A.Save` resolves.** The call through a typed parameter that the
+  oracle fixture recorded as a known false negative is now found, and
+  `graph-quality --strict` passes on the fixture.
+
 ## 0.4.0-rc.5 - 2026-10-09
 
 ### Fixed

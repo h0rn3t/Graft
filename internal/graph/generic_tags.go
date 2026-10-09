@@ -94,6 +94,7 @@ func extractGenericTags(rel, source, name string, grammar genericGrammar) (extra
 	calls := make([]reference, 0)
 	lines := strings.Split(source, "\n")
 	names := query.CaptureNames()
+	grammarName := name // the loop below shadows name with each symbol's
 	matches := cursor.Matches(query, tree.RootNode(), data)
 	for match := matches.Next(); match != nil; match = matches.Next() {
 		var defNode, nameNode, callNode *sitter.Node
@@ -140,6 +141,22 @@ func extractGenericTags(rel, source, name string, grammar genericGrammar) (extra
 				}
 				if sig != "" {
 					node.Signature = &sig
+				}
+				if kind == "function" || kind == "method" {
+					// A C declarator is captured without its body; the
+					// definition holding the body is between it and whole.
+					for candidate := defNode; candidate != nil; candidate = candidate.Parent() {
+						if candidate.ChildByFieldName("body") != nil {
+							nested := func(inner *sitter.Node) bool {
+								return inner.Kind() == "function_item" || inner.Kind() == "function_definition"
+							}
+							node.Complexity = new(cyclomatic(candidate, grammarName, data, nested))
+							break
+						}
+						if sameNode(candidate, whole) {
+							break
+						}
+					}
 				}
 				nodes = append(nodes, node)
 				defs = append(defs, definition{id: id, start: whole.StartByte(), end: whole.EndByte()})

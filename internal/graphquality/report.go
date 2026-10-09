@@ -30,6 +30,9 @@ type Resolution struct {
 	ResolvedToNode            int  `json:"resolvedToNode"`
 	ResolvedPercent           *int `json:"resolvedPct"`
 	UnresolvedExternalImports int  `json:"unresolvedExternalImports"`
+	// UnresolvedCalls is the build's count of calls bound to no node, by
+	// reason; a graph built before graft recorded it has none.
+	UnresolvedCalls *graphmodel.UnresolvedCalls `json:"unresolvedCalls,omitempty"`
 }
 
 // Connectivity contains graph connectivity metrics for symbol nodes.
@@ -170,6 +173,7 @@ func Analyze(graph Graph, path string) Report {
 			ResolvedToNode:            resolvedCalls,
 			ResolvedPercent:           percentage(resolvedCalls, calls),
 			UnresolvedExternalImports: unresolvedExternalImports,
+			UnresolvedCalls:           graph.Meta.UnresolvedCalls,
 		},
 		Connectivity: Connectivity{
 			OrphanSymbolNodes: orphanSymbolNodes,
@@ -258,6 +262,11 @@ func (report Report) Human() string {
 	fmt.Fprintf(&builder, "  relations:  %s\n", formatCounts(report.ByRelation, report.relationOrder, false))
 	fmt.Fprintf(&builder, "  confidence: %s\n", formatCounts(report.ByConfidence, report.confidenceOrder, false))
 	fmt.Fprintf(&builder, "  calls resolved: %d/%d (%s)\n", report.Resolution.ResolvedToNode, report.Resolution.Calls, formatPercentage(report.Resolution.ResolvedPercent))
+	if unresolved := report.Resolution.UnresolvedCalls; unresolved != nil {
+		fmt.Fprintf(&builder, "  calls dropped: receiver type unknown %d · member ambiguous %d · member not in graph %d · name ambiguous %d · name not in graph %d · external package %d\n",
+			unresolved.ReceiverUnknown, unresolved.MemberAmbiguous, unresolved.MemberNotInGraph,
+			unresolved.NameAmbiguous, unresolved.NameNotInGraph, unresolved.ExternalPackage)
+	}
 	fmt.Fprintf(&builder, "  orphan symbols: %d/%d (%s)\n", report.Connectivity.OrphanSymbolNodes, report.SymbolNodes, formatPercentage(report.Connectivity.OrphanPercent))
 	if report.Invariants.OK {
 		builder.WriteString("  INVARIANTS: OK ✓\n")

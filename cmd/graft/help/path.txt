@@ -1,0 +1,19 @@
+Usage: graft path [options] <from> <to> [dir]
+
+Shortest chain of calls, references and imports from one symbol to another ($0,
+no LLM). A call into an interface method continues to the methods that implement
+it
+
+Arguments:
+  from             the symbol to start from: bare name, qualified
+                   (Class.method), or package-qualified (pkg.Fn)
+  to               the symbol to reach
+  dir              repository root (default: nearest ancestor with a graft/
+                   index)
+
+Options:
+  -d, --depth <n>  longest chain to try, or "all" (default 10)
+  --in <path>      narrow both symbols to nodes at or under this path prefix
+  --json           output as JSON
+  --no-refresh     skip the freshness check — answer from the graph as-is
+  -h, --help       display help for command

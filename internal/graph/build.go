@@ -18,7 +18,7 @@ import (
 // ExtractorID names the native extractor in its cache and fingerprint sidecars.
 // Bump it whenever extraction output or a grammar version changes, so a graph
 // built by an older extractor is never trusted as fresh.
-const ExtractorID = "go-v12"
+const ExtractorID = "go-v13"
 
 var goModuleLine = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)
 
@@ -286,10 +286,13 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		_ = fsutil.WriteFileAtomic(cachePath, data, 0o644) // A cache write failure only costs reuse on the next build.
 	}
 
-	edges := resolveEdges(nodes, rawEdges, modules)
+	edges, unresolved := resolveEdges(nodes, rawEdges, modules)
 	scopes := applyMinSubstanceGuard(discoverScopes(absRoot, relFiles), nodes)
 	result.Graph = GraphV1{
-		Meta:  GraphMeta{Version: 1, NodeCount: len(nodes), EdgeCount: len(edges), Languages: slices.Sorted(maps.Keys(languageSet)), Scopes: &scopes},
+		Meta: GraphMeta{
+			Version: 1, NodeCount: len(nodes), EdgeCount: len(edges), Languages: slices.Sorted(maps.Keys(languageSet)),
+			Scopes: &scopes, UnresolvedCalls: &unresolved,
+		},
 		Nodes: nodes,
 		Edges: edges,
 	}

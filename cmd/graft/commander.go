@@ -141,6 +141,12 @@ func programSpec() *commandSpec {
 		"--no-owners", "--pr-author <who...>", "--no-refresh")
 	add(program, "graft grep [options] <pattern> [dir]", "-i, --ignore-case", "--fixed", "--in <path>", "--json", "--no-refresh")
 	add(program, "graft map [options] [dir]", "--max-dirs <n>", "--json", "--no-refresh")
+	add(program, "graft path [options] <from> <to> [dir]", "-d, --depth <n>", "--in <path>", "--json", "--no-refresh")
+	add(program, "graft dead [options] [dir]", "--in <path>", "--all", "--json", "--no-refresh")
+	add(program, "graft complexity [options] [dir]", "-n, --limit <n>", "--threshold <n>", "--in <path>", "--json", "--no-refresh")
+	add(program, "graft hotspots [options] [dir]", "--commits <n>", "-n, --limit <n>", "--in <path>", "--json", "--no-refresh")
+	add(program, "graft cycles [options] [dir]", "--level <dir|file>", "--in <path>", "--json", "--no-refresh")
+	add(program, "graft routes [options] [dir]", "--in <path>", "--json", "--no-refresh")
 	add(program, "graft init [options] [dir]", "--no-build", "--agents <ids...>", "--all-agents", "--no-agents", "--list-agents", "--no-mcp",
 		"--no-hooks", "--no-statusline", "--dry-run", "-y, --yes", "--no-global")
 	add(program, "graft uninstall [options] [dir]", "-y, --yes", "--keep-cache", "--no-global")

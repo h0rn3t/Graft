@@ -62,6 +62,11 @@ type callersOptions struct {
 	format             string
 	noOwners           bool
 	prAuthors          []string
+	target             string // path: the symbol to reach
+	all                bool   // dead: list low-confidence candidates too
+	threshold          string // complexity: the CI gate
+	commits            string // hotspots: how much history to read
+	level              string // cycles: dir or file
 }
 
 type callersResult struct {
@@ -78,13 +83,14 @@ type symbolOutput struct {
 }
 
 type hitOutput struct {
-	ID       string         `json:"id"`
-	Relation graph.Relation `json:"relation"`
-	Depth    int            `json:"depth"`
-	Name     string         `json:"name,omitempty"`
-	Kind     graph.Kind     `json:"kind,omitempty"`
-	Path     string         `json:"path,omitempty"`
-	Span     string         `json:"span,omitempty"`
+	ID         string           `json:"id"`
+	Relation   graph.Relation   `json:"relation"`
+	Confidence graph.Confidence `json:"confidence,omitempty"`
+	Depth      int              `json:"depth"`
+	Name       string           `json:"name,omitempty"`
+	Kind       graph.Kind       `json:"kind,omitempty"`
+	Path       string           `json:"path,omitempty"`
+	Span       string           `json:"span,omitempty"`
 }
 
 type matchOutput struct {
@@ -207,6 +213,18 @@ func dispatchWithInput(ctx context.Context, parsed invocation, stdin io.Reader, 
 		return runGrep(opts, stdout, stderr)
 	case "map":
 		return runMap(opts, stdout, stderr)
+	case "path":
+		return runPath(opts, stdout, stderr)
+	case "dead":
+		return runDead(opts, stdout, stderr)
+	case "complexity":
+		return runComplexity(opts, stdout, stderr)
+	case "hotspots":
+		return runHotspots(opts, stdout, stderr)
+	case "cycles":
+		return runCycles(opts, stdout, stderr)
+	case "routes":
+		return runRoutes(opts, stdout, stderr)
 	case "mcp":
 		return runMCP(ctx, opts, stdin, stdout, stderr)
 	case "ask":
@@ -251,6 +269,10 @@ func queryOptions(parsed invocation) callersOptions {
 		format:      value("--format"),
 		noOwners:    flags.bools["--no-owners"],
 		prAuthors:   flags.values["--pr-author"],
+		all:         flags.bools["--all"],
+		threshold:   value("--threshold"),
+		commits:     value("--commits"),
+		level:       value("--level"),
 	}
 	if base, ok := flags.value("--base"); ok {
 		opts.base = &base
@@ -273,6 +295,9 @@ func queryOptions(parsed invocation) callersOptions {
 	case "ask", "callers", "skeleton", "grep", "read":
 		opts.query = args[0]
 		args = args[1:]
+	case "path":
+		opts.query, opts.target = args[0], args[1]
+		args = args[2:]
 	}
 	if opts.command == "read" && len(flags.values["--also"]) > 0 {
 		opts.symbols = append([]string{opts.query}, flags.values["--also"]...)
@@ -583,7 +608,7 @@ func symbolJSON(node graph.NodeV1) symbolOutput {
 }
 
 func hitJSON(hit graph.EdgeHit) hitOutput {
-	output := hitOutput{ID: hit.ID, Relation: hit.Relation, Depth: hit.Depth}
+	output := hitOutput{ID: hit.ID, Relation: hit.Relation, Confidence: hit.Confidence, Depth: hit.Depth}
 	if hit.Node != nil {
 		output.Name = hit.Node.Name
 		output.Kind = hit.Node.Kind

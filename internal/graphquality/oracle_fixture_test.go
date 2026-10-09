@@ -28,12 +28,8 @@ func TestOracleGoFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(report.Partitions) != 2 || report.Partitions[0].TP != 3 || report.Partitions[0].FP != 0 || report.Partitions[0].FN != 1 || report.Partitions[1].TP != 10 {
-		t.Errorf("fixture oracle report = %+v, want calls TP=3 FP=0 FN=1 and contains TP=10", report)
-	}
-	wantMissing := []Fact{{Source: "a.go#Direct", Relation: "calls", Target: "a.go#A.Save"}}
-	if !reflect.DeepEqual(report.Partitions[0].FalseNegatives, wantMissing) {
-		t.Errorf("fixture missing = %+v, want %+v", report.Partitions[0].FalseNegatives, wantMissing)
+	if len(report.Partitions) != 3 || !report.OK() || report.Partitions[0].TP != 4 || report.Partitions[1].TP != 11 || report.Partitions[2].TP != 4 {
+		t.Errorf("fixture oracle report = %+v, want calls TP=4, contains TP=11, implements TP=4, and no FP or FN", report)
 	}
 	unassessed := graph
 	unassessed.Edges = append(append([]Edge{}, graph.Edges...), Edge{Source: "dynamic.go#Use", Relation: "calls", Target: "a.go#A.Save"})
@@ -55,7 +51,7 @@ func TestOracleGoFixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if bad.Partitions[0].FP != 1 || bad.Partitions[0].FN != 2 || bad.OK() {
-		t.Errorf("mutated fixture report = %+v, want FP=1 FN=2", bad.Partitions[0])
+	if bad.Partitions[0].FP != 1 || bad.Partitions[0].FN != 1 || bad.OK() {
+		t.Errorf("mutated fixture report = %+v, want FP=1 FN=1", bad.Partitions[0])
 	}
 }

@@ -87,15 +87,16 @@ var mcpTools = []mcpToolDefinition{
 	},
 	{
 		Name:        "graft_trace_calls",
-		Description: "Structural edges for a symbol, over call/reference/import/implements/extends ($0, no LLM). Defaults to direct callers (who depends on it). Set direction:\"out\" for callees (what it calls); set depth>1 (or depth:\"all\" for the full closure) to walk transitively for the full blast radius — every source that breaks if it changes. Run before a multi-file refactor to find ALL affected files.",
+		Description: "Structural edges for a symbol, over call/reference/import/implements/extends ($0, no LLM). Defaults to direct callers (who depends on it). Set direction:\"out\" for callees (what it calls); set depth>1 (or depth:\"all\" for the full closure) to walk transitively for the full blast radius — every source that breaks if it changes. Run before a multi-file refactor to find ALL affected files. Set to:<symbol> instead for the shortest call chain from symbol to that one, interface calls continuing to their implementations.",
 		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"symbol":    map[string]any{"type": "string", "description": "bare name, qualified (Class.method), or package-qualified (pkg.Fn); a file path also works"},
 				"direction": map[string]any{"type": "string", "enum": []string{"in", "out"}, "description": "\"in\" (default) = callers/dependents; \"out\" = callees/dependencies"},
-				"depth":     map[string]any{"description": "transitive walk depth for blast radius (default 1 = direct edges only); pass \"all\" for the full connected closure — every source that would be affected"},
+				"depth":     map[string]any{"description": "transitive walk depth for blast radius (default 1 = direct edges only); pass \"all\" for the full connected closure — every source that would be affected. With to: the longest chain to try (default 10)"},
 				"in":        map[string]any{"type": "string", "description": "narrow matches to nodes at or under this repo-relative path prefix, e.g. server/src"},
+				"to":        map[string]any{"type": "string", "description": "a second symbol: return the shortest chain of calls, references and imports from symbol to it, instead of edges"},
 			},
 			"required": []string{"symbol"},
 		},
@@ -642,7 +643,13 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		if symbol == "" {
 			return mcpResult{text: "graft_trace_calls requires a symbol", isError: true}
 		}
-		if _, workspace := graph.ReadWorkspaceChildren(contextDir); workspace {
+		_, workspace := graph.ReadWorkspaceChildren(contextDir)
+		switch to := mcpString(args["to"]); {
+		case to != "" && workspace:
+			return mcpResult{text: "graft_trace_calls with to: walks one repository's graph — start the server inside the repository that holds both symbols", isError: true}
+		case to != "":
+			return mcpTracePath(contextDir, symbol, to, args, cache)
+		case workspace:
 			return mcpWorkspaceTraceCalls(root, contextDir, symbol, args)
 		}
 		return mcpTraceCalls(root, contextDir, symbol, args, cache)
@@ -802,6 +809,24 @@ func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any) mcp
 
 // mcpDepthValue reads depth as the CLI reads --depth, so 3, "3" and "max"
 // mean the same in both; a value the CLI rejects walks direct edges only.
+// mcpTracePath answers graft_trace_calls with to: the shortest chain from
+// symbol to to, as graft path prints it.
+func mcpTracePath(contextDir, symbol, to string, args map[string]any, cache *queryCache) mcpResult {
+	loaded, err := cache.loadGraph(contextDir)
+	if err != nil {
+		return mcpResult{text: "no graph found — run `graft build` first", isError: true}
+	}
+	depth := pathDefaultDepth
+	if raw, ok := args["depth"]; ok {
+		depth = mcpDepthValue(raw)
+	}
+	result, err := findPath(*loaded, symbol, to, mcpString(args["in"]), depth)
+	if err != nil {
+		return mcpResult{text: err.Error(), isError: true}
+	}
+	return mcpResult{text: result.text()}
+}
+
 func mcpDepthValue(value any) int {
 	raw := ""
 	switch typed := value.(type) {

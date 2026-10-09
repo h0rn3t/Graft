@@ -21,7 +21,7 @@
     "src/math.ts": "export function add(a: number, b: number): number {\n  return a + b;\n}\nexport function sub(a: number, b: number): number {\n  return add(a, -b);\n}\nexport function compute(a: number, b: number): number {\n  return sub(a, b);\n}\n"
   },
   "status": 0,
-  "stdout": "{\n  \"query\": \"add\",\n  \"matches\": [\n    {\n      \"symbol\": {\n        \"id\": \"src/math.ts#add\",\n        \"name\": \"add\",\n        \"kind\": \"function\",\n        \"path\": \"src/math.ts\",\n        \"span\": \"L1-L3\"\n      },\n      \"hits\": [\n        {\n          \"id\": \"src/math.ts#sub\",\n          \"relation\": \"calls\",\n          \"depth\": 1,\n          \"name\": \"sub\",\n          \"kind\": \"function\",\n          \"path\": \"src/math.ts\",\n          \"span\": \"L4-L6\"\n        }\n      ]\n    }\n  ],\n  \"saved\": {\n    \"files\": 1,\n    \"baselineChars\": 223\n  }\n}\n",
+  "stdout": "{\n  \"query\": \"add\",\n  \"matches\": [\n    {\n      \"symbol\": {\n        \"id\": \"src/math.ts#add\",\n        \"name\": \"add\",\n        \"kind\": \"function\",\n        \"path\": \"src/math.ts\",\n        \"span\": \"L1-L3\"\n      },\n      \"hits\": [\n        {\n          \"id\": \"src/math.ts#sub\",\n          \"relation\": \"calls\",\n          \"confidence\": \"extracted\",\n          \"depth\": 1,\n          \"name\": \"sub\",\n          \"kind\": \"function\",\n          \"path\": \"src/math.ts\",\n          \"span\": \"L4-L6\"\n        }\n      ]\n    }\n  ],\n  \"saved\": {\n    \"files\": 1,\n    \"baselineChars\": 223\n  }\n}\n",
   "stderr": "",
   "files": {}
 }

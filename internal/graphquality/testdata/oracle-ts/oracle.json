@@ -1,0 +1,94 @@
+{
+  "version": 1,
+  "sources": [
+    { "path": "dynamic.ts", "sha256": "1243e91e4daa356eb9f1bcb3b8a7c7c4424b277a00790327d2366063374f7a4d" },
+    { "path": "service.ts", "sha256": "7ff284a946e0753a20e62e7979b7c8cbc595cf675989ad3001f8dba2d8f15d53" },
+    { "path": "store.ts", "sha256": "a9b8d39da00850df6ca89580b2515e8524fead937d334a19b187f6cb42b9f7e5" },
+    { "path": "util.ts", "sha256": "ffc04e1ab9376a6856ae5152490afe1e74cc384c3a8280a775399c05b7774620" }
+  ],
+  "build": { "extensions": [".ts"] },
+  "partitions": [
+    {
+      "name": "typescript-calls",
+      "language": "typescript",
+      "relation": "calls",
+      "files": ["store.ts", "util.ts", "service.ts"],
+      "expected": [
+        { "source": "store.ts#Store.put", "relation": "calls", "target": "store.ts#Store.touch" },
+        { "source": "service.ts#Repo.save", "relation": "calls", "target": "store.ts#Store.put" },
+        { "source": "service.ts#Repo.save", "relation": "calls", "target": "util.ts#normalize" },
+        { "source": "service.ts#Repo.save", "relation": "calls", "target": "service.ts#Repo.label" },
+        { "source": "service.ts#Repo.flush", "relation": "calls", "target": "store.ts#Cache.put" },
+        { "source": "service.ts#Repo.flush", "relation": "calls", "target": "store.ts#Cache.describe" },
+        { "source": "service.ts#Repo.load", "relation": "calls", "target": "dynamic.ts#each" },
+        { "source": "service.ts#Repo.load", "relation": "calls", "target": "store.ts#Store.put" },
+        { "source": "service.ts#AuditCache.put", "relation": "calls", "target": "store.ts#Cache.put" },
+        { "source": "service.ts#AuditCache.put", "relation": "calls", "target": "util.ts#normalize" },
+        { "source": "service.ts#AuditCache.report", "relation": "calls", "target": "store.ts#Cache.describe" },
+        { "source": "service.ts#run", "relation": "calls", "target": "store.ts#Store" },
+        { "source": "service.ts#run", "relation": "calls", "target": "store.ts#Store.touch" },
+        { "source": "service.ts#run", "relation": "calls", "target": "service.ts#Repo" },
+        { "source": "service.ts#run", "relation": "calls", "target": "service.ts#Repo.load" },
+        { "source": "service.ts#run", "relation": "calls", "target": "dynamic.ts#each" },
+        { "source": "service.ts#run", "relation": "calls", "target": "service.ts#Repo.save" }
+      ]
+    },
+    {
+      "name": "typescript-contains",
+      "language": "typescript",
+      "relation": "contains",
+      "files": ["store.ts", "util.ts", "service.ts", "dynamic.ts"],
+      "expected": [
+        { "source": "store.ts", "relation": "contains", "target": "store.ts#Saver" },
+        { "source": "store.ts#Saver", "relation": "contains", "target": "store.ts#Saver.save" },
+        { "source": "store.ts", "relation": "contains", "target": "store.ts#Store" },
+        { "source": "store.ts#Store", "relation": "contains", "target": "store.ts#Store.put" },
+        { "source": "store.ts#Store", "relation": "contains", "target": "store.ts#Store.touch" },
+        { "source": "store.ts", "relation": "contains", "target": "store.ts#Cache" },
+        { "source": "store.ts#Cache", "relation": "contains", "target": "store.ts#Cache.put" },
+        { "source": "store.ts#Cache", "relation": "contains", "target": "store.ts#Cache.describe" },
+        { "source": "util.ts", "relation": "contains", "target": "util.ts#normalize" },
+        { "source": "service.ts", "relation": "contains", "target": "service.ts#Repo" },
+        { "source": "service.ts#Repo", "relation": "contains", "target": "service.ts#Repo.constructor" },
+        { "source": "service.ts#Repo", "relation": "contains", "target": "service.ts#Repo.save" },
+        { "source": "service.ts#Repo", "relation": "contains", "target": "service.ts#Repo.label" },
+        { "source": "service.ts#Repo", "relation": "contains", "target": "service.ts#Repo.flush" },
+        { "source": "service.ts#Repo", "relation": "contains", "target": "service.ts#Repo.load" },
+        { "source": "service.ts", "relation": "contains", "target": "service.ts#AuditCache" },
+        { "source": "service.ts#AuditCache", "relation": "contains", "target": "service.ts#AuditCache.put" },
+        { "source": "service.ts#AuditCache", "relation": "contains", "target": "service.ts#AuditCache.report" },
+        { "source": "service.ts", "relation": "contains", "target": "service.ts#run" },
+        { "source": "dynamic.ts", "relation": "contains", "target": "dynamic.ts#each" },
+        { "source": "dynamic.ts", "relation": "contains", "target": "dynamic.ts#byName" },
+        { "source": "dynamic.ts", "relation": "contains", "target": "dynamic.ts#saveOne" }
+      ]
+    },
+    {
+      "name": "typescript-extends",
+      "language": "typescript",
+      "relation": "extends",
+      "files": ["store.ts", "util.ts", "service.ts", "dynamic.ts"],
+      "expected": [
+        { "source": "service.ts#AuditCache", "relation": "extends", "target": "store.ts#Cache" }
+      ]
+    },
+    {
+      "name": "typescript-implements",
+      "language": "typescript",
+      "relation": "implements",
+      "files": ["store.ts", "util.ts", "service.ts", "dynamic.ts"],
+      "expected": [
+        { "source": "service.ts#Repo", "relation": "implements", "target": "store.ts#Saver" },
+        { "source": "service.ts#Repo.save", "relation": "implements", "target": "store.ts#Saver.save" }
+      ]
+    }
+  ],
+  "limitations": [
+    "Calls from dynamic.ts are unassessed: a callback parameter call, an element-access call obj[name]() and an interface-typed receiver do not identify one static target.",
+    "Calls to built-in library methods (Array.prototype.push, String.prototype.trim) have no node in the fixture and are not facts.",
+    "Known FN: new X() is not extracted as a call, so run -> Store and run -> Repo are missing; instantiation targets the class node, as for Java and Python.",
+    "Known FN: a call through an aliased named import (import { normalize as clean }; clean()) is not resolved to normalize (Repo.save, AuditCache.put).",
+    "Known FN: super.put() is not resolved to the base-class method (AuditCache.put -> Cache.put).",
+    "Known FN: interface method signatures are not symbols, so Saver contains Saver.save is missing, and method-level implements (Repo.save -> Saver.save) is only derived for Go."
+  ]
+}

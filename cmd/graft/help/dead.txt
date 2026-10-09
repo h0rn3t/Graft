@@ -1,0 +1,15 @@
+Usage: graft dead [options] [dir]
+
+Functions and methods nothing calls or references, with a confidence: high
+(unexported, name used nowhere else), medium (exported), low (a caller the graph
+cannot see may exist) ($0, no LLM)
+
+Arguments:
+  dir           repository root (default: nearest ancestor with a graft/ index)
+
+Options:
+  --in <path>   narrow to nodes at or under this path prefix
+  --all         also list low-confidence candidates, each with its reason
+  --json        output as JSON
+  --no-refresh  skip the freshness check — answer from the graph as-is
+  -h, --help    display help for command

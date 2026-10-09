@@ -1,0 +1,90 @@
+{
+  "version": 1,
+  "sources": [
+    { "path": "shop/dynamic.py", "sha256": "98b925f8858fc919b182c3c02b23b6c901451b887372e4f853a043de50492bd6" },
+    { "path": "shop/service.py", "sha256": "9037cf22c88912a76c7c49c12124e782d3469727c528be58a34af9ee10fb8686" },
+    { "path": "shop/store.py", "sha256": "fa3cfdbf59f633836e9f6aedefbf016ee27187ca892aed674e692bd0a6d4abe3" },
+    { "path": "shop/util.py", "sha256": "0685e76de608d894a99649706a6090424e5cefba2bb83c56f691b3d09a4f5a28" }
+  ],
+  "build": { "extensions": [".py"] },
+  "partitions": [
+    {
+      "name": "python-calls",
+      "language": "python",
+      "relation": "calls",
+      "files": ["shop/util.py", "shop/store.py", "shop/service.py"],
+      "expected": [
+        { "source": "shop/util.py#helper", "relation": "calls", "target": "shop/util.py#normalize" },
+        { "source": "shop/util.py#normalize", "relation": "calls", "target": "shop/util.py#clean" },
+        { "source": "shop/store.py#Store.put", "relation": "calls", "target": "shop/store.py#Store.touch" },
+        { "source": "shop/store.py#Repo.__init__", "relation": "calls", "target": "shop/store.py#Store" },
+        { "source": "shop/store.py#Repo.save", "relation": "calls", "target": "shop/store.py#Store.put" },
+        { "source": "shop/store.py#Repo.save", "relation": "calls", "target": "shop/store.py#BaseRepo.save" },
+        { "source": "shop/store.py#Repo.flush", "relation": "calls", "target": "shop/store.py#Cache.put" },
+        { "source": "shop/store.py#Repo.flush", "relation": "calls", "target": "shop/store.py#BaseRepo.describe" },
+        { "source": "shop/store.py#Repo.build", "relation": "calls", "target": "shop/store.py#Repo" },
+        { "source": "shop/service.py#run", "relation": "calls", "target": "shop/store.py#Repo.build" },
+        { "source": "shop/service.py#run", "relation": "calls", "target": "shop/store.py#Repo.save" },
+        { "source": "shop/service.py#run", "relation": "calls", "target": "shop/service.py#run.emit" },
+        { "source": "shop/service.py#run.emit", "relation": "calls", "target": "shop/util.py#helper" },
+        { "source": "shop/service.py#check", "relation": "calls", "target": "shop/store.py#Store.put" },
+        { "source": "shop/service.py#check", "relation": "calls", "target": "shop/util.py#helper" },
+        { "source": "shop/service.py#AuditCache.put", "relation": "calls", "target": "shop/store.py#Cache.put" }
+      ]
+    },
+    {
+      "name": "python-contains",
+      "language": "python",
+      "relation": "contains",
+      "files": ["shop/util.py", "shop/store.py", "shop/service.py", "shop/dynamic.py"],
+      "expected": [
+        { "source": "shop/util.py", "relation": "contains", "target": "shop/util.py#helper" },
+        { "source": "shop/util.py", "relation": "contains", "target": "shop/util.py#normalize" },
+        { "source": "shop/util.py", "relation": "contains", "target": "shop/util.py#clean" },
+        { "source": "shop/store.py", "relation": "contains", "target": "shop/store.py#Store" },
+        { "source": "shop/store.py#Store", "relation": "contains", "target": "shop/store.py#Store.__init__" },
+        { "source": "shop/store.py#Store", "relation": "contains", "target": "shop/store.py#Store.put" },
+        { "source": "shop/store.py#Store", "relation": "contains", "target": "shop/store.py#Store.touch" },
+        { "source": "shop/store.py", "relation": "contains", "target": "shop/store.py#Cache" },
+        { "source": "shop/store.py#Cache", "relation": "contains", "target": "shop/store.py#Cache.put" },
+        { "source": "shop/store.py", "relation": "contains", "target": "shop/store.py#BaseRepo" },
+        { "source": "shop/store.py#BaseRepo", "relation": "contains", "target": "shop/store.py#BaseRepo.save" },
+        { "source": "shop/store.py#BaseRepo", "relation": "contains", "target": "shop/store.py#BaseRepo.describe" },
+        { "source": "shop/store.py", "relation": "contains", "target": "shop/store.py#Repo" },
+        { "source": "shop/store.py#Repo", "relation": "contains", "target": "shop/store.py#Repo.__init__" },
+        { "source": "shop/store.py#Repo", "relation": "contains", "target": "shop/store.py#Repo.save" },
+        { "source": "shop/store.py#Repo", "relation": "contains", "target": "shop/store.py#Repo.flush" },
+        { "source": "shop/store.py#Repo", "relation": "contains", "target": "shop/store.py#Repo.build" },
+        { "source": "shop/service.py", "relation": "contains", "target": "shop/service.py#run" },
+        { "source": "shop/service.py#run", "relation": "contains", "target": "shop/service.py#run.emit" },
+        { "source": "shop/service.py", "relation": "contains", "target": "shop/service.py#check" },
+        { "source": "shop/service.py", "relation": "contains", "target": "shop/service.py#AuditCache" },
+        { "source": "shop/service.py#AuditCache", "relation": "contains", "target": "shop/service.py#AuditCache.put" },
+        { "source": "shop/dynamic.py", "relation": "contains", "target": "shop/dynamic.py#by_name" },
+        { "source": "shop/dynamic.py", "relation": "contains", "target": "shop/dynamic.py#make_saver" },
+        { "source": "shop/dynamic.py#make_saver", "relation": "contains", "target": "shop/dynamic.py#make_saver.saver" },
+        { "source": "shop/dynamic.py", "relation": "contains", "target": "shop/dynamic.py#dispatch" },
+        { "source": "shop/dynamic.py", "relation": "contains", "target": "shop/dynamic.py#deferred" }
+      ]
+    },
+    {
+      "name": "python-extends",
+      "language": "python",
+      "relation": "extends",
+      "files": ["shop/util.py", "shop/store.py", "shop/service.py", "shop/dynamic.py"],
+      "expected": [
+        { "source": "shop/store.py#Repo", "relation": "extends", "target": "shop/store.py#BaseRepo" },
+        { "source": "shop/service.py#AuditCache", "relation": "extends", "target": "shop/store.py#Cache" }
+      ]
+    }
+  ],
+  "limitations": [
+    "Calls from shop/dynamic.py are unassessed: getattr dispatch, functools.partial, a returned closure and a dict of bound methods do not identify one static target.",
+    "Calls to builtins and the standard library (super, len, list.append, str.split, str.strip) have no node in the fixture and are not facts.",
+    "Known FN: super().save() and super().put() are not resolved to the base-class method (Repo.save -> BaseRepo.save, AuditCache.put -> Cache.put).",
+    "Known FN: a call through a module alias (from . import util as u; u.helper()) is not resolved (check -> util.helper).",
+    "Known FN: a static method called on its class name (Repo.build()) is not resolved (run -> Repo.build).",
+    "Known FN: a local assigned from a factory call (repo = Repo.build()) gets no type, so repo.save() is not resolved (run -> Repo.save).",
+    "Known FN: a module-qualified base class (class AuditCache(store.Cache)) yields no extends edge."
+  ]
+}

@@ -1,0 +1,15 @@
+Usage: graft cycles [options] [dir]
+
+Dependency cycles between directories (any call, reference, import or
+inheritance) or files (imports), with one shortest loop as evidence ($0, no LLM)
+
+Arguments:
+  dir                 repository root (default: nearest ancestor with a graft/
+                      index)
+
+Options:
+  --level <dir|file>  what a cycle is between: "dir" (default) or "file"
+  --in <path>         narrow to nodes at or under this path prefix
+  --json              output as JSON
+  --no-refresh        skip the freshness check — answer from the graph as-is
+  -h, --help          display help for command

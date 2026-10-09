@@ -34,12 +34,25 @@
         { "source": "b.go", "relation": "contains", "target": "b.go#Left" },
         { "source": "b.go", "relation": "contains", "target": "b.go#Right" },
         { "source": "dynamic.go", "relation": "contains", "target": "dynamic.go#Saver" },
+        { "source": "dynamic.go#Saver", "relation": "contains", "target": "dynamic.go#Saver.Save" },
         { "source": "dynamic.go", "relation": "contains", "target": "dynamic.go#Use" }
+      ]
+    },
+    {
+      "name": "go-implements",
+      "language": "go",
+      "relation": "implements",
+      "files": ["a.go", "b.go"],
+      "expected": [
+        { "source": "a.go#A", "relation": "implements", "target": "dynamic.go#Saver" },
+        { "source": "a.go#A.Save", "relation": "implements", "target": "dynamic.go#Saver.Save" },
+        { "source": "b.go#B", "relation": "implements", "target": "dynamic.go#Saver" },
+        { "source": "b.go#B.Save", "relation": "implements", "target": "dynamic.go#Saver.Save" }
       ]
     }
   ],
   "limitations": [
     "Calls from dynamic.go are unassessed because interface dispatch and function values do not identify one static target.",
-    "The current structural extractor misses the statically named Direct -> A.Save call; the oracle reports it as FN."
+    "go-implements matches method names and arity, not parameter types; the fixture has no same-name, same-arity method with other types."
   ]
 }

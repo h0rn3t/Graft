@@ -44,6 +44,19 @@ Commands:
   map [options] [dir]               Token-budgeted repo orientation — directory
                                     clusters, per-directory hubs, and global
                                     hotspots from the wiring graph ($0, no LLM)
+  path [options] <from> <to> [dir]  Shortest call chain from one symbol to
+                                    another, through interface implementations
+                                    ($0, no LLM)
+  dead [options] [dir]              Functions and methods nothing calls, ranked
+                                    by how sure that is ($0, no LLM)
+  complexity [options] [dir]        Most complex functions; --threshold N fails
+                                    when any exceed N (for CI)
+  hotspots [options] [dir]          Files that change often and hold complex
+                                    code, from git history ($0, no LLM)
+  cycles [options] [dir]            Dependency cycles between directories or
+                                    files ($0, no LLM)
+  routes [options] [dir]            HTTP routes declared in the code and the
+                                    symbols that handle them ($0, no LLM)
   init [options] [dir]              Wire Graft into the AI coding agents used
                                     with this repo (instruction files + MCP
                                     server; full hooks + statusline + MCP for

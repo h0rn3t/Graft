@@ -1,0 +1,105 @@
+{
+  "version": 1,
+  "sources": [
+    { "path": "shop/Dynamic.java", "sha256": "0b14643a56b239c7fd71506e9352cea0c8821e2434a530acfa5129975fd1dd98" },
+    { "path": "shop/Model.java", "sha256": "0b4910f0f8905eb8622cac35b15ee3b41ece2bde84f5e20b3df0f7dabb907636" },
+    { "path": "shop/Repo.java", "sha256": "f693b51ae9a3bf5a0621f03f002070cec24ed010bc0d3ddbd8eefa3f7a35e070" },
+    { "path": "shop/Util.java", "sha256": "9288c2baece69695981682ad2e8f750af9965f14feb42cd379cf0afc65f683ff" }
+  ],
+  "build": { "extensions": [".java"] },
+  "partitions": [
+    {
+      "name": "java-calls",
+      "language": "java",
+      "relation": "calls",
+      "files": ["shop/Model.java", "shop/Util.java", "shop/Repo.java"],
+      "expected": [
+        { "source": "shop/Model.java#Store.put", "relation": "calls", "target": "shop/Model.java#Store.touch" },
+        { "source": "shop/Util.java#Util.format", "relation": "calls", "target": "shop/Util.java#Util.format~2" },
+        { "source": "shop/Util.java#Util.format~2", "relation": "calls", "target": "shop/Util.java#Util.pad" },
+        { "source": "shop/Repo.java#Repo.create", "relation": "calls", "target": "shop/Repo.java#Repo" },
+        { "source": "shop/Repo.java#Repo.create", "relation": "calls", "target": "shop/Model.java#Store" },
+        { "source": "shop/Repo.java#Repo.save", "relation": "calls", "target": "shop/Model.java#Store.put" },
+        { "source": "shop/Repo.java#Repo.save", "relation": "calls", "target": "shop/Util.java#Util.format" },
+        { "source": "shop/Repo.java#Repo.save", "relation": "calls", "target": "shop/Util.java#Util.format~2" },
+        { "source": "shop/Repo.java#Repo.save", "relation": "calls", "target": "shop/Model.java#BaseRepo.save" },
+        { "source": "shop/Repo.java#Repo.flush", "relation": "calls", "target": "shop/Model.java#Cache.put" },
+        { "source": "shop/Repo.java#Repo.flush", "relation": "calls", "target": "shop/Model.java#BaseRepo.describe" },
+        { "source": "shop/Repo.java#Repo.listener", "relation": "calls", "target": "shop/Model.java#Store.put" },
+        { "source": "shop/Repo.java#Repo.anonymous", "relation": "calls", "target": "shop/Repo.java#Repo.anonymous.{anonymous}" },
+        { "source": "shop/Repo.java#Repo.anonymous.{anonymous}.onSave", "relation": "calls", "target": "shop/Model.java#Cache" },
+        { "source": "shop/Repo.java#Repo.anonymous.{anonymous}.onSave", "relation": "calls", "target": "shop/Model.java#Cache.put" }
+      ]
+    },
+    {
+      "name": "java-contains",
+      "language": "java",
+      "relation": "contains",
+      "files": ["shop/Model.java", "shop/Util.java", "shop/Repo.java", "shop/Dynamic.java"],
+      "expected": [
+        { "source": "shop/Model.java", "relation": "contains", "target": "shop/Model.java#Saver" },
+        { "source": "shop/Model.java#Saver", "relation": "contains", "target": "shop/Model.java#Saver.save" },
+        { "source": "shop/Model.java", "relation": "contains", "target": "shop/Model.java#Listener" },
+        { "source": "shop/Model.java#Listener", "relation": "contains", "target": "shop/Model.java#Listener.onSave" },
+        { "source": "shop/Model.java", "relation": "contains", "target": "shop/Model.java#Store" },
+        { "source": "shop/Model.java#Store", "relation": "contains", "target": "shop/Model.java#Store.put" },
+        { "source": "shop/Model.java#Store", "relation": "contains", "target": "shop/Model.java#Store.touch" },
+        { "source": "shop/Model.java", "relation": "contains", "target": "shop/Model.java#Cache" },
+        { "source": "shop/Model.java#Cache", "relation": "contains", "target": "shop/Model.java#Cache.put" },
+        { "source": "shop/Model.java#Cache", "relation": "contains", "target": "shop/Model.java#Cache.describe" },
+        { "source": "shop/Model.java", "relation": "contains", "target": "shop/Model.java#BaseRepo" },
+        { "source": "shop/Model.java#BaseRepo", "relation": "contains", "target": "shop/Model.java#BaseRepo.save" },
+        { "source": "shop/Model.java#BaseRepo", "relation": "contains", "target": "shop/Model.java#BaseRepo.describe" },
+        { "source": "shop/Util.java", "relation": "contains", "target": "shop/Util.java#Util" },
+        { "source": "shop/Util.java#Util", "relation": "contains", "target": "shop/Util.java#Util.Util" },
+        { "source": "shop/Util.java#Util", "relation": "contains", "target": "shop/Util.java#Util.format" },
+        { "source": "shop/Util.java#Util", "relation": "contains", "target": "shop/Util.java#Util.format~2" },
+        { "source": "shop/Util.java#Util", "relation": "contains", "target": "shop/Util.java#Util.pad" },
+        { "source": "shop/Repo.java", "relation": "contains", "target": "shop/Repo.java#Repo" },
+        { "source": "shop/Repo.java#Repo", "relation": "contains", "target": "shop/Repo.java#Repo.Repo" },
+        { "source": "shop/Repo.java#Repo", "relation": "contains", "target": "shop/Repo.java#Repo.create" },
+        { "source": "shop/Repo.java#Repo", "relation": "contains", "target": "shop/Repo.java#Repo.save" },
+        { "source": "shop/Repo.java#Repo", "relation": "contains", "target": "shop/Repo.java#Repo.flush" },
+        { "source": "shop/Repo.java#Repo", "relation": "contains", "target": "shop/Repo.java#Repo.listener" },
+        { "source": "shop/Repo.java#Repo", "relation": "contains", "target": "shop/Repo.java#Repo.anonymous" },
+        { "source": "shop/Repo.java#Repo.anonymous", "relation": "contains", "target": "shop/Repo.java#Repo.anonymous.{anonymous}" },
+        { "source": "shop/Repo.java#Repo.anonymous.{anonymous}", "relation": "contains", "target": "shop/Repo.java#Repo.anonymous.{anonymous}.onSave" },
+        { "source": "shop/Dynamic.java", "relation": "contains", "target": "shop/Dynamic.java#Dynamic" },
+        { "source": "shop/Dynamic.java#Dynamic", "relation": "contains", "target": "shop/Dynamic.java#Dynamic.Dynamic" },
+        { "source": "shop/Dynamic.java#Dynamic", "relation": "contains", "target": "shop/Dynamic.java#Dynamic.byName" },
+        { "source": "shop/Dynamic.java#Dynamic", "relation": "contains", "target": "shop/Dynamic.java#Dynamic.saveAll" },
+        { "source": "shop/Dynamic.java#Dynamic", "relation": "contains", "target": "shop/Dynamic.java#Dynamic.fire" }
+      ]
+    },
+    {
+      "name": "java-extends",
+      "language": "java",
+      "relation": "extends",
+      "files": ["shop/Model.java", "shop/Util.java", "shop/Repo.java", "shop/Dynamic.java"],
+      "expected": [
+        { "source": "shop/Repo.java#Repo", "relation": "extends", "target": "shop/Model.java#BaseRepo" }
+      ]
+    },
+    {
+      "name": "java-implements",
+      "language": "java",
+      "relation": "implements",
+      "files": ["shop/Model.java", "shop/Util.java", "shop/Repo.java", "shop/Dynamic.java"],
+      "expected": [
+        { "source": "shop/Repo.java#Repo", "relation": "implements", "target": "shop/Model.java#Saver" },
+        { "source": "shop/Repo.java#Repo.save", "relation": "implements", "target": "shop/Model.java#Saver.save" },
+        { "source": "shop/Repo.java#Repo.anonymous.{anonymous}", "relation": "implements", "target": "shop/Model.java#Listener" },
+        { "source": "shop/Repo.java#Repo.anonymous.{anonymous}.onSave", "relation": "implements", "target": "shop/Model.java#Listener.onSave" }
+      ]
+    }
+  ],
+  "limitations": [
+    "Calls from shop/Dynamic.java are unassessed: reflective Method.invoke and calls through interface-typed parameters do not identify one static target.",
+    "Calls to JDK methods (String.length) have no node in the fixture and are not facts. A lambda is not a symbol: calls in its body belong to the enclosing method, and its implementation of Listener.onSave is not a fact.",
+    "Known FN: a static call qualified by its class name (Util.format(...)) is not resolved, though arity would select Util.format or Util.format~2 (Repo.save).",
+    "Known FN: super.save() is not resolved to the base-class method (Repo.save -> BaseRepo.save).",
+    "Known FN: a call on a new-expression receiver (new Cache().put(item)) is not resolved ({anonymous}.onSave -> Cache.put).",
+    "Known FP and FN: new Listener() { ... } records a call to the interface Listener instead of the anonymous class it instantiates (Repo.anonymous).",
+    "Known FN: method-level implements (Repo.save -> Saver.save, {anonymous}.onSave -> Listener.onSave) is only derived for Go."
+  ]
+}

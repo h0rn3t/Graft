@@ -22,10 +22,11 @@ type ResolveSymbolOptions struct {
 
 // EdgeHit describes one dependency edge reached during a graph walk.
 type EdgeHit struct {
-	Node     *NodeV1
-	ID       string
-	Relation Relation
-	Depth    int
+	Node       *NodeV1
+	ID         string
+	Relation   Relation
+	Confidence Confidence
+	Depth      int
 }
 
 // ResolveSymbol finds all graph nodes matching query and applies an optional path prefix.
@@ -78,10 +79,11 @@ func CallersOf(graph GraphV1, symbol NodeV1) []EdgeHit {
 			continue
 		}
 		hits = append(hits, EdgeHit{
-			Node:     byID[edge.Source],
-			ID:       edge.Source,
-			Relation: edge.Relation,
-			Depth:    1,
+			Node:       byID[edge.Source],
+			ID:         edge.Source,
+			Relation:   edge.Relation,
+			Confidence: edge.Confidence,
+			Depth:      1,
 		})
 	}
 	return hits
@@ -96,10 +98,11 @@ func CalleesOf(graph GraphV1, symbol NodeV1) []EdgeHit {
 			continue
 		}
 		hits = append(hits, EdgeHit{
-			Node:     byID[edge.Target],
-			ID:       edge.Target,
-			Relation: edge.Relation,
-			Depth:    1,
+			Node:       byID[edge.Target],
+			ID:         edge.Target,
+			Relation:   edge.Relation,
+			Confidence: edge.Confidence,
+			Depth:      1,
 		})
 	}
 	return hits
@@ -130,7 +133,7 @@ func ImpactOfMany(graph GraphV1, seeds []NodeV1, maxDepth int, directions ...Dir
 		if direction == DirectionIn {
 			key, other = edge.Target, edge.Source
 		}
-		adjacency[key] = append(adjacency[key], walkEntry{other: other, relation: edge.Relation})
+		adjacency[key] = append(adjacency[key], walkEntry{other: other, relation: edge.Relation, confidence: edge.Confidence})
 	}
 
 	visited := make(map[string]bool, len(seeds))
@@ -152,10 +155,11 @@ func ImpactOfMany(graph GraphV1, seeds []NodeV1, maxDepth int, directions ...Dir
 				}
 				visited[entry.other] = true
 				hits = append(hits, EdgeHit{
-					Node:     byID[entry.other],
-					ID:       entry.other,
-					Relation: entry.relation,
-					Depth:    depth,
+					Node:       byID[entry.other],
+					ID:         entry.other,
+					Relation:   entry.relation,
+					Confidence: entry.confidence,
+					Depth:      depth,
 				})
 				next = append(next, entry.other)
 			}
@@ -192,8 +196,9 @@ func EdgeWalk(graph GraphV1, node NodeV1, direction Direction, depth int) []Edge
 }
 
 type walkEntry struct {
-	other    string
-	relation Relation
+	other      string
+	relation   Relation
+	confidence Confidence
 }
 
 func nodeIndex(graph GraphV1) map[string]*NodeV1 {

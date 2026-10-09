@@ -43,6 +43,8 @@ type NodeV1 struct {
 	Owner    *string `json:"owner,omitempty"`
 	Arity    *int    `json:"arity,omitempty"`
 	Variadic *bool   `json:"variadic,omitempty"`
+	// Complexity is the cyclomatic complexity of a function or method with a body.
+	Complexity *int `json:"complexity,omitempty"`
 }
 
 // EdgeV1 is a version-one graph edge.
@@ -60,13 +62,32 @@ type ScopeV1 struct {
 	Markers []string `json:"markers"`
 }
 
+// UnresolvedCalls counts, by reason, the calls the static resolver bound to no
+// node. The language-server pass may bind some of them afterwards.
+type UnresolvedCalls struct {
+	// ReceiverUnknown is `x.f()` where the type of x is not known.
+	ReceiverUnknown int `json:"receiverUnknown"`
+	// MemberAmbiguous is `x.f()` where the type of x has several reachable f.
+	MemberAmbiguous int `json:"memberAmbiguous"`
+	// MemberNotInGraph is `x.f()` where the type of x, or its f, is not a node.
+	MemberNotInGraph int `json:"memberNotInGraph"`
+	// NameAmbiguous is `f()` with several reachable definitions of f.
+	NameAmbiguous int `json:"nameAmbiguous"`
+	// NameNotInGraph is `f()` or `pkg.f()` with no definition of f in the graph:
+	// a builtin, or a library the repository does not contain.
+	NameNotInGraph int `json:"nameNotInGraph"`
+	// ExternalPackage is a Go `pkg.f()` call into a package outside the repository.
+	ExternalPackage int `json:"externalPackage"`
+}
+
 // GraphMeta contains the version and aggregate values stored with a graph.
 type GraphMeta struct {
-	Version   int        `json:"version"`
-	NodeCount int        `json:"nodeCount"`
-	EdgeCount int        `json:"edgeCount"`
-	Languages []string   `json:"languages"`
-	Scopes    *[]ScopeV1 `json:"scopes,omitempty"`
+	Version         int              `json:"version"`
+	NodeCount       int              `json:"nodeCount"`
+	EdgeCount       int              `json:"edgeCount"`
+	Languages       []string         `json:"languages"`
+	Scopes          *[]ScopeV1       `json:"scopes,omitempty"`
+	UnresolvedCalls *UnresolvedCalls `json:"unresolvedCalls,omitempty"`
 }
 
 // GraphV1 is the version-one persisted wiring graph.

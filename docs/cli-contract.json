@@ -144,6 +144,60 @@
       "effects": ["refresh: see queryRefresh"]
     },
     {
+      "name": "path",
+      "usage": "graft path [options] <from> <to> [dir]",
+      "options": ["-d, --depth <n>", "--in <path>", "--json", "--no-refresh"],
+      "backend": "go",
+      "stdout": "the shortest chain of calls, references and imports, one step per line with inferred steps marked, or `no path from <from> to <to> …`; JSON `{from, to, depth, start, steps}`",
+      "exit": { "0": "searched, including no path", "1": "`✗ no graph — run graft build first`, a multi-repo workspace root, an unknown symbol or prefix, or an invalid --depth (checked before refresh)" },
+      "effects": ["refresh: see queryRefresh"]
+    },
+    {
+      "name": "dead",
+      "usage": "graft dead [options] [dir]",
+      "options": ["--in <path>", "--all", "--json", "--no-refresh"],
+      "backend": "go",
+      "stdout": "functions and methods without callers grouped by confidence — high, medium, and with --all low, each low one with its reason; JSON `{high, medium, low, candidates}`",
+      "exit": { "0": "listed, including none", "1": "`✗ no graph — run graft build first`, a multi-repo workspace root, or an unknown prefix" },
+      "effects": ["refresh: see queryRefresh", "reads every indexed source file to find mentions of the candidates' names"]
+    },
+    {
+      "name": "complexity",
+      "usage": "graft complexity [options] [dir]",
+      "options": ["-n, --limit <n>", "--threshold <n>", "--in <path>", "--json", "--no-refresh"],
+      "backend": "go",
+      "stdout": "functions by cyclomatic complexity, most complex first; with --threshold only those above it; JSON `{functions, total, threshold, listed}`",
+      "exit": { "0": "listed, and with --threshold none above it", "1": "--threshold found a function above it, `✗ no graph — run graft build first`, a multi-repo workspace root, an unknown prefix, or a --limit/--threshold that is not a positive integer (checked before refresh)" },
+      "effects": ["refresh: see queryRefresh"]
+    },
+    {
+      "name": "hotspots",
+      "usage": "graft hotspots [options] [dir]",
+      "options": ["--commits <n>", "-n, --limit <n>", "--in <path>", "--json", "--no-refresh"],
+      "backend": "go",
+      "stdout": "files ranked by commits among the last --commits × summed cyclomatic complexity, each with its most complex function; JSON `{commits, files}`",
+      "exit": { "0": "ranked, including none", "1": "`✗ no graph — run graft build first`, a multi-repo workspace root, an unknown prefix, unreadable git history, or a --commits/--limit that is not a positive integer (checked before refresh)" },
+      "effects": ["refresh: see queryRefresh", "runs `git log --format= --name-only --relative -n <commits> -- .` in <R>"]
+    },
+    {
+      "name": "cycles",
+      "usage": "graft cycles [options] [dir]",
+      "options": ["--level <dir|file>", "--in <path>", "--json", "--no-refresh"],
+      "backend": "go",
+      "stdout": "strongly connected directories (any dependency edge) or files (imports) of production code, each with one shortest loop and the edge behind every step; JSON `{level, cycles}`",
+      "exit": { "0": "searched, including no cycles", "1": "`✗ no graph — run graft build first`, a multi-repo workspace root, an unknown prefix, or an invalid --level (checked before refresh)" },
+      "effects": ["refresh: see queryRefresh"]
+    },
+    {
+      "name": "routes",
+      "usage": "graft routes [options] [dir]",
+      "options": ["--in <path>", "--json", "--no-refresh"],
+      "backend": "go",
+      "stdout": "HTTP routes declared in production code — method, path, declaring file:line, and the handler symbol or handler text; JSON `{routes}`",
+      "exit": { "0": "listed, including none", "1": "`✗ no graph — run graft build first`, a multi-repo workspace root, or an unknown prefix" },
+      "effects": ["refresh: see queryRefresh", "reads and parses the indexed Go, Python, TypeScript/JavaScript and Java files that may declare routes"]
+    },
+    {
       "name": "init",
       "usage": "graft init [options] [dir]",
       "options": ["--no-build", "--agents <ids...>", "--all-agents", "--no-agents", "--list-agents", "--no-mcp", "--no-hooks", "--no-statusline", "--dry-run", "-y, --yes", "--no-global"],
@@ -213,7 +267,7 @@
     }
   ],
   "queryRefresh": {
-    "commands": ["ask", "skeleton", "grep", "map", "callers", "blast"],
+    "commands": ["ask", "skeleton", "grep", "map", "callers", "blast", "path", "dead", "complexity", "hotspots", "cycles", "routes"],
     "disabledBy": ["--no-refresh", "GRAFT_NO_REFRESH"],
     "effects": [
       "no wiring.json: takes <C>/.cache/.sync.lock and tries a worktree seed; an empty <C>/.cache/ is left behind even outside a worktree",

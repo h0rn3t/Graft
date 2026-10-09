@@ -130,6 +130,8 @@ type extractor struct {
 	minted   map[string]struct{}
 	nodes    []NodeV1
 	edges    []rawEdge
+	// goPackages maps a Go file's imported package names to import paths.
+	goPackages map[string]string
 }
 
 const (
@@ -208,6 +210,9 @@ func extractSource(rel, source string) (extractResult, error) {
 			Span: fmt.Sprintf("L1-L%d", root.EndPosition().Row+1), Exported: true,
 			Origin: "ast", BodyHash: sourcefiles.Hash(source), Chars: &chars, SummaryState: "pending",
 		}},
+	}
+	if lang == langGo {
+		x.goPackages = x.collectGoPackages(root)
 	}
 	ctx := walkCtx{rel: rel, lang: lang, parentID: rel, imported: x.collectImportedSymbols(root)}
 	x.walkNamedChildren(namedChildren(root), ctx)
@@ -327,6 +332,9 @@ func (x *extractor) callEdge(node *sitter.Node, callee callee, ctx walkCtx) rawE
 		edge.argCount = javaArgCount(node)
 	}
 	edge.recvType = x.bindings.resolveRecvType(callee.receiver, ctx)
+	if edge.recvType == "" && callee.receiver != "" {
+		edge.specifier = x.goPackages[callee.receiver] // `pkg.F()` names a package, not a receiver
+	}
 	return edge
 }
 
@@ -342,6 +350,11 @@ func (x *extractor) emitDefinition(node *sitter.Node, desc *defDescriptor, ctx w
 		owner = &ownerName
 	}
 	body := x.text(desc.hashNode)
+	var complexity *int
+	if (desc.kind == "function" || desc.kind == "method") && desc.headerEnd < desc.hashNode.EndByte() {
+		nested := func(candidate *sitter.Node) bool { return x.describe(candidate, ctx) != nil }
+		complexity = new(cyclomatic(desc.hashNode, complexityGrammar(ctx.lang), x.source, nested))
+	}
 	x.nodes = append(x.nodes, NodeV1{
 		ID: id, Name: desc.name, Kind: desc.kind, Owner: owner, Path: ctx.rel,
 		Span:      spanOf(desc.hashNode),
@@ -349,11 +362,15 @@ func (x *extractor) emitDefinition(node *sitter.Node, desc *defDescriptor, ctx w
 		Exported:  x.exported(desc, node, ctx), Origin: "ast",
 		BodyHash: sourcefiles.Hash(body), BodyText: new(searchBody(body, maxBodyChars)),
 		Arity: desc.arity, Variadic: truePointer(desc.variadic), SummaryState: "pending",
+		Complexity: complexity,
 	})
 	x.edges = append(x.edges, rawEdge{source: ctx.parentID, relation: "contains", targetID: id, file: ctx.rel})
 	typeDecl := desc.kind == "class" || (ctx.lang == langJava && slices.Contains(javaTypeKinds, desc.kind))
 	if typeDecl {
 		x.edges = append(x.edges, x.heritageEdges(node, id, ctx)...)
+	}
+	if ctx.lang == langGo && (desc.kind == "struct" || desc.kind == "interface") {
+		x.edges = append(x.edges, x.goEmbeds(node, id, ctx)...)
 	}
 	if ctx.lang == langJava {
 		x.edges = append(x.edges, x.javaAnnotationReferences(node, id, ctx)...)

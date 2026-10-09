@@ -1,0 +1,16 @@
+Usage: graft hotspots [options] [dir]
+
+Files that change often and hold complex code: commits in recent git history
+times summed cyclomatic complexity ($0, no LLM)
+
+Arguments:
+  dir              repository root (default: nearest ancestor with a graft/
+                   index)
+
+Options:
+  --commits <n>    how many recent commits to read (default 500)
+  -n, --limit <n>  how many files to list (default 15)
+  --in <path>      narrow to nodes at or under this path prefix
+  --json           output as JSON
+  --no-refresh     skip the freshness check — answer from the graph as-is
+  -h, --help       display help for command
