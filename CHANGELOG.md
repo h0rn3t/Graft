@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **A definition over the budget answers with what fits.** `graft_read_symbol` (`graft read`) answered "needs N estimated tokens" for a definition larger than its budget, which cost the agent a retry; a large class retried whole then ran past the roughly 25,000 characters Claude Code shows inline. A class, interface or other container now keeps its head and lists every member as a `⋮ L490-L599 SolidLanguageServer.__init__ · signature` line to read by name, dropping the signatures, then the members past what fits, when the list is long. A function or method shows its longest whole-line head and a closing `⋮` line naming up to six functions the rest calls, with the budget the whole definition needs. In a batch read with `also`, such an item gets the status `partial` from what the complete definitions leave instead of `omitted`. Only a declaration that alone exceeds the budget still answers with the budget it needs. In Serena's Python source, 103 of 890 classes exceed the default budget of 2,000 tokens; its 36,000-token `SolidLanguageServer` now answers in 8,199 characters that list all 146 members. In Go, 0.3% of definitions exceed it, on this repository and on golang.org/x/tools alike.
+
 ## 0.5.1-beta.2 - 2026-10-10
 
 ### Added

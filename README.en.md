@@ -464,10 +464,16 @@ query that names its top hit (`probeDrift fast paths`) returns that definition
 whole when it fits half of the budget.
 Responses include the full indexed line span and a hash of the returned source.
 The default budget is 2000 estimated tokens (UTF-16 length / 4), configurable
-from 128 to 64000. A definition that does not fit returns an error with its
-required budget rather than partial source. Missing, unreadable, or changed
+from 128 to 64000. A definition over the budget still answers in one call. A
+class, interface or other container keeps its head and lists every member as a
+`⋮ L10-L42 Owner.member · signature` line to read by name; a long list drops the
+signatures, then lists the members that fit and points at the file's skeleton.
+A function or method shows its longest whole-line head and a closing `⋮` line
+naming up to six functions the rest calls, with the budget the whole definition
+needs. Only a declaration that alone exceeds the budget answers with the budget
+it needs instead of source. Missing, unreadable, or changed
 source also returns an error; even `--no-refresh` never reads stale spans.
-Over MCP, a name that resolves to no single definition, a definition over
+Over MCP, a name that resolves to no single definition, a declaration over
 budget, a missing graph and an unknown symbol in `graft_trace_calls` answer
 with that guidance instead of an error result, since an agent that gets errors
 for names it guessed stops calling graft; a misspelled name also gets the
@@ -475,10 +481,12 @@ closest symbol names. Malformed requests and faults stay errors.
 
 For related definitions, pass up to eight selectors: repeated `--also` flags on
 the CLI, or `also: [...]` beside `symbol` in MCP `graft_read_symbol`.
-Batch JSON is `{results: [...]}` with per-item `ok`, `covered`, `omitted`, or
-`error` statuses. Definitions are ordered by file/span; containing definitions
-come first and cover their children without repeating source. A missing or
-oversized item does not discard the complete definitions that fit. If even the
+Batch JSON is `{results: [...]}` with per-item `ok`, `partial`, `covered`,
+`omitted`, or `error` statuses. Definitions are ordered by file/span; containing
+definitions come first and cover their children without repeating source. A
+missing item does not discard the complete definitions that fit, and an item too
+big for what they leave comes back `partial`, as the outline or head a single
+read would give, or `omitted` when not even that fits. If even the
 item metadata exceeds the shared budget, the request fails with guidance.
 
 Local MCP file API, call tracing, grep, map, and exact reads share the decoded

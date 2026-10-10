@@ -104,12 +104,12 @@ func TestReadSymbolOverBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out, diagnostic bytes.Buffer
-	if status := run([]string{"read", "big", root, "--budget", "128"}, &out, &diagnostic); status != 1 || !strings.Contains(diagnostic.String(), "retry once with --budget") {
-		t.Errorf("run(read big --budget 128) = (%d, %q), want 1 and the budget it needs", status, diagnostic.String())
+	if status := run([]string{"read", "big", root, "--budget", "128"}, &out, &diagnostic); status != 0 || !strings.Contains(out.String(), "export function big() {") || !strings.Contains(out.String(), "--budget ") {
+		t.Errorf("run(read big --budget 128) = (%d, %q, %q), want 0, the head and the budget the whole needs", status, out.String(), diagnostic.String())
 	}
 	result := mcpCall(t.Context(), root, filepath.Join(root, "graft"), "", "graft_read_symbol", map[string]any{"symbol": "big", "budget": float64(128)})
-	if result.isError || !strings.Contains(result.text, "retry once with budget") || strings.Contains(result.text, "console.log") {
-		t.Errorf("mcpCall(read big, budget 128) = %+v, want an answer naming the budget it needs, without partial source", result)
+	if result.isError || !strings.Contains(result.text, "export function big() {") || !strings.Contains(result.text, "⋮ L") || savings.Tokens(savings.Length(result.text)) > 128 {
+		t.Errorf("mcpCall(read big, budget 128) = %+v, want the head and a gap line within 128 estimated tokens", result)
 	}
 }
 
@@ -150,7 +150,7 @@ func TestReadSymbolBudget(t *testing.T) {
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	for _, budget := range []string{"127", "64001", "1.5", "128"} {
+	for _, budget := range []string{"127", "64001", "1.5"} {
 		var out, diagnostic bytes.Buffer
 		if status := run([]string{"read", "large", root, "--budget", budget}, &out, &diagnostic); status == 0 || out.Len() != 0 || !strings.Contains(diagnostic.String(), "budget") {
 			t.Errorf("read(large, budget=%s) = (%d, %q, %q), want budget error without partial source", budget, status, out.String(), diagnostic.String())
@@ -312,8 +312,9 @@ func TestMCPReadRefreshBudgetBoundary(t *testing.T) {
 			t.Fatal(err)
 		}
 		result = mcpCall(t.Context(), root, filepath.Join(root, "graft"), "", "graft_read_symbol", args)
-		if result.isError || !strings.Contains(result.text, "complete definition needs") || strings.Contains(result.text, "return 3") {
-			t.Errorf("MCP read(padding=%d, budget=%d) = %+v, want the budget it needs and no source", padding, tokens-1, result)
+		// The refresh note counts against the budget, so the whole definition no longer fits.
+		if result.isError || !strings.Contains(result.text, "needs") || savings.Tokens(savings.Length(result.text)) > tokens-1 {
+			t.Errorf("MCP read(padding=%d, budget=%d) = %+v, want what fits with the refresh note, naming the budget it needs", padding, tokens-1, result)
 		}
 	}
 }

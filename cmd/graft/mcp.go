@@ -129,7 +129,7 @@ var mcpTools = []mcpToolDefinition{
 	},
 	{
 		Name:        "graft_read_symbol",
-		Description: "Read a known symbol directly, no search or file API first: its complete source, span and hash, plus its callees in the same directory. Several known symbols? Read them in ONE call: symbol plus also: [the others] (8 in all, one shared budget) — each extra call costs a model round. Production definitions win over test copies. On \"needs N estimated tokens\", retry once with budget N or higher.",
+		Description: "Read a known symbol directly, no search or file API first: its complete source, span and hash, plus its callees in the same directory. Several known symbols? Read them in ONE call: symbol plus also: [the others] (8 in all, one shared budget) — each extra call costs a model round. Production definitions win over test copies. A definition over the budget comes back as its members' outline or its head, with ⋮ lines naming what was left out.",
 		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",

@@ -86,16 +86,22 @@ func runRead(opts callersOptions, stdout, stderr io.Writer) int {
 		return 1
 	}
 	text := renderReadResult(result, opts.jsonOutput)
-	required := savings.Tokens(savings.Length(text + diagnostics.String()))
-	if required > budget {
-		flag := "--budget"
-		if opts.mcp {
-			flag = "budget"
+	if required := savings.Tokens(savings.Length(text + diagnostics.String())); required > budget {
+		fitted, ok := fitReadResult(workspace.Loaded[match.child].Graph, match.node, result, required, opts.mcp, func(candidate readResult) bool {
+			return savings.Tokens(savings.Length(renderReadResult(candidate, opts.jsonOutput)+diagnostics.String())) <= budget
+		})
+		if !ok {
+			flag := "--budget"
+			if opts.mcp {
+				flag = "budget"
+			}
+			writeDiagnostic(stderr, "complete definition needs %d estimated tokens and not even its declaration fits; retry once with %s %d or higher (maximum 64000)\n", required, flag, required)
+			return readMissStatus(opts)
 		}
-		writeDiagnostic(stderr, "complete definition needs %d estimated tokens; retry once with %s %d or higher (maximum 64000), or read the source range directly\n", required, flag, required)
-		return readMissStatus(opts)
+		result = fitted
+	} else {
+		addReadCallees(root, workspace, match, &result, budget, diagnostics.String(), opts.jsonOutput, sources)
 	}
-	addReadCallees(root, workspace, match, &result, budget, diagnostics.String(), opts.jsonOutput, sources)
 	if _, err := io.WriteString(stderr, diagnostics.String()); err != nil {
 		return 1
 	}

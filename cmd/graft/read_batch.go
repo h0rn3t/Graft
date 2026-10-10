@@ -112,6 +112,30 @@ func writeReadBatch(root string, workspace graph.WorkspaceGraphs, opts callersOp
 			}
 		}
 	}
+	// What did not fit whole gets an outline or its head from what is left,
+	// after every definition that fits whole has its place.
+	for i := range items {
+		item := &items[i]
+		if item.Status != "omitted" {
+			continue
+		}
+		match, _, err := resolveReadSelector(workspace, item.Selector, budget, opts.mcp)
+		if err != nil {
+			continue
+		}
+		omitted := *item.Result
+		whole := omitted
+		whole.Code = codes[i]
+		needed := savings.Tokens(savings.Length(renderReadResult(whole, opts.jsonOutput)))
+		fitted, ok := fitReadResult(workspace.Loaded[match.child].Graph, match.node, whole, needed, opts.mcp, func(candidate readResult) bool {
+			item.Status, item.Result = "partial", &candidate
+			return savings.Tokens(savings.Length(diagnostics+renderReadBatch(items, opts.jsonOutput, flow))) <= budget
+		})
+		item.Status, item.Result = "partial", &fitted
+		if !ok {
+			item.Status, item.Result = "omitted", &omitted
+		}
+	}
 	if _, err := io.WriteString(stderr, diagnostics); err != nil {
 		return 1
 	}
@@ -134,7 +158,7 @@ func renderReadBatch(items []readBatchItem, asJSON bool, flow string) string {
 	}
 	for _, item := range items {
 		switch item.Status {
-		case "ok":
+		case "ok", "partial":
 			out.WriteString(renderReadResult(*item.Result, false))
 		case "covered":
 			fmt.Fprintf(&out, "%s · %s — covered by %s\n", item.Selector, item.Result.Pointer, item.CoveredBy)

@@ -141,8 +141,8 @@ func TestReadBatchOmittedParentAndDuplicateChild(t *testing.T) {
 		t.Fatal(err)
 	}
 	text, failed := readBatchText(t, root, 400, "Service", "run", "run")
-	if failed || !strings.Contains(text, "Service · src/one.ts:L1-L303 — omitted") || strings.Count(text, "return 42") != 1 || !strings.Contains(text, "covered by") {
-		t.Errorf("read(omitted parent, duplicate child) = %q, want full child once and covered duplicate", text)
+	if failed || !strings.Contains(text, "⋮ L2-L2 Service.run") || strings.Count(text, "return 42") != 1 || !strings.Contains(text, "covered by") {
+		t.Errorf("read(outlined parent, duplicate child) = %q, want the parent's outline, full child once and covered duplicate", text)
 	}
 }
 
@@ -154,8 +154,8 @@ func TestReadBatchBudget(t *testing.T) {
 		t.Fatal(err)
 	}
 	text, failed := readBatchText(t, root, 350, "alpha", "src/two.ts::shared")
-	if failed || !strings.Contains(text, "omitted") || !strings.Contains(text, "return 2") || strings.Contains(text, "shared();") || savings.Tokens(savings.Length(text)) > 350 {
-		t.Errorf("MCP read(batch,budget=350) = %q, want omitted large definition, complete small one, bounded response", text)
+	if failed || !strings.Contains(text, "· calls shared") || !strings.Contains(text, "return 2") || strings.Count(text, "shared();") == 300 || savings.Tokens(savings.Length(text)) > 350 {
+		t.Errorf("MCP read(batch,budget=350) = %q, want the large definition's head, complete small one, bounded response", text)
 	}
 }
 

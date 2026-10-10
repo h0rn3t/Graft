@@ -61,8 +61,8 @@
       "usage": "graft read [options] <symbol> [dir]",
       "options": ["--also <symbol>", "--budget <tokens>", "--json", "--no-refresh"],
       "backend": "go",
-      "stdout": "single complete definition with span and hash, a resolution note when a copy or wrong path was skipped, and same-directory callees inlined or listed within budget, or JSON {id,name,kind,pointer,sourceHash,code,note?,callees?}; --also returns a shared-budget batch with per-item ok/covered/omitted/error status, or JSON {results:[...]}",
-      "exit": { "0": "single definition or valid batch answered; inspect batch item statuses for omissions and errors", "1": "invalid request, missing graph, metadata over budget, or an unresolved, unsafe, stale or oversized single definition" },
+      "stdout": "single definition with span and hash, whole or, over the budget, a container's member outline or a function's head with ⋮ gap lines, a resolution note when a copy or wrong path was skipped, and same-directory callees inlined or listed within budget, or JSON {id,name,kind,pointer,sourceHash,code,note?,callees?}; --also returns a shared-budget batch with per-item ok/partial/covered/omitted/error status, or JSON {results:[...]}",
+      "exit": { "0": "single definition or valid batch answered; inspect batch item statuses for omissions and errors", "1": "invalid request, missing graph, metadata over budget, or an unresolved, unsafe or stale single definition, or one whose declaration alone exceeds the budget" },
       "effects": ["refresh: see queryRefresh"]
     },
     {
