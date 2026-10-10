@@ -169,7 +169,7 @@ func hookRetrievalBody(hits []graph.AskHit) string {
 		}
 		if hit.Code != "" {
 			withCode = true
-			block += "\n```\n" + askExcerptText(hit.Code, false) + "\n```"
+			block += "\n```\n" + askExcerptText(hit.Code, false, "") + "\n```"
 		}
 		blocks = append(blocks, block)
 	}

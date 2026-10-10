@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **Every MCP answer fits what the host shows inline.** Claude Code 2.1.296 writes an MCP result over 50,000 characters to a file (a remote setting can lower that per tool) and shows the agent a 2,000-character preview, so the agent spends a round reading it back; codegraph saw a 35,000-character answer go to a file. Every graft tool now answers in at most 25,000 characters. `graft_find_code` and `graft_read_symbol` spend at most 6,000 estimated tokens, whatever budget is asked: the schema says so, and a client that asks for up to 64,000 gets the same answer. A definition larger than that says so instead of naming a budget that would come back cut the same way. `graft_file_api` drops docs, then signatures, then lists the definitions that fit and names the first ones it leaves out, with a count. `graft_repo_map` lists fewer directories and keeps its hotspots. Any other answer is cut at a line end, with a count of the lines left out. The CLI is unchanged. On the 625 recorded search calls of this repository's benchmark the largest answer is 12,482 characters, so none of them changes; the ceiling bounds a large budget, a big file's skeleton (Serena's 5,962-line `lsp_types.py` lists 23,583 characters) and a wide repo map.
+- **A cut answer never reads as whole, and names what it left out.** When a `graft_find_code` (`graft ask`) answer ran past its budget, the last definition was halved with no marker and trailing hits were dropped under a generic note; with `full: true`, a body ending mid-function looked complete. Replaying the 339 recorded `graft_find_code` calls, 5 of the 12 answers that hit the budget held such a body. A cut body is now numbered and closed like any excerpt, with the count of lines it lost, and the note names the dropped hits with their spans, best ranked first, up to six. Over MCP an excerpt's last line names the read that completes it, such as `… +26 lines (graft_read_symbol Journal.replay)`, with `Owner.member` for a method. Before, it suggested `full: true`, which re-ran the search and cut its lowest hits to the budget again. On the replay, every one of the 41 selectors these lines name resolves to a single definition.
+
 ## 0.5.1-beta.3 - 2026-10-10
 
 ### Changed

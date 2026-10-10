@@ -39,7 +39,9 @@ func mcpAskOptions(args map[string]any) (callersOptions, error) {
 		if !ok || math.IsNaN(budget) || budget < 128 || budget > 64000 || math.Trunc(budget) != budget {
 			return opts, fmt.Errorf("budget must be an integer from 128 to 64000 estimated tokens")
 		}
-		opts.budget = strconv.Itoa(int(budget))
+		// Older clients may still ask for up to 64000; the answer fits what a
+		// host shows inline either way.
+		opts.budget = strconv.Itoa(min(int(budget), mcpBudgetCeiling))
 	}
 	if value, exists := args["intent"]; exists {
 		intent, ok := value.(string)
@@ -102,36 +104,71 @@ func renderAskBudget(result graph.AskResult, asJSON, mcp bool) string {
 func fitAskBudget(result graph.AskResult, budget int, asJSON, mcp bool, overhead ...string) (graph.AskResult, error) {
 	result.Hits = slices.Clone(result.Hits)
 	overheadChars := savings.Length(strings.Join(overhead, ""))
-	noted := false
-	for savings.Tokens(overheadChars+savings.Length(renderAskBudget(result, asJSON, mcp))) > budget {
-		if !noted {
-			result.Note = strings.TrimSpace(result.Note + "\nContext omitted to fit the budget; increase --budget or narrow --in.")
-			noted = true
+	advice := "increase --budget or narrow --in"
+	if mcp {
+		advice = "increase budget or narrow in"
+		if budget >= mcpBudgetCeiling {
+			advice = "narrow in"
 		}
+	}
+	note := result.Note
+	var dropped []string
+	for savings.Tokens(overheadChars+savings.Length(renderAskBudget(result, asJSON, mcp))) > budget {
 		if len(result.Hits) == 0 {
 			return result, fmt.Errorf("query and coverage metadata exceed budget; increase --budget or shorten the query")
 		}
 		last := &result.Hits[len(result.Hits)-1]
-		if last.Code != "" {
-			lines := strings.Split(last.Code, "\n")
-			if len(lines) > 1 {
-				last.Code = strings.Join(lines[:len(lines)/2], "\n")
-			} else {
-				last.Code = ""
-			}
+		switch {
+		case last.Code != "":
 			// A partial excerpt must never acknowledge the original complete content.
 			last.ContentRef = ""
-			continue
-		}
-		if last.Doc != "" {
+			lines := strings.Split(last.Code, "\n")
+			marker := lines[len(lines)-1]
+			if strings.HasPrefix(marker, "… (") {
+				lines = lines[:len(lines)-1]
+			}
+			if len(lines) < 2 {
+				last.Code = ""
+				break
+			}
+			kept := lines[:len(lines)/2]
+			// A cut body ends as an excerpt does, with the span it came from,
+			// or it reads as the whole definition.
+			if !strings.HasPrefix(marker, "… (excerpt; ") && !strings.HasPrefix(marker, "… (crux ") {
+				path, from, to, _ := parseAskPointer(last.Pointer)
+				first, _, _ := strings.Cut(lines[0], ": ")
+				final, _, _ := strings.Cut(lines[len(lines)-1], ": ")
+				if askExcerptLineNumber(first) > 0 {
+					// A whole file is numbered already.
+					from, to = askExcerptLineNumber(first), askExcerptLineNumber(final)
+				} else {
+					for i := range kept {
+						kept[i] = fmt.Sprintf("L%d: %s", from+i, kept[i])
+					}
+				}
+				marker = fmt.Sprintf("… (excerpt; full definition at %s:L%d-L%d; rerun with --full)", path, from, to)
+			}
+			last.Code = strings.Join(kept, "\n") + "\n" + marker
+		case last.Doc != "":
 			last.Doc = ""
-			continue
-		}
-		if last.Snippet != "" {
+		case last.Snippet != "":
 			last.Snippet = ""
-			continue
+		default:
+			name, _, _ := strings.Cut(last.Title, " · ")
+			dropped = append(dropped, name+" ("+last.Pointer+")")
+			result.Hits = result.Hits[:len(result.Hits)-1]
 		}
-		result.Hits = result.Hits[:len(result.Hits)-1]
+		// The hits dropped whole are named, best ranked first.
+		omitted := "Context omitted to fit the budget; "
+		if len(dropped) > 0 {
+			names := slices.Clone(dropped)
+			slices.Reverse(names)
+			if len(names) > 6 {
+				names = append(names[:6], fmt.Sprintf("+%d more", len(names)-6))
+			}
+			omitted += "not shown: " + strings.Join(names, ", ") + "; "
+		}
+		result.Note = strings.TrimSpace(note + "\n" + omitted + advice + ".")
 	}
 	return result, nil
 }
@@ -162,6 +199,22 @@ func setAskSourceHashes(wiring graph.GraphV1, hits []graph.AskHit) {
 	}
 	for i := range hits {
 		hits[i].SourceHash = hashes[hits[i].Pointer]
+	}
+}
+
+// setAskSelectors names each symbol hit as a read takes it, Owner.member for a
+// method. A hit's title is its name, followed by " · kind" for a ranked one.
+func setAskSelectors(wiring graph.GraphV1, hits []graph.AskHit) {
+	wanted := make(map[string]int, len(hits))
+	for i, hit := range hits {
+		name, _, _ := strings.Cut(hit.Title, " · ")
+		wanted[name+"\x00"+hit.Pointer] = i
+	}
+	for _, node := range wiring.Nodes {
+		i, ok := wanted[node.Name+"\x00"+node.Path+":"+node.Span]
+		if _, selector, qualified := strings.Cut(node.ID, "#"); ok && qualified {
+			hits[i].Selector = selector
+		}
 	}
 }
 

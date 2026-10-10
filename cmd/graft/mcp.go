@@ -14,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -22,6 +23,7 @@ import (
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/hosts"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/savings"
 	"github.com/h0rn3t/Graft/internal/upkeep"
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -64,8 +66,8 @@ var mcpTools = []mcpToolDefinition{
 			"properties": map[string]any{
 				"query":  map[string]any{"type": "string", "description": "what you want to understand, in plain words"},
 				"limit":  map[string]any{"type": "number", "description": "max ranked matches (default 5)"},
-				"full":   map[string]any{"type": "boolean", "description": "inline every definition whole, past the budget fit"},
-				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "response budget in estimated tokens, default 2000"},
+				"full":   map[string]any{"type": "boolean", "description": "inline every hit whole, cutting the lowest-ranked to fit the budget"},
+				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": mcpBudgetCeiling, "description": "response budget in estimated tokens, default 2000"},
 				"intent": map[string]any{"type": "string", "enum": []string{"lookup", "edit"}, "description": "edit adds direct callers, dependencies and tests"},
 				"seen":   map[string]any{"type": "array", "maxItems": 256, "items": map[string]any{"type": "string"}, "description": "content refs: [] returns refs; prior refs omit unchanged source"},
 				"in":     map[string]any{"type": "string", "description": "only nodes under this path prefix"},
@@ -136,7 +138,7 @@ var mcpTools = []mcpToolDefinition{
 			"properties": map[string]any{
 				"symbol": map[string]any{"type": "string", "description": "exact name, node ID or path::name (child prefix in a workspace)"},
 				"also":   map[string]any{"type": "array", "maxItems": 7, "items": map[string]any{"type": "string"}, "description": "more symbols for this call, sharing its budget, without callees"},
-				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "estimated-token budget, default 2000; callees fill what the definitions leave"},
+				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": mcpBudgetCeiling, "description": "estimated-token budget, default 2000; callees fill what the definitions leave"},
 			},
 			"required": []string{"symbol"},
 		},
@@ -511,6 +513,18 @@ func (c *mcpConnection) writeValue(value any) error {
 	return err
 }
 
+// mcpResultCeiling caps the characters, in UTF-16 code units, of one tool
+// answer. Past a threshold Claude Code writes a result to a file and shows a
+// 2,000-character preview, and the agent spends a round reading it back: 50,000
+// characters in 2.1.296, lowered per tool by a remote setting, and codegraph saw
+// a 35,000-character answer go to a file.
+const mcpResultCeiling = 25_000
+
+// mcpBudgetCeiling is the largest budget graft_find_code and graft_read_symbol
+// spend, in estimated tokens of four characters: an answer at it stays under
+// mcpResultCeiling with room for the notes around it.
+const mcpBudgetCeiling = 6_000
+
 // mcpGrepBudget caps the bytes of hit groups in one graft_find_all answer,
 // about the 2000 tokens the other tools default to. A result stays in the
 // agent's context for every later round, so a broad pattern's tail costs far
@@ -542,6 +556,8 @@ func mcpCall(ctx context.Context, root, contextDir, dirOverride, requestedName s
 }
 
 func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, requestedName string, args map[string]any, cache *queryCache) (result mcpResult) {
+	// Deferred first, so it runs last and also bounds the refresh note.
+	defer func() { result.text = fitMCPText(result.text, mcpResultCeiling) }()
 	name := mcpAliases[requestedName]
 	if name == "" {
 		name = requestedName
@@ -661,13 +677,12 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		if err == nil {
 			result = graph.Skeleton(*loaded, file)
 		}
-		var text bytes.Buffer
-		writeSkeletonHuman(&text, result)
+		text := fitSkeletonText(result, mcpResultCeiling)
 		if result.Saved != nil {
-			recordQuerySavings(contextDir, text.Len(), result.Saved.BaselineChars)
+			recordQuerySavings(contextDir, len(text), result.Saved.BaselineChars)
 		}
 		// A graph that is there but does not load is a fault, not a miss.
-		return mcpResult{text: text.String(), isError: err != nil && !errors.Is(err, os.ErrNotExist)}
+		return mcpResult{text: text, isError: err != nil && !errors.Is(err, os.ErrNotExist)}
 	case "graft_trace_calls":
 		symbol := mcpString(args["symbol"])
 		if symbol == "" {
@@ -745,6 +760,21 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		}
 		repoMap := graph.BuildRepoMap(*loaded, graph.RepoMapOptions{MaxDirs: maxDirs})
 		text := graph.FormatRepoMap(repoMap)
+		// Past the ceiling the map lists fewer directories, keeping its
+		// hotspots; the dropped ones are counted. 64 characters are left for
+		// the line that says so.
+		if limit := mcpResultCeiling - 64; savings.Length(text) > limit {
+			shown := len(repoMap.Dirs)
+			for _, scope := range repoMap.Scopes {
+				shown = max(shown, len(scope.Dirs))
+			}
+			for savings.Length(text) > limit && shown > 1 {
+				shown = max(shown*limit/savings.Length(text), 1)
+				repoMap = graph.BuildRepoMap(*loaded, graph.RepoMapOptions{MaxDirs: shown})
+				text = graph.FormatRepoMap(repoMap)
+			}
+			text += fmt.Sprintf("max_dirs %d is what one answer holds\n", shown)
+		}
 		if repoMap.Saved != nil {
 			recordQuerySavings(contextDir, len(text), repoMap.Saved.BaselineChars)
 		}
@@ -761,6 +791,21 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 
 // mcpRunCommand runs a CLI command with options built from tool arguments; a
 // failure answers with the command's diagnostic, as a thrown error.
+// fitMCPText cuts text past ceiling characters at a line end and counts the
+// lines it left out. The tools shape their own answers to fit; this bounds the
+// rest, such as a long drift report or a workspace's federated answer.
+func fitMCPText(text string, ceiling int) string {
+	if savings.Length(text) <= ceiling {
+		return text
+	}
+	lines := strings.Split(text, "\n")
+	cut := func(kept int) string {
+		return strings.Join(lines[:kept], "\n") + fmt.Sprintf("\n⋮ +%d more lines past the %d characters one answer holds", len(lines)-kept, ceiling)
+	}
+	kept := sort.Search(len(lines), func(i int) bool { return savings.Length(cut(i+1)) > ceiling })
+	return cut(kept)
+}
+
 func mcpRunCommand(command func(callersOptions, io.Writer, io.Writer) int, opts callersOptions) mcpResult {
 	var stdout, stderr bytes.Buffer
 	if status := command(opts, &stdout, &stderr); status != 0 {

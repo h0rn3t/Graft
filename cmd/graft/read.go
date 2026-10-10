@@ -91,11 +91,11 @@ func runRead(opts callersOptions, stdout, stderr io.Writer) int {
 			return savings.Tokens(savings.Length(renderReadResult(candidate, opts.jsonOutput)+diagnostics.String())) <= budget
 		})
 		if !ok {
-			flag := "--budget"
+			flag, maximum := "--budget", 64000
 			if opts.mcp {
-				flag = "budget"
+				flag, maximum = "budget", mcpBudgetCeiling
 			}
-			writeDiagnostic(stderr, "complete definition needs %d estimated tokens and not even its declaration fits; retry once with %s %d or higher (maximum 64000)\n", required, flag, required)
+			writeDiagnostic(stderr, "complete definition needs %d estimated tokens and not even its declaration fits; retry once with %s %d or higher (maximum %d)\n", required, flag, min(required, maximum), maximum)
 			return readMissStatus(opts)
 		}
 		result = fitted

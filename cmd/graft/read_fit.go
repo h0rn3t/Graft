@@ -47,7 +47,12 @@ func fitReadResult(wiring graph.GraphV1, node graph.NodeV1, result readResult, n
 		note := fmt.Sprintf("the whole %s needs %d estimated tokens; its members follow as ⋮ lines: read them by name, several at once with %s", node.Kind, needed, also)
 		return fitReadOutline(withReadNote(result, note), node, members, fileAPI, fits)
 	}
-	return fitReadHead(result, node, callees, fmt.Sprintf("the whole %s needs %d estimated tokens: %s %d", node.Kind, needed, flag, needed), fits)
+	whole := fmt.Sprintf("the whole %s needs %d estimated tokens: %s %d", node.Kind, needed, flag, needed)
+	if mcp && needed > mcpBudgetCeiling {
+		// A larger budget would come back cut the same way.
+		whole = fmt.Sprintf("the whole %s needs %d, more than the %d estimated tokens one answer holds", node.Kind, needed, mcpBudgetCeiling)
+	}
+	return fitReadHead(result, node, callees, whole, fits)
 }
 
 // fitReadOutline keeps a container's head and lists every member as a gap line

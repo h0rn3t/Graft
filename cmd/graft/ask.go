@@ -73,6 +73,7 @@ func runAsk(opts callersOptions, stdout, stderr io.Writer) int {
 	if opts.source {
 		setAskSourceHashes(*loaded, result.Hits)
 		setAskMethods(*loaded, result.Hits)
+		setAskSelectors(*loaded, result.Hits)
 		inlineAskHits(root, askCruxByPointer(*loaded), result.Hits, opts.full, opts.query)
 		nodes := askHitNodes(*loaded, result.Hits)
 		var chain []string
@@ -619,7 +620,7 @@ func formatAskText(result graph.AskResult, mcp bool) string {
 				lines = append(lines, "   unchanged; source already supplied")
 			}
 			if hit.Code != "" {
-				lines = append(lines, "", "```", askExcerptText(hit.Code, mcp), "```", "")
+				lines = append(lines, "", "```", askExcerptText(hit.Code, mcp, hit.Selector), "```", "")
 			}
 		}
 	} else {
@@ -655,7 +656,7 @@ func formatAskText(result graph.AskResult, mcp bool) string {
 				lines = append(lines, "   methods: "+hit.Methods)
 			}
 			if hit.Code != "" {
-				lines = append(lines, "", "```", askExcerptText(hit.Code, mcp), "```")
+				lines = append(lines, "", "```", askExcerptText(hit.Code, mcp, hit.Selector), "```")
 			}
 			lines = append(lines, "")
 		}
@@ -691,9 +692,10 @@ func askExcerptLineNumber(label string) int {
 
 // askExcerptText rewrites a compact excerpt for text output. Lines holding only
 // closing brackets and separators are left out, and the footer states how many
-// definition lines were not printed. Whole definitions are returned unchanged,
-// and so is the code field of JSON output.
-func askExcerptText(code string, mcp bool) string {
+// definition lines were not printed and how to read them; over MCP that is a
+// read of selector when the hit has one. Whole definitions are returned
+// unchanged, and so is the code field of JSON output.
+func askExcerptText(code string, mcp bool, selector string) string {
 	lines := strings.Split(code, "\n")
 	pointer, ok := strings.CutPrefix(lines[len(lines)-1], "… (excerpt; full definition at ")
 	if ok {
@@ -719,7 +721,12 @@ func askExcerptText(code string, mcp bool) string {
 	}
 	hint := "--full"
 	if mcp {
+		// One read gets the definition whole; full: true would re-run the
+		// search and cut its lowest hits to the budget.
 		hint = "full: true"
+		if selector != "" {
+			hint = "graft_read_symbol " + selector
+		}
 	}
 	return strings.Join(kept, "\n") + fmt.Sprintf("\n… +%d lines (%s)", to-from+1-printed, hint)
 }

@@ -98,6 +98,10 @@ type AskHit struct {
 	// Methods lists a type hit's methods for text output, "name L1-L9" joined
 	// by " · "; it is not part of the JSON contract.
 	Methods string `json:"-"`
+	// Selector names the hit's definition as a read takes it, Owner.member
+	// for a method, for the text that points at the rest of an excerpt; it is
+	// not part of the JSON contract.
+	Selector string `json:"-"`
 	// ContentRef identifies source delivered to callers using opt-in deduplication.
 	ContentRef string `json:"contentRef,omitempty"`
 	Unchanged  bool   `json:"unchanged,omitempty"`

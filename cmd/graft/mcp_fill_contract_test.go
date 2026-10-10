@@ -82,7 +82,7 @@ func TestMCPFindCodeFillsBudgetContract(t *testing.T) {
 			name:   "an excerpt that fits is completed",
 			args:   map[string]any{"query": "invoice totals line by line", "limit": float64(1)},
 			want:   []string{"total += lines[39]", "return total"},
-			reject: []string{"(full: true)", "whole file billing/tally.go"},
+			reject: []string{"… +", "whole file billing/tally.go"},
 		},
 		{
 			name: "a hit covering most of a small file brings the whole file",
@@ -98,13 +98,13 @@ func TestMCPFindCodeFillsBudgetContract(t *testing.T) {
 		{
 			name: "a definition larger than the budget stays an excerpt",
 			args: map[string]any{"query": "replays every invoice entry", "limit": float64(1)},
-			want: []string{"Ledger", "(full: true)"},
+			want: []string{"Ledger", "lines (graft_read_symbol Ledger)"},
 		},
 		{
 			name:   "a small file holding several partial hits is shown once, whole",
 			args:   map[string]any{"query": "pipeline input"},
 			want:   []string{"L1: package flow", "whole file flow/flow.go"},
-			reject: []string{"(full: true)"},
+			reject: []string{"… +"},
 		},
 		{
 			name: "the call flow among the hits leads the answer",

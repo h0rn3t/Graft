@@ -441,10 +441,21 @@ spans, up to ten, so the next read can name them. `--full` expands definitions w
 (default 2000, range 128–64000 estimated tokens, measured as UTF-16 length / 4).
 The result limit applies to ranked matches; edit intent can add up to six
 directly related symbols. JSON metadata counts toward this budget too.
-Truncation is reported; increase
-the budget or narrow the scope to inspect omitted logic before editing.
+When the answer runs past the budget, the lowest hits give up their source
+first: a cut definition keeps a numbered head closed by an `… +N lines` line, so
+it never reads as whole, and the hits dropped altogether are named with their
+spans, up to six. Increase the budget or narrow the scope to inspect omitted
+logic before editing.
 
-MCP `graft_find_code` exposes the same `budget` and `intent` options. Optional
+MCP `graft_find_code` exposes the same `budget` and `intent` options. Over MCP
+an excerpt's last line names the read that completes it, such as `… +26 lines
+(graft_read_symbol Journal.replay)`. Every MCP answer stays within 25,000
+characters; past a larger size Claude Code saves a result to a file and shows
+the agent a 2,000-character preview. `graft_find_code` and `graft_read_symbol`
+spend at most 6000 estimated tokens whatever budget is asked; `graft_file_api`
+drops docs, then signatures, then names the first definitions it leaves out;
+`graft_repo_map` lists fewer directories; any other answer is cut at a line end
+with a count of the lines left out. Optional
 `seen: []` returns content references; passing previous references suppresses
 unchanged source for that agent. Omit `seen` after context compaction to receive
 source again. The MCP server caches decoded graph/index snapshots while still
@@ -464,13 +475,13 @@ query that names its top hit (`probeDrift fast paths`) returns that definition
 whole when it fits half of the budget.
 Responses include the full indexed line span and a hash of the returned source.
 The default budget is 2000 estimated tokens (UTF-16 length / 4), configurable
-from 128 to 64000. A definition over the budget still answers in one call. A
+from 128 to 64000 (6000 over MCP). A definition over the budget still answers in one call. A
 class, interface or other container keeps its head and lists every member as a
 `⋮ L10-L42 Owner.member · signature` line to read by name; a long list drops the
 signatures, then lists the members that fit and points at the file's skeleton.
 A function or method shows its longest whole-line head and a closing `⋮` line
 naming up to six functions the rest calls, with the budget the whole definition
-needs. Only a declaration that alone exceeds the budget answers with the budget
+needs, or, over MCP past 6000, a note that it is more than one answer holds. Only a declaration that alone exceeds the budget answers with the budget
 it needs instead of source. Missing, unreadable, or changed
 source also returns an error; even `--no-refresh` never reads stale spans.
 Over MCP, a name that resolves to no single definition, a declaration over
