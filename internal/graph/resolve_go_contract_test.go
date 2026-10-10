@@ -19,7 +19,12 @@ func resolveFiles(t *testing.T, files map[string]string, modules []goModule) ([]
 		nodes = append(nodes, got.nodes...)
 		raw = append(raw, got.rawEdges...)
 	}
-	return resolveEdges(nodes, raw, modules)
+	edges, unresolved, _ := resolveEdges(nodes, raw, modules)
+	// The cases compare what links to what; TestResolveEdgeLines owns lines.
+	for index := range edges {
+		edges[index].Line = 0
+	}
+	return edges, unresolved
 }
 
 func TestResolveGoInterfacesAndPackageCalls(t *testing.T) {
@@ -119,7 +124,7 @@ func TestResolveGoFunctionValues(t *testing.T) {
 		reference("app/app.go#setup", "kit/kit.go#Helper"),              // package function value
 		reference("app/app.go#Server.Start", "app/app.go#Server.Serve"), // method value through the receiver
 		reference("app/app.go#factory", "app/app.go#handle"),            // returned value
-		reference("app/app.go", "app/app.go#onTick"),                    // package-level var value
+		reference("app/app.go#single", "app/app.go#onTick"),             // package-level var value
 		{Source: "app/app.go#setup", Target: "app/app.go#register", Relation: "calls", Confidence: "extracted"},
 	} {
 		if !slices.Contains(edges, want) {
@@ -159,20 +164,20 @@ func TestResolveGoTypeUses(t *testing.T) {
 		return EdgeV1{Source: source, Target: target, Relation: "references", Confidence: "inferred"}
 	}
 	for _, want := range []EdgeV1{
-		reference("app/app.go#IDs", "app/app.go#ID"),          // underlying type
-		reference("app/app.go#Item", "app/app.go#ID"),         // field type
-		reference("app/app.go#Store", "kit/kit.go#Config"),    // qualified field type
-		reference("app/app.go#Store", "app/app.go#Item"),      // map value type
-		reference("app/app.go#Handler", "app/app.go#Item"),    // function type parameter
-		reference("app/app.go#Store.Get", "app/app.go#ID"),    // parameter type
-		reference("app/app.go#Store.Get", "app/app.go#Item"),  // result type
-		reference("app/app.go#NewStore", "kit/kit.go#Option"), // variadic qualified parameter
-		reference("app/app.go#NewStore", "app/app.go#Store"),  // result and composite literal
-		reference("app/app.go#toID", "app/app.go#ID"),         // conversion
-		reference("app/app.go#toOption", "kit/kit.go#Option"), // qualified conversion
-		reference("app/app.go#cast", "app/app.go#Item"),       // type assertion
-		reference("app/app.go#alloc", "app/app.go#Base"),      // new(T)
-		reference("app/app.go", "app/app.go#ID"),              // package-level var type
+		reference("app/app.go#IDs", "app/app.go#ID"),           // underlying type
+		reference("app/app.go#Item.id", "app/app.go#ID"),       // field type
+		reference("app/app.go#Store.cfg", "kit/kit.go#Config"), // qualified field type
+		reference("app/app.go#Store.byID", "app/app.go#Item"),  // map value type
+		reference("app/app.go#Handler", "app/app.go#Item"),     // function type parameter
+		reference("app/app.go#Store.Get", "app/app.go#ID"),     // parameter type
+		reference("app/app.go#Store.Get", "app/app.go#Item"),   // result type
+		reference("app/app.go#NewStore", "kit/kit.go#Option"),  // variadic qualified parameter
+		reference("app/app.go#NewStore", "app/app.go#Store"),   // result and composite literal
+		reference("app/app.go#toID", "app/app.go#ID"),          // conversion
+		reference("app/app.go#toOption", "kit/kit.go#Option"),  // qualified conversion
+		reference("app/app.go#cast", "app/app.go#Item"),        // type assertion
+		reference("app/app.go#alloc", "app/app.go#Base"),       // new(T)
+		reference("app/app.go#defaultID", "app/app.go#ID"),     // package-level var type
 	} {
 		if !slices.Contains(edges, want) {
 			t.Errorf("resolveEdges(app, kit) has no %+v", want)
@@ -182,7 +187,7 @@ func TestResolveGoTypeUses(t *testing.T) {
 		{"app/app.go#Store", "app/app.go#Store"},     // no self references
 		{"app/app.go#Store", "app/app.go#Base"},      // an embedded field extends, it is no reference
 		{"app/app.go#Store.Get", "app/app.go#Store"}, // a receiver owns the method
-		{"app/app.go#List", "app/app.go#T"},          // the type parameter T hides the type
+		{"app/app.go#List.items", "app/app.go#T"},    // the type parameter T hides the type
 		{"app/app.go#List.Push", "app/app.go#T"},     // so does a generic receiver's
 		{"app/app.go#Map", "app/app.go#T"},           // and a generic function's
 	} {
@@ -321,5 +326,111 @@ func TestResolveCountsUnresolvedCalls(t *testing.T) {
 	want := UnresolvedCalls{ReceiverUnknown: 1, MemberNotInGraph: 1, NameAmbiguous: 1, NameNotInGraph: 1}
 	if unresolved != want {
 		t.Errorf("resolveEdges(a.py, b.py, main.py) unresolved = %+v, want %+v", unresolved, want)
+	}
+}
+
+func TestResolveGoValueUses(t *testing.T) {
+	files := map[string]string{
+		"kit/kit.go": "package kit\n\nconst Limit = 3\n\nvar Default = 1\n",
+		"app/app.go": "package app\n\nimport \"example.com/m/kit\"\n\n" +
+			"type Kind int\n\nconst (\n\tKindA Kind = iota\n\tKindB\n)\n\n" +
+			"type Weights map[Kind]int\n\n" +
+			"var hits int\n\nvar hook = func() {}\n\n" +
+			"type Base struct{ Inner int }\n\n" +
+			"type Box struct {\n\tBase\n\tName  string\n\tcache map[string]int\n\tcb    func()\n}\n\n" +
+			"func (b *Box) Fill(k string) {\n\tb.Name = \"x\"\n\tb.cache[k] = 1\n\thits++\n\tb.cb()\n\thook()\n}\n\n" +
+			"func read(b *Box) int { return b.Inner + kit.Limit + kit.Default + len(b.Name) }\n\n" +
+			"func build() []Box {\n\t_ = map[Kind]int{KindA: 1}\n\t_ = Weights{KindB: 2}\n\treturn []Box{{Name: \"a\"}}\n}\n\n" +
+			"func shadow() int {\n\thits := 1\n\treturn hits\n}\n\n" +
+			"func load() *Box { return nil }\n\n" +
+			"func untyped() string {\n\tb := load()\n\treturn b.Name\n}\n",
+	}
+	edges, _ := resolveFiles(t, files, []goModule{{module: "example.com/m", dir: "."}})
+
+	edge := func(source, relation, target string) EdgeV1 {
+		return EdgeV1{Source: "app/app.go#" + source, Target: target, Relation: Relation(relation), Confidence: "inferred"}
+	}
+	for _, want := range []EdgeV1{
+		edge("Box.Fill", "writes", "app/app.go#Box.Name"),  // assigned
+		edge("Box.Fill", "writes", "app/app.go#Box.cache"), // stored into through an index
+		edge("Box.Fill", "writes", "app/app.go#hits"),      // stepped
+		// Called through a field of function type: bound like a method call.
+		{Source: "app/app.go#Box.Fill", Target: "app/app.go#Box.cb", Relation: "references", Confidence: "extracted"},
+		edge("Box.Fill", "references", "app/app.go#hook"),   // called through a variable
+		edge("read", "references", "app/app.go#Base.Inner"), // promoted through an embedded struct
+		edge("read", "references", "app/app.go#Box.Name"),   // read
+		edge("read", "references", "kit/kit.go#Limit"),      // an imported package's constant
+		edge("read", "references", "kit/kit.go#Default"),    // and variable
+		edge("build", "references", "app/app.go#KindA"),     // a map literal's key is a value
+		edge("build", "references", "app/app.go#KindB"),     // so is a key of a literal of a map type
+		edge("build", "writes", "app/app.go#Box.Name"),      // an elided element's key is a field
+	} {
+		if !slices.Contains(edges, want) {
+			t.Errorf("resolveEdges(app, kit) has no %+v", want)
+		}
+	}
+	for _, unwanted := range []EdgeV1{
+		edge("shadow", "references", "app/app.go#hits"),                                                          // the local hits hides the variable
+		edge("untyped", "references", "app/app.go#Box.Name"),                                                     // b's type is not known
+		{Source: "app/app.go#Box.Fill", Target: "app/app.go#Box.cb", Relation: "calls", Confidence: "extracted"}, // a field is read, not called
+	} {
+		if slices.Contains(edges, unwanted) {
+			t.Errorf("resolveEdges(app, kit) has %+v, want none", unwanted)
+		}
+	}
+}
+
+func TestResolveCountsUnresolvedNames(t *testing.T) {
+	files := map[string]string{
+		"app/lock_unix.go":    "package app\n\nfunc tryLock() bool { return true }\n",
+		"app/lock_windows.go": "package app\n\nfunc tryLock() bool { return false }\n",
+		"kit/lock_unix.go":    "package kit\n\nfunc Lock() {}\n",
+		"kit/lock_windows.go": "package kit\n\nfunc Lock() {}\n",
+		"app/app.go": "package app\n\nimport \"example.com/m/kit\"\n\ntype Box struct{ Name string }\n\nfunc (Box) Close() {}\n\n" +
+			"func load() *Box { return nil }\n\n" +
+			"func run() string {\n\tb := load()\n\tb.Close()\n\t_ = tryLock()\n\tkit.Lock()\n\treturn b.Name + b.Missing\n}\n",
+	}
+	var nodes []NodeV1
+	var raw []rawEdge
+	for _, rel := range slices.Sorted(maps.Keys(files)) {
+		got, err := extractFile(rel, files[rel])
+		if err != nil {
+			t.Fatalf("extractFile(%q) error = %v, want nil", rel, err)
+		}
+		nodes = append(nodes, got.nodes...)
+		raw = append(raw, got.rawEdges...)
+	}
+	_, _, names := resolveEdges(nodes, raw, []goModule{{module: "example.com/m", dir: "."}})
+	want := map[string]UnresolvedName{
+		"Close":   {Untyped: 1},   // a call on a receiver of unknown type
+		"Name":    {Untyped: 1},   // and a field read on one
+		"tryLock": {Ambiguous: 1}, // two definitions of one name
+		"Lock":    {Ambiguous: 1}, // and of one name in an imported package
+	}
+	if !maps.Equal(names, want) {
+		t.Errorf("resolveEdges(app) unresolved names = %v, want %v (Missing names no symbol)", names, want)
+	}
+}
+
+func TestResolveEdgeLines(t *testing.T) {
+	const source = "package app\n\nimport \"fmt\"\n\ntype Box struct{ n int }\n\n" +
+		"func (b *Box) inc() { b.n++ }\n\n" +
+		"func run(b *Box) {\n\tfmt.Println(b.n)\n\tb.inc()\n\tb.inc()\n}\n"
+	got, err := extractFile("app.go", source)
+	if err != nil {
+		t.Fatalf("extractFile(%q, source) error = %v, want nil", "app.go", err)
+	}
+	edges, _, _ := resolveEdges(got.nodes, got.rawEdges, nil)
+	for _, want := range []EdgeV1{
+		{Source: "app.go#Box.inc", Target: "app.go#Box.n", Relation: "writes", Confidence: "inferred", Line: 7},
+		{Source: "app.go#run", Target: "app.go#Box.n", Relation: "references", Confidence: "inferred", Line: 10},
+		// The first of two calls gives the edge its line.
+		{Source: "app.go#run", Target: "app.go#Box.inc", Relation: "calls", Confidence: "extracted", Line: 11},
+		// contains is no use, and has no line.
+		{Source: "app.go#Box", Target: "app.go#Box.n", Relation: "contains", Confidence: "extracted"},
+	} {
+		if !slices.Contains(edges, want) {
+			t.Errorf("resolveEdges(extractFile(%q)) = %+v, want %+v", "app.go", edges, want)
+		}
 	}
 }

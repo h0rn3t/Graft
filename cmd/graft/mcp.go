@@ -850,6 +850,7 @@ func mcpTraceCalls(root, contextDir, symbol string, args map[string]any, cache *
 	dropped := make(map[string]int)
 	for _, result := range results {
 		fmt.Fprintf(&body, "%s · %s · %s:%s\n", result.symbol.Name, result.symbol.Kind, result.symbol.Path, result.symbol.Span)
+		body.WriteString(boundLine(*loaded, result.symbol, direction))
 		if len(result.hits) == 0 {
 			body.WriteString(looseNote(direction, result.symbol.Name, len(results)))
 			body.WriteByte('\n')
@@ -857,19 +858,11 @@ func mcpTraceCalls(root, contextDir, symbol string, args map[string]any, cache *
 		hits := slices.Clone(result.hits)
 		slices.SortStableFunc(hits, func(a, b graph.EdgeHit) int { return cmp.Compare(copied(a.Node), copied(b.Node)) })
 		for _, hit := range hits {
-			arrow := "←"
-			if direction == graph.DirectionOut {
-				arrow = "→"
-			}
-			label, path := fmt.Sprintf("%s (unresolved import)", hit.ID), hit.ID
+			path := hit.ID
 			if hit.Node != nil {
-				label, path = fmt.Sprintf("%s (%s:%s)", hit.Node.Name, hit.Node.Path, hit.Node.Span), hit.Node.Path
+				path = hit.Node.Path
 			}
-			depthLabel := ""
-			if depth > 1 {
-				depthLabel = fmt.Sprintf(" [depth %d]", hit.Depth)
-			}
-			line := fmt.Sprintf("  %s %s %s%s\n", hit.Relation, arrow, label, depthLabel)
+			line := edgeHitLine(hit, direction, depth) + "\n"
 			if body.Len()+len(line) > mcpGrepBudget {
 				dropped[path]++
 				continue

@@ -9,7 +9,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "trim · function · src/format.js:L2-L2\n  calls ← format (src/format.js:L1-L1) [depth 1]\n      1: export function format(text) { return trim(text).toUpperCase(); }\n  calls ← get (src/store.ts:L4-L4) [depth 2]\n",
+  "stdout": "trim · function · src/format.js:L2-L2\n  lower bound: 1 use of .trim on a receiver of unknown type\n  calls ← format (src/format.js:L1-L1) [depth 1]\n      1: export function format(text) { return trim(text).toUpperCase(); }\n  calls ← get (src/store.ts:L4-L4) [depth 2]\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

@@ -109,7 +109,7 @@
       "usage": "graft callers [options] <symbol> [dir]",
       "options": ["--direction <in|out>", "-d, --depth <n>", "--in <path>", "--json", "--no-refresh"],
       "backend": "go",
-      "stdout": "caller/callee listing, or JSON",
+      "stdout": "caller/callee listing, each edge with its line, and under a function, method or field whose callers are listed `exact` or `lower bound` with its reasons; JSON `{query, matches: [{symbol, bound?, hits, note?}]}`",
       "exit": { "0": "resolved", "1": "`✗ no graph found at <C> — run `graft build` first`, unknown symbol, or invalid --direction/--depth" },
       "effects": ["refresh: see queryRefresh"]
     },
@@ -157,7 +157,7 @@
       "usage": "graft dead [options] [dir]",
       "options": ["--in <path>", "--all", "--json", "--no-refresh"],
       "backend": "go",
-      "stdout": "functions and methods without callers grouped by confidence — high, medium, and with --all low, each low one with its reason; JSON `{high, medium, low, candidates}`",
+      "stdout": "functions and methods without callers grouped by confidence — high, medium, and with --all low, each low one with its reason, then the code left out counted by reason; JSON `{high, medium, low, excluded, candidates}`",
       "exit": { "0": "listed, including none", "1": "`✗ no graph — run graft build first`, a multi-repo workspace root, or an unknown prefix" },
       "effects": ["refresh: see queryRefresh", "reads every indexed source file to find mentions of the candidates' names"]
     },

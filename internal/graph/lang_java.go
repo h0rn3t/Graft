@@ -121,7 +121,7 @@ func (x *extractor) javaHeritage(node *sitter.Node, classID string, ctx walkCtx)
 			if _, isParameter := typeParameters[name]; name == "" || isParameter {
 				continue
 			}
-			edges = append(edges, rawEdge{source: classID, relation: relation, name: name, file: ctx.rel})
+			edges = append(edges, rawEdge{source: classID, relation: relation, name: name, file: ctx.rel, line: lineOf(entry)})
 		}
 	}
 	return edges
@@ -156,7 +156,7 @@ func (x *extractor) javaAnnotationReferences(node *sitter.Node, sourceID string,
 	for _, annotation := range namedChildrenOfKind(namedChildOfKind(node, "modifiers"), "marker_annotation", "annotation") {
 		name := annotation.ChildByFieldName("name")
 		if name != nil && (name.Kind() == "identifier" || name.Kind() == "scoped_identifier") {
-			edges = append(edges, rawEdge{source: sourceID, relation: "references", name: x.text(name), file: ctx.rel})
+			edges = append(edges, rawEdge{source: sourceID, relation: "references", name: x.text(name), file: ctx.rel, line: lineOf(name)})
 		}
 	}
 	return edges
@@ -218,7 +218,7 @@ func (x *extractor) javaAnonymousClass(node *sitter.Node, ctx walkCtx) bool {
 	})
 	x.edges = append(x.edges, rawEdge{source: ctx.parentID, relation: "contains", targetID: id, file: ctx.rel})
 	if super := x.javaConstructedTypeName(node.ChildByFieldName("type")); super != "" {
-		x.edges = append(x.edges, rawEdge{source: id, relation: "implements", name: super, file: ctx.rel})
+		x.edges = append(x.edges, rawEdge{source: id, relation: "implements", name: super, file: ctx.rel, line: lineOf(node)})
 	}
 	anonymous := ctx
 	anonymous.scope = append(slices.Clone(ctx.scope), idPart)

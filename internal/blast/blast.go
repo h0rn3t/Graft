@@ -134,6 +134,8 @@ func spanBounds(span string) (int, int, bool) {
 }
 
 // seedsForFile returns the innermost symbols in path overlapping any range.
+// A changed field seeds its struct as well: adding or reordering one changes
+// every literal of the struct, not only the code naming the field.
 func seedsForFile(wiring graph.GraphV1, path string, ranges []LineRange) []graph.NodeV1 {
 	symbols := make([]spanned, 0)
 	for _, node := range wiring.Nodes {
@@ -161,7 +163,7 @@ func seedsForFile(wiring graph.GraphV1, path string, ranges []LineRange) []graph
 			containsAnother := false
 			for _, j := range overlapping {
 				other := symbols[j]
-				if j != i && other.start >= symbol.start && other.end <= symbol.end {
+				if j != i && other.node.Kind != "field" && other.start >= symbol.start && other.end <= symbol.end {
 					containsAnother = true
 					break
 				}

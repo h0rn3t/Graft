@@ -73,6 +73,9 @@ func WriteCards(graph GraphV1, outDir string) (CardStats, error) {
 			}
 		}
 		for _, node := range symbols {
+			if node.Kind == "field" {
+				body.WriteString("  ") // under its struct
+			}
 			body.WriteString("- " + node.Name + " · " + string(node.Kind) + " · " + node.Span)
 			if summary := cardOneLiner(node); summary != "" {
 				body.WriteString(" — " + summary)

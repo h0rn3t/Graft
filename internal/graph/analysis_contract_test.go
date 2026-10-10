@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/h0rn3t/Graft/internal/sourcefiles"
@@ -141,12 +142,12 @@ func TestFindDeadCode(t *testing.T) {
 			"def main():\n    x = get()\n    x.dynamic()\n    print(\"mentioned\")\n",
 		"tests/test_app.py": "def helper():\n    pass\n",
 	})
-	dead, err := FindDeadCode(graph, root, "")
+	report, err := FindDeadCode(graph, root, "")
 	if err != nil {
 		t.Fatalf("FindDeadCode() error = %v, want nil", err)
 	}
-	got := make([]string, 0, len(dead))
-	for _, symbol := range dead {
+	got := make([]string, 0, len(report.Symbols))
+	for _, symbol := range report.Symbols {
 		got = append(got, fmt.Sprintf("%s %s", symbol.Confidence, symbol.Node.Name))
 	}
 	want := []string{
@@ -263,5 +264,45 @@ func TestFindRoutes(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("FindRoutes() =\n%q\nwant\n%q", got, want)
+	}
+}
+
+func TestFindDeadCodeRules(t *testing.T) {
+	root, graph := buildAnalysisRepo(t, map[string]string{
+		"internal/svc/svc.go": "package svc\n\n" +
+			"type Fetcher interface{ Fetch() string }\n\n" +
+			"type T struct{}\n\nfunc (T) String() string { return \"\" }\n\n" +
+			"type A struct{}\n\nfunc (A) Run() {}\n\n" +
+			"type B struct{}\n\nfunc (B) Run() {}\n\n" +
+			"type C struct{}\n\nfunc (C) Load() {}\n\n" +
+			"func newC() *C { return nil }\n\n" +
+			"func init() {\n\tvar a A\n\ta.Run()\n\tc := newC()\n\tc.Load()\n}\n\n" +
+			"func Exported() {}\n\nfunc orphan() {}\n",
+		"internal/svc/svc_test.go": "package svc\n\nfunc helper() {}\n",
+		"cmd/tool/main.go":         "package main\n\nfunc main() {}\n\nfunc Command() {}\n",
+		"api/api.go":               "package api\n\nfunc Public() {}\n",
+	})
+	report, err := FindDeadCode(graph, root, "")
+	if err != nil {
+		t.Fatalf("FindDeadCode() error = %v, want nil", err)
+	}
+	got := make([]string, 0, len(report.Symbols))
+	for _, symbol := range report.Symbols {
+		got = append(got, fmt.Sprintf("%s %s %s", symbol.Confidence, symbol.Node.Name, symbol.Rule))
+	}
+	want := []string{
+		"high Command ",  // a command's exported function: no other module imports it
+		"high Exported ", // nor an internal package's
+		"high orphan ",
+		"medium Public ",
+		"low Run twin",        // A.Run is called, and may have taken B.Run's calls
+		"low Load unresolved", // the type of c is unknown, so c.Load() may be C.Load
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("FindDeadCode() = %q, want %q", got, want)
+	}
+	wantExcluded := DeadExclusions{Copies: 1, EntryPoints: 2, RuntimeNames: 1, Declarations: 1}
+	if report.Excluded != wantExcluded {
+		t.Errorf("FindDeadCode() excluded = %+v, want %+v", report.Excluded, wantExcluded)
 	}
 }

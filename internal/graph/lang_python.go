@@ -32,7 +32,7 @@ func (x *extractor) pythonHeritage(node *sitter.Node, classID string, ctx walkCt
 	if superclasses := node.ChildByFieldName("superclasses"); superclasses != nil {
 		for _, base := range namedChildren(superclasses) {
 			if base.Kind() == "identifier" {
-				edges = append(edges, rawEdge{source: classID, relation: "extends", name: x.text(base), file: ctx.rel})
+				edges = append(edges, rawEdge{source: classID, relation: "extends", name: x.text(base), file: ctx.rel, line: lineOf(base)})
 			}
 		}
 	}

@@ -18,7 +18,7 @@ import (
 // ExtractorID names the native extractor in its cache and fingerprint sidecars.
 // Bump it whenever extraction output or a grammar version changes, so a graph
 // built by an older extractor is never trusted as fresh.
-const ExtractorID = "go-v17"
+const ExtractorID = "go-v18"
 
 var goModuleLine = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)
 
@@ -67,7 +67,9 @@ type cachedEdge struct {
 	Kinds        []Kind   `json:"kinds,omitempty"`
 	ArgCount     *int     `json:"argCount,omitempty"`
 	ImplicitSelf bool     `json:"implicitSelf,omitempty"`
+	LiteralKey   bool     `json:"literalKey,omitempty"`
 	File         string   `json:"file"`
+	Line         int      `json:"line,omitempty"`
 }
 
 type cachedFile struct {
@@ -245,7 +247,7 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 					specifier: edge.Specifier, name: edge.Name, viaMember: edge.ViaMember,
 					recvType: edge.RecvType, recvPackage: edge.RecvPackage, recvFields: edge.RecvFields,
 					kinds: edge.Kinds, argCount: edge.ArgCount,
-					implicitSelf: edge.ImplicitSelf, file: edge.File,
+					implicitSelf: edge.ImplicitSelf, literalKey: edge.LiteralKey, file: edge.File, line: edge.Line,
 				})
 			}
 			languageSet[label] = struct{}{}
@@ -274,7 +276,7 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 				Specifier: edge.specifier, Name: edge.name, ViaMember: edge.viaMember,
 				RecvType: edge.recvType, RecvPackage: edge.recvPackage, RecvFields: edge.recvFields,
 				Kinds: edge.kinds, ArgCount: edge.argCount,
-				ImplicitSelf: edge.implicitSelf, File: edge.file,
+				ImplicitSelf: edge.implicitSelf, LiteralKey: edge.literalKey, File: edge.file, Line: edge.line,
 			})
 		}
 		current.Files[file.Rel] = entry
@@ -290,12 +292,12 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		_ = fsutil.WriteFileAtomic(cachePath, data, 0o644) // A cache write failure only costs reuse on the next build.
 	}
 
-	edges, unresolved := resolveEdges(nodes, rawEdges, modules)
+	edges, unresolved, unresolvedNames := resolveEdges(nodes, rawEdges, modules)
 	scopes := applyMinSubstanceGuard(discoverScopes(absRoot, relFiles), nodes)
 	result.Graph = GraphV1{
 		Meta: GraphMeta{
 			Version: 1, NodeCount: len(nodes), EdgeCount: len(edges), Languages: slices.Sorted(maps.Keys(languageSet)),
-			Scopes: &scopes, UnresolvedCalls: &unresolved,
+			Scopes: &scopes, UnresolvedCalls: &unresolved, UnresolvedNames: unresolvedNames,
 		},
 		Nodes: nodes,
 		Edges: edges,

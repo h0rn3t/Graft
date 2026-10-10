@@ -27,7 +27,7 @@ func TestExtractFileContract(t *testing.T) {
 			},
 			wantEdges: []rawEdge{
 				{source: "src/app.TS", relation: "contains", targetID: "src/app.TS#greet", file: "src/app.TS"},
-				{source: "src/app.TS#greet", relation: "calls", name: "helper", file: "src/app.TS"},
+				{source: "src/app.TS#greet", relation: "calls", name: "helper", file: "src/app.TS", line: 2},
 				{source: "src/app.TS", relation: "contains", targetID: "src/app.TS#helper", file: "src/app.TS"},
 			},
 		},
@@ -45,7 +45,7 @@ func TestExtractFileContract(t *testing.T) {
 			wantEdges: []rawEdge{
 				{source: "src/worker.js", relation: "contains", targetID: "src/worker.js#Worker", file: "src/worker.js"},
 				{source: "src/worker.js#Worker", relation: "contains", targetID: "src/worker.js#Worker.run", file: "src/worker.js"},
-				{source: "src/worker.js#Worker.run", relation: "calls", name: "make", file: "src/worker.js"},
+				{source: "src/worker.js#Worker.run", relation: "calls", name: "make", file: "src/worker.js", line: 1},
 				{source: "src/worker.js", relation: "contains", targetID: "src/worker.js#make", file: "src/worker.js"},
 			},
 		},
@@ -59,7 +59,7 @@ func TestExtractFileContract(t *testing.T) {
 				{ID: "src/app.js#run", Name: "run", Kind: "function", Path: "src/app.js", Span: "L2-L2", Signature: new("function run()"), Origin: "ast", BodyHash: "772ac08d618be0a9d483d59ab7573fb70e730fc76853177c37b38c7a70607fc1", BodyText: new("function run() {}"), SummaryState: "pending"},
 			},
 			wantEdges: []rawEdge{
-				{source: "src/app.js", relation: "imports", specifier: "./dep.js", file: "src/app.js"},
+				{source: "src/app.js", relation: "imports", specifier: "./dep.js", file: "src/app.js", line: 1},
 				{source: "src/app.js", relation: "contains", targetID: "src/app.js#run", file: "src/app.js"},
 			},
 		},
@@ -73,7 +73,7 @@ func TestExtractFileContract(t *testing.T) {
 				{ID: "src/app.js#run", Name: "run", Kind: "function", Path: "src/app.js", Span: "L2-L2", Signature: new("function run(helper)"), Origin: "ast", BodyHash: "7ba8173d1eb759d46e0a0669ba989b4fff3a76ff4cac9cf886b5e7163cc30aed", BodyText: new("function run(helper) { return helper; }"), SummaryState: "pending"},
 			},
 			wantEdges: []rawEdge{
-				{source: "src/app.js", relation: "imports", specifier: "./dep.js", file: "src/app.js"},
+				{source: "src/app.js", relation: "imports", specifier: "./dep.js", file: "src/app.js", line: 1},
 				{source: "src/app.js", relation: "contains", targetID: "src/app.js#run", file: "src/app.js"},
 			},
 		},

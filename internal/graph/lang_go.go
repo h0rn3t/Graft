@@ -9,6 +9,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 	sitter "github.com/tree-sitter/go-tree-sitter"
 )
 
@@ -140,7 +141,7 @@ func (x *extractor) goEmbeds(spec *sitter.Node, id string, ctx walkCtx) []rawEdg
 			embed = lastNamedChild(embed)
 		}
 		if embed = goGenericBase(embed); embed != nil && (embed.Kind() == "type_identifier" || embed.Kind() == "qualified_type") {
-			edges = append(edges, rawEdge{source: id, relation: "extends", name: x.text(embed), file: ctx.rel})
+			edges = append(edges, rawEdge{source: id, relation: "extends", name: x.text(embed), file: ctx.rel, line: lineOf(embed)})
 		}
 	}
 	return edges
@@ -181,28 +182,153 @@ func goValuePosition(node *sitter.Node) bool {
 	return false
 }
 
-// goFunctionValue is the references intent of a function or method named as
-// a value: `handle` in `register(handle)`, `s.Serve` through the type bound to
-// s, `kit.Helper` in an imported package. A bare name a parameter or local
-// declares is a variable, and a selector on a value of unknown type names
-// nothing to resolve.
-func (x *extractor) goFunctionValue(node *sitter.Node, ctx walkCtx) (rawEdge, bool) {
-	edge := rawEdge{source: ctx.parentID, relation: "references", file: ctx.rel}
-	if node.Kind() == "identifier" {
-		edge.name = x.text(node)
-		_, local := ctx.goLocals[edge.name]
-		return edge, !local
+// goValueKinds are the Go declarations a name in a value position can denote;
+// goDataKinds those a name in any other expression can.
+var (
+	goValueKinds = []Kind{"function", "constant", "variable"}
+	goDataKinds  = []Kind{"constant", "variable"}
+)
+
+// goWritten reports whether an expression is assigned or stepped: the left
+// side of = or op=, the operand of ++ or --, or what an index expression on
+// such a side stores into, `s.cache` in `s.cache[k] = v`.
+func goWritten(node *sitter.Node) bool {
+	parent := node.Parent()
+	if parent == nil {
+		return false
 	}
+	switch parent.Kind() {
+	case "expression_list":
+		owner := parent.Parent()
+		return owner != nil && owner.Kind() == "assignment_statement" && sameNode(owner.ChildByFieldName("left"), parent)
+	case "inc_statement", "dec_statement":
+		return true
+	case "index_expression":
+		return sameNode(parent.ChildByFieldName("operand"), node) && goWritten(parent)
+	case "parenthesized_expression":
+		return goWritten(parent)
+	}
+	return false
+}
+
+// goUseIntent starts the intent of a Go name or selector used where node
+// stands: writes when it is assigned, else references; a function, constant
+// or variable in a value position, and a constant or variable elsewhere.
+func goUseIntent(node *sitter.Node, name string, ctx walkCtx) rawEdge {
+	edge := rawEdge{source: ctx.parentID, relation: "references", name: name, file: ctx.rel, line: lineOf(node), kinds: goDataKinds}
+	if goWritten(node) {
+		edge.relation = "writes"
+	}
+	if goValuePosition(node) {
+		edge.kinds = goValueKinds
+	}
+	return edge
+}
+
+// goNameUse is the intent of a bare name used in an expression: `handle` in
+// `register(handle)`, `maxBodyChars` in `n > maxBodyChars`, `count` in
+// `count++`. A name a parameter or local declares, an import name, the blank
+// name and a declaration's own name are none; a composite literal's key is
+// goLiteralKey's.
+func (x *extractor) goNameUse(node *sitter.Node, ctx walkCtx) (rawEdge, bool) {
+	name := x.text(node)
+	_, local := ctx.goLocals[name]
+	_, imported := x.goPackages[name]
+	parent := node.Parent()
+	switch {
+	case local, imported, name == "_", parent == nil, isDeclarationName(node):
+		return rawEdge{}, false
+	case parent.Kind() == "literal_element":
+		if keyed := parent.Parent(); keyed != nil && keyed.Kind() == "keyed_element" && sameNode(keyed.ChildByFieldName("key"), parent) {
+			return x.goLiteralKey(node, keyed, ctx)
+		}
+	}
+	switch parent.Kind() {
+	case "const_spec", "var_spec", "parameter_declaration", "variadic_parameter_declaration", "type_parameter_declaration":
+		return rawEdge{}, false
+	}
+	return goUseIntent(node, name, ctx), true
+}
+
+// goMemberUse is the intent of a selector that is no call: a field read or
+// written, `s.store` and `s.count++` through the type bound to s, a method
+// value `s.Serve`, or `kit.Default` in an imported package. A selector on a
+// value of unknown type keeps no type: it links nothing, and the resolver
+// counts its name as unresolved.
+func (x *extractor) goMemberUse(node *sitter.Node, ctx walkCtx) (rawEdge, bool) {
 	operand, field := node.ChildByFieldName("operand"), node.ChildByFieldName("field")
 	if operand == nil || field == nil {
 		return rawEdge{}, false
 	}
-	edge.name, edge.viaMember = x.text(field), true
+	edge := goUseIntent(node, x.text(field), ctx)
+	edge.viaMember = true
 	x.goTypeOperand(&edge, operand, ctx)
 	if _, local := ctx.goLocals[x.text(operand)]; edge.recvType == "" && operand.Kind() == "identifier" && !local {
 		edge.specifier = x.goPackages[x.text(operand)]
 	}
-	return edge, edge.recvType != "" || edge.specifier != ""
+	return edge, true
+}
+
+// goLiteralKey is the intent of a composite literal's bare key: the field it
+// writes, `Name` in `T{Name: v}` and in an element `[]T{{Name: v}}` whose type
+// is elided, or a value, `KindFile` in `map[Kind]int{KindFile: 1}`. A key of
+// a literal whose type nothing names, or names outside the file's imports, is
+// neither.
+func (x *extractor) goLiteralKey(key, keyed *sitter.Node, ctx walkCtx) (rawEdge, bool) {
+	typ := goLiteralType(keyed.Parent())
+	if typ == nil {
+		return rawEdge{}, false
+	}
+	switch typ.Kind() {
+	case "map_type", "slice_type", "array_type", "implicit_length_array_type":
+		return goUseIntent(key, x.text(key), ctx), true
+	}
+	name, pkg, ok := x.goQualifiedType(goTypeName(typ, x.source))
+	if !ok {
+		return rawEdge{}, false
+	}
+	edge := rawEdge{
+		source: ctx.parentID, relation: "writes", name: x.text(key), viaMember: true, literalKey: true,
+		recvType: name, recvPackage: pkg, file: ctx.rel, line: lineOf(key),
+	}
+	return edge, true
+}
+
+// goLiteralType is the type node of the composite literal a literal_value is
+// the body of, followed through elided element types: T for the inner body
+// of `[]T{{Name: "a"}}` and of `map[string]*T{"a": {}}`. It is nil when no
+// type is written for it.
+func goLiteralType(body *sitter.Node) *sitter.Node {
+	parent := body.Parent()
+	if parent == nil {
+		return nil
+	}
+	if parent.Kind() == "composite_literal" {
+		return parent.ChildByFieldName("type")
+	}
+	if parent.Kind() != "literal_element" {
+		return nil
+	}
+	outer := parent.Parent()
+	if outer != nil && outer.Kind() == "keyed_element" {
+		if !sameNode(outer.ChildByFieldName("value"), parent) {
+			return nil
+		}
+		outer = outer.Parent()
+	}
+	if outer == nil || outer.Kind() != "literal_value" {
+		return nil
+	}
+	container := goLiteralType(outer)
+	switch {
+	case container == nil:
+		return nil
+	case container.Kind() == "map_type":
+		return container.ChildByFieldName("value")
+	case container.Kind() == "slice_type", container.Kind() == "array_type", container.Kind() == "implicit_length_array_type":
+		return container.ChildByFieldName("element")
+	}
+	return nil
 }
 
 // goTypeOperand types the operand a Go selector selects from: a variable
@@ -230,31 +356,89 @@ func (x *extractor) goTypeOperand(edge *rawEdge, operand *sitter.Node, ctx walkC
 	}
 }
 
-// goFields is the field intent of each struct field of a named type: `client`
-// of type `*kit.Client`, and an embedded `kit.Base` under its type's name, as
-// Go names it.
-func (x *extractor) goFields(spec *sitter.Node, id string, ctx walkCtx) []rawEdge {
-	shape := spec.ChildByFieldName("type")
-	if shape == nil || shape.Kind() != "struct_type" {
-		return nil
+// goField emits a node for each name a struct field declares, `client` in
+// `client *kit.Client`, with the field intent naming its type as Go names it,
+// and walks the field's type as that node's. An embedded field declares no
+// node, and its intent names it by its type's name, as Go does.
+func (x *extractor) goField(field *sitter.Node, ctx walkCtx) {
+	typeNode := field.ChildByFieldName("type")
+	intent := rawEdge{source: ctx.parentID, relation: "field", file: ctx.rel}
+	typeName, pkg, typed := x.goQualifiedType(goTypeName(typeNode, x.source))
+	if typed {
+		intent.recvType, intent.recvPackage = typeName, pkg
 	}
-	var edges []rawEdge
-	for _, field := range namedChildrenOfKind(namedChildOfKind(shape, "field_declaration_list"), "field_declaration") {
-		name, pkg, ok := x.goQualifiedType(goTypeName(field.ChildByFieldName("type"), x.source))
-		if !ok {
+	names := namedChildrenOfKind(field, "field_identifier")
+	if len(names) == 0 {
+		if typed {
+			intent.name = typeName
+			x.edges = append(x.edges, intent)
+		}
+		x.walkNamedChildren(namedChildren(field), ctx)
+		return
+	}
+	owner := ctx.scope[len(ctx.scope)-1]
+	signature, _, _ := strings.Cut(x.text(field), "\n")
+	for _, name := range names {
+		member := ctx
+		member.parentID = x.emitGoMember(field, x.text(name), "field", &owner, signature, ctx)
+		member.enclosingKind = "field"
+		intent.name, intent.targetID = x.text(name), member.parentID
+		x.edges = append(x.edges, intent)
+		if typeNode != nil {
+			x.walk(typeNode, member)
+		}
+	}
+}
+
+// goValueSpec emits a node for each name a package-level const or var spec
+// declares, `maxBodyChars` in `const maxBodyChars = 5000`, and walks the
+// spec's type and values as that node's: its own value when the spec pairs
+// names with values, else every value. A spec of blank names declares
+// nothing, and its values are the file's.
+func (x *extractor) goValueSpec(spec *sitter.Node, ctx walkCtx) {
+	kind, keyword := Kind("constant"), "const "
+	if spec.Kind() == "var_spec" {
+		kind, keyword = "variable", "var "
+	}
+	firstLine, _, _ := strings.Cut(x.text(spec), "\n")
+	names := namedChildrenOfKind(spec, "identifier")
+	values := namedChildren(spec.ChildByFieldName("value"))
+	declared := false
+	for index, name := range names {
+		if x.text(name) == "_" {
 			continue
 		}
-		edge := rawEdge{source: id, relation: "field", name: name, recvType: name, recvPackage: pkg, file: ctx.rel}
-		names := namedChildrenOfKind(field, "field_identifier")
-		if len(names) == 0 {
-			edges = append(edges, edge)
+		declared = true
+		member := ctx
+		member.parentID = x.emitGoMember(spec, x.text(name), kind, nil, keyword+firstLine, ctx)
+		member.enclosingKind = kind
+		if typ := spec.ChildByFieldName("type"); typ != nil {
+			x.walk(typ, member)
 		}
-		for _, fieldName := range names {
-			edge.name = x.text(fieldName)
-			edges = append(edges, edge)
+		if len(values) == len(names) {
+			x.walk(values[index], member)
+		} else {
+			x.walkNamedChildren(values, member)
 		}
 	}
-	return edges
+	if !declared {
+		x.walkNamedChildren(namedChildren(spec), ctx)
+	}
+}
+
+// emitGoMember appends the node of a field, constant or variable that decl
+// declares as name, with the contains edge from what holds it, and returns
+// its ID.
+func (x *extractor) emitGoMember(decl *sitter.Node, name string, kind Kind, owner *string, signature string, ctx walkCtx) string {
+	id := x.mintID(ctx.rel + "#" + strings.Join(append(slices.Clone(ctx.scope), name), "."))
+	body := x.text(decl)
+	x.nodes = append(x.nodes, NodeV1{
+		ID: id, Name: name, Kind: kind, Owner: owner, Path: ctx.rel, Span: spanOf(decl),
+		Signature: cleanSignature(signature), Exported: goExported(name), Origin: "ast",
+		BodyHash: sourcefiles.Hash(body), BodyText: new(searchBody(body, maxBodyChars)), SummaryState: "pending",
+	})
+	x.edges = append(x.edges, rawEdge{source: ctx.parentID, relation: "contains", targetID: id, file: ctx.rel})
+	return id
 }
 
 // goQualifiedType splits a type name as written into its name and the import
@@ -349,7 +533,7 @@ func goTypeUse(node *sitter.Node) bool {
 // A predeclared type, a type parameter and a qualifier that is no import name
 // nothing to resolve.
 func (x *extractor) goTypeReference(node *sitter.Node, ctx walkCtx) (rawEdge, bool) {
-	edge := rawEdge{source: ctx.parentID, relation: "references", file: ctx.rel, kinds: goTypeKinds}
+	edge := rawEdge{source: ctx.parentID, relation: "references", file: ctx.rel, kinds: goTypeKinds, line: lineOf(node)}
 	if node.Kind() == "qualified_type" {
 		edge.name = x.text(node.ChildByFieldName("name"))
 		edge.specifier = x.goPackages[x.text(node.ChildByFieldName("package"))]

@@ -50,10 +50,10 @@ func TestRustGenericExtractorContract(t *testing.T) {
 		t.Errorf("extractFile(%q, source) nodes = (%v, %v), want (%v, %v)", "lib.rs", ids, kinds, wantIDs, wantKinds)
 	}
 	wantEdges := []rawEdge{
-		{source: "lib.rs#load", relation: "calls", name: "parse", file: "lib.rs"},
-		{source: "lib.rs#parse", relation: "calls", name: "helper", file: "lib.rs"},
-		{source: "lib.rs#helper", relation: "calls", name: "new", file: "lib.rs"},
-		{source: "lib.rs", relation: "imports", specifier: "crate/util/Thing", file: "lib.rs"},
+		{source: "lib.rs#load", relation: "calls", name: "parse", file: "lib.rs", line: 2},
+		{source: "lib.rs#parse", relation: "calls", name: "helper", file: "lib.rs", line: 3},
+		{source: "lib.rs#helper", relation: "calls", name: "new", file: "lib.rs", line: 4},
+		{source: "lib.rs", relation: "imports", specifier: "crate/util/Thing", file: "lib.rs", line: 5},
 	}
 	if !reflect.DeepEqual(got.rawEdges, wantEdges) {
 		t.Errorf("extractFile(%q, source) raw edges = %#v, want %#v", "lib.rs", got.rawEdges, wantEdges)
@@ -76,7 +76,7 @@ func TestBuildGraphRustContract(t *testing.T) {
 		!reflect.DeepEqual(first.Graph.Meta.Languages, []string{"rust"}) {
 		t.Errorf("BuildGraph(%q, %#v) coverage = (parsed %d, unsupported %v, errors %v, languages %v), want complete Rust graph", root, opts, first.Parsed, first.Unsupported, first.Errors, first.Graph.Meta.Languages)
 	}
-	wantCall := EdgeV1{Source: "lib.rs#run", Target: "lib.rs#helper", Relation: "calls", Confidence: "extracted"}
+	wantCall := EdgeV1{Source: "lib.rs#run", Target: "lib.rs#helper", Relation: "calls", Confidence: "extracted", Line: 2}
 	found := false
 	for _, edge := range first.Graph.Edges {
 		found = found || edge == wantCall
@@ -104,15 +104,15 @@ func TestCAndCPPGenericExtractorContract(t *testing.T) {
 			name: "c", file: "src/main.c",
 			source:      "#include \"local.h\"\n#include <stdio.h>\nint helper() { return 1; }\nint run() { return helper(); }\n",
 			wantIDs:     []string{"src/main.c", "src/main.c#helper", "src/main.c#run"},
-			wantCall:    rawEdge{source: "src/main.c#run", relation: "calls", name: "helper", file: "src/main.c"},
-			wantInclude: rawEdge{source: "src/main.c", relation: "imports", specifier: "local.h", file: "src/main.c"},
+			wantCall:    rawEdge{source: "src/main.c#run", relation: "calls", name: "helper", file: "src/main.c", line: 4},
+			wantInclude: rawEdge{source: "src/main.c", relation: "imports", specifier: "local.h", file: "src/main.c", line: 1},
 		},
 		{
 			name: "cpp", file: "src/main.cpp",
 			source:      "#include \"local.hpp\"\nclass Widget { public: int run() { return helper(); } int helper() { return 1; } };\n",
 			wantIDs:     []string{"src/main.cpp", "src/main.cpp#Widget", "src/main.cpp#run", "src/main.cpp#helper"},
-			wantCall:    rawEdge{source: "src/main.cpp#run", relation: "calls", name: "helper", file: "src/main.cpp"},
-			wantInclude: rawEdge{source: "src/main.cpp", relation: "imports", specifier: "local.hpp", file: "src/main.cpp"},
+			wantCall:    rawEdge{source: "src/main.cpp#run", relation: "calls", name: "helper", file: "src/main.cpp", line: 2},
+			wantInclude: rawEdge{source: "src/main.cpp", relation: "imports", specifier: "local.hpp", file: "src/main.cpp", line: 1},
 		},
 	}
 	for _, tc := range cases {

@@ -55,6 +55,10 @@ type EdgeV1 struct {
 	Target     string     `json:"target"`
 	Relation   Relation   `json:"relation"`
 	Confidence Confidence `json:"confidence"`
+	// Line is the 1-based line, in the source's file, of the first call,
+	// use or import the edge stands for. It is zero for an edge no single
+	// line states: contains, or an implements the resolver derived.
+	Line int `json:"line,omitzero"`
 }
 
 // ScopeV1 describes a ranking scope discovered below the graph root.
@@ -83,6 +87,15 @@ type UnresolvedCalls struct {
 	ExternalPackage int `json:"externalPackage"`
 }
 
+// UnresolvedName counts the uses of one name the static resolver bound to no
+// node, although the graph has a symbol of that name.
+type UnresolvedName struct {
+	// Untyped is `x.name` or `x.name()` where the type of x is not known.
+	Untyped int `json:"untyped,omitzero"`
+	// Ambiguous is a use of name that matched several definitions.
+	Ambiguous int `json:"ambiguous,omitzero"`
+}
+
 // GraphMeta contains the version and aggregate values stored with a graph.
 type GraphMeta struct {
 	Version         int              `json:"version"`
@@ -91,6 +104,11 @@ type GraphMeta struct {
 	Languages       []string         `json:"languages"`
 	Scopes          *[]ScopeV1       `json:"scopes,omitempty"`
 	UnresolvedCalls *UnresolvedCalls `json:"unresolvedCalls,omitempty"`
+	// UnresolvedNames holds, by name, the uses the resolver could not bind:
+	// the callers the graph lists for a symbol of that name may be fewer
+	// than the code has. It is written even when empty, so a graph from
+	// before it was recorded reads as nil.
+	UnresolvedNames map[string]UnresolvedName `json:"unresolvedNames"`
 }
 
 // GraphV1 is the version-one persisted wiring graph.

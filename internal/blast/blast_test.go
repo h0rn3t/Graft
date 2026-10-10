@@ -108,3 +108,23 @@ func TestRadiusSeedsInnermostSymbolAndSerializesFullDepth(t *testing.T) {
 		t.Errorf("Radius JSON = %s, want depth null and no owners", data)
 	}
 }
+
+func TestRadiusSeedsAChangedFieldAndItsStruct(t *testing.T) {
+	wiring := graph.GraphV1{
+		Nodes: []graph.NodeV1{
+			{ID: "box.go", Name: "box.go", Kind: "file", Path: "box.go", Span: "L1-L20"},
+			{ID: "box.go#Box", Name: "Box", Kind: "struct", Path: "box.go", Span: "L3-L6"},
+			{ID: "box.go#Box.size", Name: "size", Kind: "field", Path: "box.go", Span: "L4-L4"},
+			{ID: "box.go#Box.name", Name: "name", Kind: "field", Path: "box.go", Span: "L5-L5"},
+		},
+	}
+	changed := []*ChangedFile{{Path: "box.go", Status: StatusModified, Ranges: []LineRange{{Start: 4, End: 4}}, Hunks: []*Hunk{}}}
+	report := Radius(wiring, changed, "working tree vs HEAD", FullDepth)
+	var seeds []string
+	for _, seed := range report.Seeds {
+		seeds = append(seeds, seed.ID)
+	}
+	if want := []string{"box.go#Box", "box.go#Box.size"}; !slices.Equal(seeds, want) {
+		t.Errorf("Radius seeds = %v, want %v: a positional literal of Box changes with any field", seeds, want)
+	}
+}

@@ -63,9 +63,14 @@ func writeSkeletonHuman(stdout io.Writer, result graph.SkeletonResult) int {
 	}
 	lines := make([]string, 0, len(result.Entries))
 	for _, entry := range result.Entries {
-		line := fmt.Sprintf("- %s  %s %s", entry.Span, entry.Kind, entry.Name)
+		// A field follows its struct, one level in.
+		bullet := "- "
+		if entry.Kind == "field" {
+			bullet = "  - "
+		}
+		line := fmt.Sprintf("%s%s  %s %s", bullet, entry.Span, entry.Kind, entry.Name)
 		if entry.Signature != nil {
-			line = "- " + entry.Span + " " + *entry.Signature
+			line = bullet + entry.Span + " " + *entry.Signature
 		}
 		if entry.Summary != nil {
 			line += " — " + *entry.Summary

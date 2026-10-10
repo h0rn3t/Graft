@@ -544,13 +544,21 @@ func askFallthroughNote(subject string) string {
 }
 
 func askUsableIndex(index *AskIndex, wiring GraphV1) *AskIndex {
-	if index == nil || index.Version != AskIndexVersion || index.DocCount != len(wiring.Nodes) || index.DocCount != len(index.Docs) {
+	if index == nil || index.Version != AskIndexVersion || index.DocCount != len(index.Docs) {
 		return nil
 	}
+	ranked := 0
 	for _, node := range wiring.Nodes {
+		if !askRanked(node) {
+			continue
+		}
+		ranked++
 		if _, ok := index.Docs[node.ID]; !ok {
 			return nil
 		}
+	}
+	if ranked != index.DocCount {
+		return nil
 	}
 	return index
 }

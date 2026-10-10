@@ -69,7 +69,27 @@ func TestAnalyzeCommandsContract(t *testing.T) {
 		{
 			name: "dead json counts every class",
 			args: []string{"dead", root, "--json", "--all"},
-			want: []string{`"high": 1`, `"name": "unused"`, `"confidence": "high"`},
+			want: []string{`"high": 1`, `"name": "unused"`, `"confidence": "high"`, `"entryPoints": 1`},
+		},
+		{
+			name: "dead counts what it leaves out",
+			args: []string{"dead", root},
+			want: []string{"\nnot listed: 1 entry point\n"},
+		},
+		{
+			name: "callers quote the line of each call",
+			args: []string{"callers", "read", root},
+			want: []string{"read · function · cmd/main.go:L9-L9\n  exact: no unresolved use names it\n  calls ← main (cmd/main.go:L11-L14)\n      12: read(store.NewStore())\n"},
+		},
+		{
+			name: "callers through an interface are a lower bound",
+			args: []string{"callers", "Store.Get", root},
+			want: []string{"Get · method · store/store.go:L9-L14\n  lower bound: calls through Getter.Get may reach it\n"},
+		},
+		{
+			name: "callers json carries the bound and the line",
+			args: []string{"callers", "read", root, "--json"},
+			want: []string{`"bound": {` + "\n" + `        "kind": "exact"`, `"line": 12`},
 		},
 		{
 			name: "complexity lists the most complex first",

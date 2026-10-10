@@ -78,7 +78,7 @@ func CheckInvariants(graph GraphV1) InvariantResult {
 
 func validKind(kind Kind) bool {
 	switch kind {
-	case "file", "class", "function", "method", "interface", "type", "enum", "struct", "module", "constant", "variable":
+	case "file", "class", "function", "method", "interface", "type", "enum", "struct", "module", "constant", "variable", "field":
 		return true
 	default:
 		return false
@@ -87,7 +87,7 @@ func validKind(kind Kind) bool {
 
 func validRelation(relation Relation) bool {
 	switch relation {
-	case "contains", "calls", "imports", "references", "implements", "extends":
+	case "contains", "calls", "imports", "references", "writes", "implements", "extends":
 		return true
 	default:
 		return false

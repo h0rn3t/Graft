@@ -13,15 +13,15 @@ var goTypeKinds = []Kind{"struct", "interface", "type"}
 // resolveGoEmbed binds an embedded type: a bare `Base` to the type of that
 // name in the embedding type's package, a qualified `pkg.Base` to the one Base
 // in an in-repo directory named pkg. Anything else stays an external target.
-func (ix *resolveIndex) resolveGoEmbed(edge rawEdge, add func(string, string, Relation, Confidence)) {
+func (ix *resolveIndex) resolveGoEmbed(edge rawEdge, add func(rawEdge, string, Relation, Confidence)) {
 	hits := ix.goEmbedded(edge)
 	switch {
 	case len(hits) != 1:
-		add(edge.source, edge.name, "extends", "inferred")
+		add(edge, edge.name, "extends", "inferred")
 	case hits[0].Path == edge.file:
-		add(edge.source, hits[0].ID, "extends", "extracted")
+		add(edge, hits[0].ID, "extends", "extracted")
 	default:
-		add(edge.source, hits[0].ID, "extends", "inferred")
+		add(edge, hits[0].ID, "extends", "inferred")
 	}
 }
 
@@ -45,8 +45,9 @@ func (ix *resolveIndex) goEmbedded(edge rawEdge) []NodeV1 {
 }
 
 // resolveGoPackageCall binds `pkg.F()` to the function F of the in-repo
-// package the file imports as pkg, or a conversion `pkg.T(x)` to its type.
-func (ix *resolveIndex) resolveGoPackageCall(edge rawEdge, add func(string, string, Relation, Confidence)) {
+// package the file imports as pkg; a conversion `pkg.T(x)` references its
+// type, and a call through a variable `pkg.V()` the variable.
+func (ix *resolveIndex) resolveGoPackageCall(edge rawEdge, add func(rawEdge, string, Relation, Confidence)) {
 	hits, external := ix.goPackageDecls(edge.name, edge.specifier, edge.file, []Kind{"function"})
 	if external {
 		ix.unresolved.ExternalPackage++
@@ -54,15 +55,16 @@ func (ix *resolveIndex) resolveGoPackageCall(edge rawEdge, add func(string, stri
 	}
 	switch len(hits) {
 	case 0:
-		if types, _ := ix.goPackageDecls(edge.name, edge.specifier, edge.file, goTypeKinds); len(types) == 1 {
-			add(edge.source, types[0].ID, "references", "inferred")
+		if values, _ := ix.goPackageDecls(edge.name, edge.specifier, edge.file, append([]Kind{"variable"}, goTypeKinds...)); len(values) == 1 {
+			add(edge, values[0].ID, "references", "inferred")
 			return
 		}
 		ix.unresolved.NameNotInGraph++
 	case 1:
-		add(edge.source, hits[0].ID, "calls", "inferred")
+		add(edge, hits[0].ID, "calls", "inferred")
 	default:
 		ix.unresolved.NameAmbiguous++
+		ix.missName(edge.name, false)
 	}
 }
 
@@ -89,40 +91,62 @@ func (ix *resolveIndex) goPackageDecls(name, specifier, file string, kinds []Kin
 	return hits, false
 }
 
-// resolveGoReference binds a function or method named as a value, or a type
-// used, as an inferred reference: `kit.Helper` and `kit.Config` to that
-// package's declaration, `s.Serve` through the type bound to s, a bare name
-// to the one declaration of its package. A miss or a tie links nothing, and
-// a declaration naming itself is no reference.
-func (ix *resolveIndex) resolveGoReference(edge rawEdge, add func(string, string, Relation, Confidence)) {
-	kinds := edge.kinds
-	if kinds == nil {
-		kinds = []Kind{"function"}
-	}
-	target := ""
+// resolveGoReference binds a use — a function or method named as a value, a
+// constant, variable or field read or written, a type — as an inferred edge
+// of the intent's relation: `kit.Helper` and `kit.Config` to that package's
+// declaration, `s.Serve` and `s.count` through the type bound to s, a bare
+// name to the one declaration of its package, a literal's key to the field
+// it writes. A miss or a tie links nothing, and a declaration naming itself
+// is no reference.
+func (ix *resolveIndex) resolveGoReference(edge rawEdge, add func(rawEdge, string, Relation, Confidence)) {
+	target, relation := "", edge.relation
 	switch {
+	case edge.literalKey:
+		target, relation = ix.resolveGoLiteralKey(edge)
 	case edge.specifier != "":
-		if hits, _ := ix.goPackageDecls(edge.name, edge.specifier, edge.file, kinds); len(hits) == 1 {
+		if hits, _ := ix.goPackageDecls(edge.name, edge.specifier, edge.file, edge.kinds); len(hits) == 1 {
 			target = hits[0].ID
 		}
 	case edge.viaMember:
 		hit, _ := ix.resolveGoMember(edge)
 		target = hit.id
+		if edge.recvType == "" || hit.ambiguous {
+			ix.missName(edge.name, edge.recvType == "")
+		}
 	default:
-		if hit, ok := ix.resolveName(edge.name, edge.file, kinds); ok {
-			target = hit.id
+		hit, ok := ix.resolveName(edge.name, edge.file, edge.kinds)
+		target = hit.id
+		if !ok && hit.ambiguous {
+			ix.missName(edge.name, false)
 		}
 	}
 	if target != "" && target != edge.source {
-		add(edge.source, target, "references", "inferred")
+		add(edge, target, relation, "inferred")
 	}
 }
 
-// resolveGoMember binds a Go selector to the method of its receiver's type:
-// recvType in its package, then down recvFields, each field typed in its
-// struct's package, the way Go promotes fields and methods of embedded types.
-// A receiver of a type outside the repository is external; a miss or a tie
-// links nothing.
+// resolveGoLiteralKey binds a composite literal's key to the field it writes
+// of the literal's struct type, or, when that in-repo type is no struct, to
+// the declaration the key names as a value: `KindFile` in `Weights{KindFile:
+// 1}` for `type Weights map[Kind]int`.
+func (ix *resolveIndex) resolveGoLiteralKey(edge rawEdge) (string, Relation) {
+	types, _ := ix.goPackageDecls(edge.recvType, edge.recvPackage, edge.file, goTypeKinds)
+	switch {
+	case len(types) != 1:
+		return "", ""
+	case types[0].Kind != "struct":
+		hit, _ := ix.resolveName(edge.name, edge.file, goValueKinds)
+		return hit.id, "references"
+	}
+	hit, _ := ix.resolveGoMember(edge)
+	return hit.id, "writes"
+}
+
+// resolveGoMember binds a Go selector to the method or field of its
+// receiver's type: recvType in its package, then down recvFields, each field
+// typed in its struct's package, the way Go promotes fields and methods of
+// embedded types. A receiver of a type outside the repository is external; a
+// miss or a tie links nothing.
 func (ix *resolveIndex) resolveGoMember(edge rawEdge) (hit resolved, external bool) {
 	types, external := ix.goPackageDecls(edge.recvType, edge.recvPackage, edge.file, goTypeKinds)
 	for _, field := range edge.recvFields {
@@ -149,16 +173,19 @@ func (ix *resolveIndex) resolveGoMember(edge rawEdge) (hit resolved, external bo
 		return resolved{}, external
 	}
 	for _, level := range ix.goPromotion(types[0]) {
-		var methods []NodeV1
+		var members []NodeV1
 		for _, typ := range level {
-			methods = append(methods, ix.goMethods(typ, edge.name, edge.file)...)
+			members = append(members, ix.goMethods(typ, edge.name, edge.file)...)
+			if field, ok := ix.goFields[typ.ID+"\x00"+edge.name]; ok && field.targetID != "" {
+				members = append(members, ix.byID[field.targetID])
+			}
 		}
 		switch {
-		case len(methods) == 1:
-			return memberHit(methods[0], edge.file), false
-		case len(methods) > 1:
-			if index := slices.IndexFunc(methods, func(method NodeV1) bool { return method.Path == edge.file }); index >= 0 {
-				return resolved{id: methods[index].ID, confidence: "extracted"}, false
+		case len(members) == 1:
+			return memberHit(members[0], edge.file), false
+		case len(members) > 1:
+			if index := slices.IndexFunc(members, func(member NodeV1) bool { return member.Path == edge.file }); index >= 0 {
+				return resolved{id: members[index].ID, confidence: "extracted"}, false
 			}
 			return resolved{ambiguous: true}, false
 		}
@@ -212,7 +239,7 @@ func (ix *resolveIndex) goMethods(typ NodeV1, name, file string) []NodeV1 {
 // inside the interface's package. Parameter types are not compared, so every
 // such edge is inferred. An interface that embeds a type outside the graph has
 // an unknown method set and is skipped.
-func (ix *resolveIndex) addGoImplements(nodes []NodeV1, edges []EdgeV1, add func(string, string, Relation, Confidence)) {
+func (ix *resolveIndex) addGoImplements(nodes []NodeV1, edges []EdgeV1, add func(rawEdge, string, Relation, Confidence)) {
 	embeds := make(map[string][]string)
 	for _, edge := range edges {
 		if edge.Relation == "extends" && strings.HasSuffix(ix.byID[edge.Source].Path, ".go") {
@@ -303,11 +330,11 @@ func (ix *resolveIndex) addGoImplements(nodes []NodeV1, edges []EdgeV1, add func
 			if !goSatisfies(set, required, path.Dir(candidate.Path), path.Dir(iface.Path)) {
 				continue
 			}
-			add(candidate.ID, iface.ID, "implements", "inferred")
+			add(rawEdge{source: candidate.ID}, iface.ID, "implements", "inferred")
 			for _, name := range names {
 				// A struct that embeds the interface promotes its methods as they are.
 				if implementation := set[name]; implementation.ID != required[name].ID {
-					add(implementation.ID, required[name].ID, "implements", "inferred")
+					add(rawEdge{source: implementation.ID}, required[name].ID, "implements", "inferred")
 				}
 			}
 		}

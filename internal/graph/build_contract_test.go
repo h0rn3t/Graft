@@ -35,9 +35,9 @@ func TestBuildGraphContract(t *testing.T) {
 	}
 	wantEdges := []EdgeV1{
 		{Source: "src/helper.js", Target: "src/helper.js#helper", Relation: "contains", Confidence: "extracted"},
-		{Source: "src/main.ts", Target: "src/helper.js", Relation: "imports", Confidence: "extracted"},
+		{Source: "src/main.ts", Target: "src/helper.js", Relation: "imports", Confidence: "extracted", Line: 1},
 		{Source: "src/main.ts", Target: "src/main.ts#run", Relation: "contains", Confidence: "extracted"},
-		{Source: "src/main.ts#run", Target: "src/helper.js#helper", Relation: "references", Confidence: "extracted"},
+		{Source: "src/main.ts#run", Target: "src/helper.js#helper", Relation: "references", Confidence: "extracted", Line: 2},
 	}
 	wantScopes := []ScopeV1{{Prefix: "", Label: "", Markers: []string{}}}
 	if got.Graph.Meta.Version != 1 || got.Graph.Meta.NodeCount != 4 || got.Graph.Meta.EdgeCount != len(wantEdges) || !reflect.DeepEqual(got.Graph.Meta.Languages, []string{"javascript", "typescript"}) || len(got.Graph.Nodes) != 4 || !reflect.DeepEqual(got.Graph.Edges, wantEdges) || len(got.Unsupported) != 0 || len(got.Errors) != 0 || len(got.Limitations) != 0 || got.Graph.Meta.Scopes == nil || !reflect.DeepEqual(*got.Graph.Meta.Scopes, wantScopes) {

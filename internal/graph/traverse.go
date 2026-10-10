@@ -27,6 +27,9 @@ type EdgeHit struct {
 	Relation   Relation
 	Confidence Confidence
 	Depth      int
+	// Line is the edge's line in its source's file: the caller's for an
+	// incoming edge, the walked symbol's for an outgoing one; zero if unknown.
+	Line int
 }
 
 // ResolveSymbol finds all graph nodes matching query and applies an optional path prefix.
@@ -84,6 +87,7 @@ func CallersOf(graph GraphV1, symbol NodeV1) []EdgeHit {
 			Relation:   edge.Relation,
 			Confidence: edge.Confidence,
 			Depth:      1,
+			Line:       edge.Line,
 		})
 	}
 	return hits
@@ -103,6 +107,7 @@ func CalleesOf(graph GraphV1, symbol NodeV1) []EdgeHit {
 			Relation:   edge.Relation,
 			Confidence: edge.Confidence,
 			Depth:      1,
+			Line:       edge.Line,
 		})
 	}
 	return hits
@@ -133,7 +138,7 @@ func ImpactOfMany(graph GraphV1, seeds []NodeV1, maxDepth int, directions ...Dir
 		if direction == DirectionIn {
 			key, other = edge.Target, edge.Source
 		}
-		adjacency[key] = append(adjacency[key], walkEntry{other: other, relation: edge.Relation, confidence: edge.Confidence})
+		adjacency[key] = append(adjacency[key], walkEntry{other: other, relation: edge.Relation, confidence: edge.Confidence, line: edge.Line})
 	}
 
 	visited := make(map[string]bool, len(seeds))
@@ -160,6 +165,7 @@ func ImpactOfMany(graph GraphV1, seeds []NodeV1, maxDepth int, directions ...Dir
 					Relation:   entry.relation,
 					Confidence: entry.confidence,
 					Depth:      depth,
+					Line:       entry.line,
 				})
 				next = append(next, entry.other)
 			}
@@ -199,6 +205,7 @@ type walkEntry struct {
 	other      string
 	relation   Relation
 	confidence Confidence
+	line       int
 }
 
 func nodeIndex(graph GraphV1) map[string]*NodeV1 {
@@ -258,7 +265,7 @@ func allDigits(value string) bool {
 
 func isWalkRelation(relation Relation) bool {
 	switch relation {
-	case "calls", "references", "imports", "implements", "extends":
+	case "calls", "references", "writes", "imports", "implements", "extends":
 		return true
 	default:
 		return false
@@ -275,4 +282,67 @@ func normalizePathPrefix(prefix string) string {
 
 func pathUnderPrefix(path, prefix string) bool {
 	return prefix == "" || path == prefix || strings.HasPrefix(path, prefix+"/")
+}
+
+// CallerBound says why the callers the graph lists for a symbol may be fewer
+// than the code has. The zero value marks a list nothing is known to miss.
+type CallerBound struct {
+	// Untyped counts the uses of the symbol's name on a receiver whose type
+	// the resolver did not know, `x.Close()`: any of them may be the symbol's.
+	Untyped int
+	// Ambiguous counts the uses of its name that matched several definitions.
+	Ambiguous int
+	// Dispatch lists what a call may reach the method through instead: the
+	// interface methods it implements, or the types its class extends or
+	// implements.
+	Dispatch []string
+	// Values counts the symbols that name it as a value; a call made later
+	// through such a value is no edge.
+	Values int
+}
+
+// Exact reports whether nothing bounds the callers.
+func (bound CallerBound) Exact() bool {
+	return bound.Untyped == 0 && bound.Ambiguous == 0 && len(bound.Dispatch) == 0 && bound.Values == 0
+}
+
+// CallerBoundOf bounds the callers of a function, method or field; ok is
+// false for any other symbol, whose uses the graph does not track the same
+// way in every language, for a graph built before graft recorded the uses it
+// could not resolve, and for a list it cannot call exact: outside Go a
+// function passed as a value leaves no edge.
+func CallerBoundOf(graph GraphV1, symbol NodeV1) (bound CallerBound, ok bool) {
+	callable := symbol.Kind == "function" || symbol.Kind == "method"
+	if (!callable && symbol.Kind != "field") || graph.Meta.UnresolvedNames == nil {
+		return bound, false
+	}
+	goFile := strings.HasSuffix(symbol.Path, ".go")
+	counts := graph.Meta.UnresolvedNames[symbol.Name]
+	// A Go function is named bare or through its package, never through a
+	// receiver; elsewhere `module.f()` may be one.
+	if symbol.Kind != "function" || !goFile {
+		bound.Untyped = counts.Untyped
+	}
+	if callable {
+		bound.Ambiguous = counts.Ambiguous
+	}
+	owner := ""
+	for _, edge := range graph.Edges {
+		switch {
+		case edge.Target == symbol.ID && edge.Relation == "contains":
+			owner = edge.Source
+		case edge.Target == symbol.ID && edge.Relation == "references" && callable:
+			bound.Values++
+		case edge.Source == symbol.ID && edge.Relation == "implements" && symbol.Kind == "method":
+			bound.Dispatch = append(bound.Dispatch, edge.Target)
+		}
+	}
+	if symbol.Kind == "method" && !goFile && owner != "" {
+		for _, edge := range graph.Edges {
+			if edge.Source == owner && (edge.Relation == "extends" || edge.Relation == "implements") {
+				bound.Dispatch = append(bound.Dispatch, edge.Target)
+			}
+		}
+	}
+	return bound, goFile || !bound.Exact()
 }

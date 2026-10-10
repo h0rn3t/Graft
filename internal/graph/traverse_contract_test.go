@@ -1,6 +1,8 @@
 package graph
 
 import (
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -159,4 +161,64 @@ func nodeIDsFromHits(hits []EdgeHit) []string {
 		ids[i] = hit.ID
 	}
 	return ids
+}
+
+func TestCallerBoundOf(t *testing.T) {
+	nodes := []NodeV1{
+		traversalNode("io.go#Closer", "Closer", "interface", "io.go"),
+		traversalNode("io.go#Closer.Close", "Close", "method", "io.go"),
+		traversalNode("io.go#File", "File", "struct", "io.go"),
+		traversalNode("io.go#File.Close", "Close", "method", "io.go"),
+		traversalNode("io.go#File.path", "path", "field", "io.go"),
+		traversalNode("io.go#open", "open", "function", "io.go"),
+		traversalNode("io.go#handle", "handle", "function", "io.go"),
+		traversalNode("io.go#limit", "limit", "constant", "io.go"),
+		traversalNode("ui.ts#Base", "Base", "class", "ui.ts"),
+		traversalNode("ui.ts#View", "View", "class", "ui.ts"),
+		traversalNode("ui.ts#View.render", "render", "method", "ui.ts"),
+		traversalNode("ui.ts#load", "load", "function", "ui.ts"),
+		traversalNode("ui.ts#save", "save", "function", "ui.ts"),
+	}
+	graph := traversalGraph(nodes, []EdgeV1{
+		traversalEdge("io.go#File", "io.go#File.Close", "contains"),
+		traversalEdge("io.go#File.Close", "io.go#Closer.Close", "implements"),
+		traversalEdge("io.go#open", "io.go#handle", "references"),
+		traversalEdge("ui.ts#View", "ui.ts#Base", "extends"),
+		traversalEdge("ui.ts#View", "ui.ts#View.render", "contains"),
+	})
+	graph.Meta.UnresolvedNames = map[string]UnresolvedName{
+		"Close": {Untyped: 4}, "path": {Untyped: 2}, "open": {Untyped: 1, Ambiguous: 2}, "load": {Untyped: 3},
+	}
+	tests := []struct {
+		id     string
+		want   CallerBound
+		wantOK bool
+	}{
+		{"io.go#File.Close", CallerBound{Untyped: 4, Dispatch: []string{"io.go#Closer.Close"}}, true},
+		{"io.go#File.path", CallerBound{Untyped: 2}, true},
+		// A Go function is never called through a receiver.
+		{"io.go#open", CallerBound{Ambiguous: 2}, true},
+		{"io.go#handle", CallerBound{Values: 1}, true},
+		{"ui.ts#View.render", CallerBound{Dispatch: []string{"ui.ts#Base"}}, true},
+		// Elsewhere `module.load()` may be one of its calls.
+		{"ui.ts#load", CallerBound{Untyped: 3}, true},
+		// Outside Go a function passed as a value leaves no edge, so no
+		// list there is exact.
+		{"ui.ts#save", CallerBound{}, false},
+		{"io.go#limit", CallerBound{}, false},
+		{"io.go#File", CallerBound{}, false},
+	}
+	if _, ok := CallerBoundOf(traversalGraph(nodes, nil), nodes[3]); ok {
+		t.Errorf("CallerBoundOf(%s) in a graph with no unresolved names recorded ok = true, want false", nodes[3].ID)
+	}
+	for _, tt := range tests {
+		node := nodes[slices.IndexFunc(nodes, func(node NodeV1) bool { return node.ID == tt.id })]
+		got, ok := CallerBoundOf(graph, node)
+		if !reflect.DeepEqual(got, tt.want) || ok != tt.wantOK {
+			t.Errorf("CallerBoundOf(%s) = %+v, %t, want %+v, %t", tt.id, got, ok, tt.want, tt.wantOK)
+		}
+		if got.Exact() != reflect.DeepEqual(tt.want, CallerBound{}) {
+			t.Errorf("CallerBoundOf(%s).Exact() = %t, want %t", tt.id, got.Exact(), reflect.DeepEqual(tt.want, CallerBound{}))
+		}
+	}
 }

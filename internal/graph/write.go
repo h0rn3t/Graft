@@ -84,7 +84,7 @@ func Write(graph GraphV1, outDir string) (string, error) {
 	path := WiringPath(outDir)
 	// json/v2 escapes neither HTML characters nor U+2028/U+2029, matching the
 	// JSON.stringify output TypeScript builds write.
-	data, err := jsonv2.Marshal(sorted, jsontext.WithIndent("  "))
+	data, err := jsonv2.Marshal(sorted, jsontext.WithIndent("  "), jsonv2.Deterministic(true))
 	if err != nil {
 		return "", fmt.Errorf("encode graph: %w", err)
 	}

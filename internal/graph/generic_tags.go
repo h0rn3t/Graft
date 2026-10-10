@@ -90,6 +90,7 @@ func extractGenericTags(rel, source, name string, grammar genericGrammar) (extra
 	type reference struct {
 		name string
 		at   uint
+		line int
 	}
 	calls := make([]reference, 0)
 	lines := strings.Split(source, "\n")
@@ -163,7 +164,7 @@ func extractGenericTags(rel, source, name string, grammar genericGrammar) (extra
 			}
 		}
 		if callNode != nil && nameNode != nil {
-			calls = append(calls, reference{name: nameNode.Utf8Text(data), at: nameNode.StartByte()})
+			calls = append(calls, reference{name: nameNode.Utf8Text(data), at: nameNode.StartByte(), line: lineOf(nameNode)})
 		}
 	}
 	// Definitions are syntax nodes, so any two are nested or disjoint. Sorted by
@@ -195,13 +196,13 @@ func extractGenericTags(rel, source, name string, grammar genericGrammar) (extra
 		if enclosing >= 0 {
 			sourceID = defs[enclosing].id
 		}
-		edges = append(edges, rawEdge{source: sourceID, relation: "calls", name: call.name, file: rel})
+		edges = append(edges, rawEdge{source: sourceID, relation: "calls", name: call.name, file: rel, line: call.line})
 	}
 	var visitImports func(*sitter.Node)
 	visitImports = func(node *sitter.Node) {
 		if name == "rust" && node.Kind() == "use_declaration" {
 			if spec, ok := rustUseModule(node.Utf8Text(data)); ok {
-				edges = append(edges, rawEdge{source: rel, relation: "imports", specifier: spec, file: rel})
+				edges = append(edges, rawEdge{source: rel, relation: "imports", specifier: spec, file: rel, line: lineOf(node)})
 			}
 		}
 		if (name == "c" || name == "cpp") && node.Kind() == "preproc_include" {
@@ -209,7 +210,7 @@ func extractGenericTags(rel, source, name string, grammar genericGrammar) (extra
 				raw := pathNode.Utf8Text(data)
 				if strings.HasPrefix(raw, "\"") {
 					if spec := strings.TrimSpace(strings.Trim(raw, "\"")); spec != "" {
-						edges = append(edges, rawEdge{source: rel, relation: "imports", specifier: spec, file: rel})
+						edges = append(edges, rawEdge{source: rel, relation: "imports", specifier: spec, file: rel, line: lineOf(node)})
 					}
 				}
 			}

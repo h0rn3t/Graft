@@ -367,40 +367,75 @@ func askLink(adjacency map[string][]string, source, target string) {
 	adjacency[source] = append(adjacency[source], target)
 }
 
-// askRankEdge reports whether an edge carries relevance between the symbols
-// it links: a walk relation, unless it is a Go type use. A type most
-// functions take would tie them all together and hand each its rank.
-func askRankEdge(edge EdgeV1, goTypes map[string]struct{}) bool {
-	_, typeUse := goTypes[edge.Target]
-	return isWalkRelation(edge.Relation) && (edge.Relation != "references" || !typeUse)
+// askRanked reports whether find_code ranks node as an answer of its own. A
+// field, constant or variable is a detail of the type or file it is in: on
+// the ranking eval, answering with them crowded out the functions asked for.
+func askRanked(node NodeV1) bool {
+	return !askValueKind(node.Kind)
 }
 
-// askGoTypes are the IDs of the graph's Go type declarations.
-func askGoTypes(nodes []NodeV1) map[string]struct{} {
-	types := make(map[string]struct{})
+// askValueKind reports a kind that holds a value: a field, constant or
+// variable.
+func askValueKind(kind Kind) bool {
+	return kind == "field" || kind == "constant" || kind == "variable"
+}
+
+// askRankEdge reports whether an edge carries relevance between the symbols
+// it links: a walk relation, unless it is a Go type or value use. A type most
+// functions take, or a field or constant most of them read, would tie them
+// all together and hand each its rank.
+func askRankEdge(edge EdgeV1, goUsed map[string]struct{}) bool {
+	_, use := goUsed[edge.Target]
+	return isWalkRelation(edge.Relation) && edge.Relation != "writes" && (edge.Relation != "references" || !use)
+}
+
+// askGoUsed are the IDs of the graph's Go types, fields, constants and
+// variables: what a Go use references.
+func askGoUsed(nodes []NodeV1) map[string]struct{} {
+	used := make(map[string]struct{})
 	for _, node := range nodes {
-		if slices.Contains(goTypeKinds, node.Kind) && strings.HasSuffix(node.Path, ".go") {
-			types[node.ID] = struct{}{}
+		if (slices.Contains(goTypeKinds, node.Kind) || slices.Contains(goDataKinds, node.Kind) || node.Kind == "field") && strings.HasSuffix(node.Path, ".go") {
+			used[node.ID] = struct{}{}
 		}
 	}
-	return types
+	return used
+}
+
+// askRankEdges lists the edges that carry relevance between ranked symbols.
+// An edge a field, constant or variable holds counts as its struct's or
+// file's, as it did before those were nodes, since find_code ranks neither.
+func askRankEdges(wiring GraphV1) []EdgeV1 {
+	goUsed := askGoUsed(wiring.Nodes)
+	holder := make(map[string]string)
+	for _, edge := range wiring.Edges {
+		if _, value := goUsed[edge.Target]; value && edge.Relation == "contains" {
+			holder[edge.Target] = edge.Source
+		}
+	}
+	var edges []EdgeV1
+	for _, edge := range wiring.Edges {
+		if !askRankEdge(edge, goUsed) {
+			continue
+		}
+		if source, ok := holder[edge.Source]; ok {
+			edge.Source = source
+		}
+		edges = append(edges, edge)
+	}
+	return edges
 }
 
 func askPrepareTopology(wiring GraphV1, keep func(string) bool) askTopology {
 	topology := askTopology{ids: make(map[string]struct{}), adjacency: make(map[string][]string)}
 	for _, node := range wiring.Nodes {
-		if keep == nil || keep(node.ID) {
+		if (keep == nil || keep(node.ID)) && askRanked(node) {
 			topology.ids[node.ID] = struct{}{}
 		}
 	}
 	if len(topology.ids) == 0 {
 		return topology
 	}
-	goTypes := askGoTypes(wiring.Nodes)
-	for _, edge := range wiring.Edges {
-		if !askRankEdge(edge, goTypes) {
-			continue
-		}
+	for _, edge := range askRankEdges(wiring) {
 		_, source := topology.ids[edge.Source]
 		_, target := topology.ids[edge.Target]
 		if !source || !target {
@@ -417,7 +452,7 @@ func askPreparePartitions(wiring GraphV1, partitionOf func(string) (string, bool
 	partitions := make(map[string]*askTopology)
 	for _, node := range wiring.Nodes {
 		partition, ok := partitionOf(node.ID)
-		if !ok {
+		if !ok || !askRanked(node) {
 			continue
 		}
 		partitionByID[node.ID] = partition
@@ -428,11 +463,7 @@ func askPreparePartitions(wiring GraphV1, partitionOf func(string) (string, bool
 		}
 		topology.ids[node.ID] = struct{}{}
 	}
-	goTypes := askGoTypes(wiring.Nodes)
-	for _, edge := range wiring.Edges {
-		if !askRankEdge(edge, goTypes) {
-			continue
-		}
+	for _, edge := range askRankEdges(wiring) {
 		partition, ok := partitionByID[edge.Source]
 		if !ok {
 			continue
@@ -1023,13 +1054,10 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 	}
 
 	index := askUsableIndex(opts.Index, wiring)
-	graphNodes := wiring.Nodes
-	if prefix != "" {
-		graphNodes = make([]NodeV1, 0, len(wiring.Nodes))
-		for _, node := range wiring.Nodes {
-			if pathUnderPrefix(node.Path, prefix) {
-				graphNodes = append(graphNodes, node)
-			}
+	graphNodes := make([]NodeV1, 0, len(wiring.Nodes))
+	for _, node := range wiring.Nodes {
+		if askRanked(node) && (prefix == "" || pathUnderPrefix(node.Path, prefix)) {
+			graphNodes = append(graphNodes, node)
 		}
 	}
 	symbolDocs := make([]askLexDoc, 0, len(graphNodes))

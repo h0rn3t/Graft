@@ -1,6 +1,7 @@
 package graph
 
 import (
+	"maps"
 	"path"
 	"regexp"
 	"slices"
@@ -91,11 +92,13 @@ type resolveIndex struct {
 	sqlTypesBySegment map[string][]NodeV1
 	family            map[string]string
 	unresolved        UnresolvedCalls
+	unresolvedNames   map[string]UnresolvedName
 }
 
 // resolveEdges turns raw edge intents into GraphV1 edges (resolve.ts
-// resolveEdges) and counts the calls it could not bind.
-func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) ([]EdgeV1, UnresolvedCalls) {
+// resolveEdges), counts the calls it could not bind, and counts by name the
+// uses it could not bind of the names the graph's symbols have.
+func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) ([]EdgeV1, UnresolvedCalls, map[string]UnresolvedName) {
 	ix := resolveIndex{
 		byID: make(map[string]NodeV1, len(nodes)), globalName: make(map[string][]NodeV1),
 		perFileName: make(map[string]map[string][]NodeV1), ownerMethod: make(map[string][]NodeV1),
@@ -103,6 +106,7 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) ([]E
 		cFilesBySuffix: make(map[string][]string), classParents: make(map[string][]string),
 		goModules: goModules, sqlTypesBySegment: make(map[string][]NodeV1), family: make(map[string]string),
 		goEmbeds: make(map[string][]rawEdge), goFields: make(map[string]rawEdge),
+		unresolvedNames: make(map[string]UnresolvedName),
 	}
 	pushSuffixes := func(index map[string][]string, node NodeV1) {
 		parts := strings.Split(node.Path, "/")
@@ -174,20 +178,22 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) ([]E
 
 	edges := make([]EdgeV1, 0, len(rawEdges))
 	seen := make(map[string]struct{}, len(rawEdges))
-	add := func(source, target string, relation Relation, confidence Confidence) {
-		key := source + "\x00" + string(relation) + "\x00" + target
+	// add links an intent's source to target; of the intents one edge stands
+	// for, the first, in source order, gives its line.
+	add := func(intent rawEdge, target string, relation Relation, confidence Confidence) {
+		key := intent.source + "\x00" + string(relation) + "\x00" + target
 		if _, ok := seen[key]; ok {
 			return
 		}
 		seen[key] = struct{}{}
-		edges = append(edges, EdgeV1{Source: source, Target: target, Relation: relation, Confidence: confidence})
+		edges = append(edges, EdgeV1{Source: intent.source, Target: target, Relation: relation, Confidence: confidence, Line: intent.line})
 	}
 	for _, edge := range rawEdges {
 		switch {
 		case edge.relation == "contains" && edge.targetID != "":
-			add(edge.source, edge.targetID, "contains", "extracted")
+			add(edge, edge.targetID, "contains", "extracted")
 		case edge.relation == "imports" && edge.specifier != "":
-			add(edge.source, ix.resolveImportTarget(edge), "imports", "extracted")
+			add(edge, ix.resolveImportTarget(edge), "imports", "extracted")
 		case edge.relation == "extends" && strings.HasSuffix(edge.file, ".go"):
 			ix.resolveGoEmbed(edge, add)
 		case edge.relation == "extends" || edge.relation == "implements":
@@ -196,18 +202,33 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) ([]E
 				kinds = []Kind{"interface", "trait"}
 			}
 			if hit, ok := ix.resolveName(edge.name, edge.file, kinds); ok {
-				add(edge.source, hit.id, edge.relation, hit.confidence)
+				add(edge, hit.id, edge.relation, hit.confidence)
 			} else {
-				add(edge.source, edge.name, edge.relation, "inferred")
+				add(edge, edge.name, edge.relation, "inferred")
 			}
 		case edge.relation == "references" && edge.name != "":
 			ix.resolveReference(edge, add)
+		case edge.relation == "writes":
+			ix.resolveGoReference(edge, add)
 		case edge.relation == "calls":
 			ix.resolveCall(edge, add)
 		}
 	}
 	ix.addGoImplements(nodes, edges, add)
-	return edges, ix.unresolved
+	maps.DeleteFunc(ix.unresolvedNames, func(name string, _ UnresolvedName) bool { return len(ix.globalName[name]) == 0 })
+	return edges, ix.unresolved, ix.unresolvedNames
+}
+
+// missName counts a use of name bound to no node: untyped when the type of
+// its receiver is unknown, else ambiguous.
+func (ix *resolveIndex) missName(name string, untyped bool) {
+	counts := ix.unresolvedNames[name]
+	if untyped {
+		counts.Untyped++
+	} else {
+		counts.Ambiguous++
+	}
+	ix.unresolvedNames[name] = counts
 }
 
 func (ix *resolveIndex) resolveImportTarget(edge rawEdge) string {
@@ -224,7 +245,7 @@ func (ix *resolveIndex) resolveImportTarget(edge rawEdge) string {
 	return ix.resolveImport(edge.specifier, edge.file)
 }
 
-func (ix *resolveIndex) resolveReference(edge rawEdge, add func(string, string, Relation, Confidence)) {
+func (ix *resolveIndex) resolveReference(edge rawEdge, add func(rawEdge, string, Relation, Confidence)) {
 	source := ix.byID[edge.source]
 	switch {
 	case strings.HasSuffix(edge.file, ".go"):
@@ -235,15 +256,15 @@ func (ix *resolveIndex) resolveReference(edge rawEdge, add func(string, string, 
 			return
 		}
 		if candidates := ix.perFileName[target][edge.name]; len(candidates) == 1 {
-			add(edge.source, candidates[0].ID, "references", "extracted")
+			add(edge, candidates[0].ID, "references", "extracted")
 		}
 	case strings.HasSuffix(edge.file, ".java") && source.Origin == "ast":
 		hit, ok := ix.resolveName(edge.name, edge.file, []Kind{"interface"})
 		annotation := ix.byID[hit.id]
 		if ok && hit.id != edge.source && annotation.Signature != nil && strings.Contains(*annotation.Signature, "@interface") {
-			add(edge.source, hit.id, "references", hit.confidence)
+			add(edge, hit.id, "references", hit.confidence)
 		} else {
-			add(edge.source, edge.name, "references", "inferred")
+			add(edge, edge.name, "references", "inferred")
 		}
 	case strings.EqualFold(path.Ext(edge.file), ".sql"):
 		candidates := make([]NodeV1, 0)
@@ -260,16 +281,16 @@ func (ix *resolveIndex) resolveReference(edge rawEdge, add func(string, string, 
 			if candidates[0].Path == edge.file {
 				confidence = "extracted"
 			}
-			add(edge.source, candidates[0].ID, "references", confidence)
+			add(edge, candidates[0].ID, "references", confidence)
 		}
 	case source.Origin == "generic":
 		if hit, ok := ix.resolveName(edge.name, edge.file, []Kind{"class", "interface", "struct", "enum", "type", "module"}); ok && hit.id != edge.source {
-			add(edge.source, hit.id, "references", hit.confidence)
+			add(edge, hit.id, "references", hit.confidence)
 		}
 	}
 }
 
-func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relation, Confidence)) {
+func (ix *resolveIndex) resolveCall(edge rawEdge, add func(rawEdge, string, Relation, Confidence)) {
 	if edge.specifier != "" && strings.HasSuffix(edge.file, ".go") {
 		ix.resolveGoPackageCall(edge, add)
 		return
@@ -277,6 +298,7 @@ func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relat
 	if edge.viaMember {
 		if edge.recvType == "" {
 			ix.unresolved.ReceiverUnknown++
+			ix.missName(edge.name, true)
 			return
 		}
 		var hit resolved
@@ -291,10 +313,16 @@ func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relat
 		}
 		if hit.ambiguous {
 			ix.unresolved.MemberAmbiguous++
+			ix.missName(edge.name, false)
 			return
 		}
 		if hit.id != "" {
-			add(edge.source, hit.id, "calls", hit.confidence)
+			// A call through a Go field of function type reads the field.
+			relation := Relation("calls")
+			if ix.byID[hit.id].Kind == "field" {
+				relation = "references"
+			}
+			add(edge, hit.id, relation, hit.confidence)
 			return
 		}
 		if !edge.implicitSelf {
@@ -315,9 +343,10 @@ func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relat
 	}
 	hit, ok := ix.resolveName(edge.name, edge.file, kinds)
 	if !ok && !hit.ambiguous && strings.HasSuffix(edge.file, ".go") {
-		// A Go conversion `T(x)` uses the type T; it calls nothing.
-		if conversion, found := ix.resolveName(edge.name, edge.file, goTypeKinds); found {
-			add(edge.source, conversion.id, "references", "inferred")
+		// A Go conversion `T(x)` uses the type T, and a call through a
+		// variable `v()` reads v; neither calls a declaration.
+		if value, found := ix.resolveName(edge.name, edge.file, append([]Kind{"variable"}, goTypeKinds...)); found {
+			add(edge, value.id, "references", "inferred")
 			return
 		}
 	}
@@ -328,9 +357,10 @@ func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relat
 	}
 	switch {
 	case ok:
-		add(edge.source, hit.id, "calls", hit.confidence)
+		add(edge, hit.id, "calls", hit.confidence)
 	case hit.ambiguous:
 		ix.unresolved.NameAmbiguous++
+		ix.missName(edge.name, false)
 	default:
 		ix.unresolved.NameNotInGraph++
 	}

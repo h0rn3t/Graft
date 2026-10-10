@@ -1,7 +1,8 @@
 Usage: graft callers [options] <symbol> [dir]
 
-Who calls/references a symbol ($0, no LLM). --direction out gives callees (what
-it calls); --depth N (or all) walks transitively for full blast radius
+Who calls/references a symbol ($0, no LLM), each with the line it does so on,
+and whether that list is exact or a lower bound. --direction out gives callees
+(what it calls); --depth N (or all) walks transitively for full blast radius
 
 Arguments:
   symbol                bare name, qualified (Class.method), or

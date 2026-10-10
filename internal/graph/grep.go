@@ -190,12 +190,13 @@ type grepSymbolSpan struct {
 }
 
 // grepSymbols groups the symbols with a line span by path, each group in
-// span-start order and otherwise in node order.
+// span-start order and otherwise in node order. A field is left out, so the
+// lines of a struct group under it as one.
 func grepSymbols(nodes []NodeV1) map[string][]grepSymbolSpan {
 	byPath := make(map[string][]grepSymbolSpan)
 	for index := range nodes {
 		node := &nodes[index]
-		if node.Kind == Kind("file") {
+		if node.Kind == Kind("file") || node.Kind == "field" {
 			continue
 		}
 		start, end, ok := grepSpanBounds(node.Span)

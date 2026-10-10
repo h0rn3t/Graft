@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "## api/\nquery · function · src/db.ts:L1-L1\n  calls ← serve (src/server.ts:L2-L2)\n",
+  "stdout": "## api/\nquery · function · src/db.ts:L1-L1\n  calls ← serve (src/server.ts:L2-L2) at L2\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

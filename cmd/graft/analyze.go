@@ -209,15 +209,18 @@ func runDead(opts callersOptions, stdout, stderr io.Writer) int {
 	if !ok {
 		return 1
 	}
-	dead, err := graph.FindDeadCode(*loaded, root, opts.in)
+	report, err := graph.FindDeadCode(*loaded, root, opts.in)
 	if err != nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
 	}
+	dead := report.Symbols
 	counts := map[graph.DeadConfidence]int{}
+	rules := map[graph.DeadRule]int{}
 	var shown []graph.DeadSymbol
 	for _, symbol := range dead {
 		counts[symbol.Confidence]++
+		rules[symbol.Rule]++
 		if opts.all || symbol.Confidence != graph.DeadLow {
 			shown = append(shown, symbol)
 		}
@@ -226,18 +229,56 @@ func runDead(opts callersOptions, stdout, stderr io.Writer) int {
 		type candidate struct {
 			symbolOutput
 			Confidence graph.DeadConfidence `json:"confidence"`
+			Rule       graph.DeadRule       `json:"rule,omitempty"`
 			Reason     string               `json:"reason"`
 		}
 		candidates := make([]candidate, 0, len(shown))
 		for _, symbol := range shown {
-			candidates = append(candidates, candidate{symbolJSON(symbol.Node), symbol.Confidence, symbol.Reason})
+			candidates = append(candidates, candidate{symbolJSON(symbol.Node), symbol.Confidence, symbol.Rule, symbol.Reason})
 		}
 		return writeJSONResult(stdout, stderr, struct {
-			High       int         `json:"high"`
-			Medium     int         `json:"medium"`
-			Low        int         `json:"low"`
-			Candidates []candidate `json:"candidates"`
-		}{counts[graph.DeadHigh], counts[graph.DeadMedium], counts[graph.DeadLow], candidates}, "dead code")
+			High       int                  `json:"high"`
+			Medium     int                  `json:"medium"`
+			Low        int                  `json:"low"`
+			Excluded   graph.DeadExclusions `json:"excluded"`
+			Candidates []candidate          `json:"candidates"`
+		}{counts[graph.DeadHigh], counts[graph.DeadMedium], counts[graph.DeadLow], report.Excluded, candidates}, "dead code")
+	}
+	// The low findings and the code left out are counted by reason: a list
+	// drawn from thousands of candidates reads otherwise than one from ten.
+	var lowRules []string
+	for _, rule := range []struct {
+		rule  graph.DeadRule
+		label string
+	}{
+		{graph.DeadUnresolved, "named by an unresolved use"},
+		{graph.DeadTwin, "sharing a called symbol's name"},
+		{graph.DeadDecorated, "decorated"},
+		{graph.DeadOverriding, "in a class with a supertype"},
+		{graph.DeadMentioned, "named elsewhere in the source"},
+	} {
+		if rules[rule.rule] > 0 {
+			lowRules = append(lowRules, fmt.Sprintf("%d %s", rules[rule.rule], rule.label))
+		}
+	}
+	var excluded []string
+	for _, reason := range []struct {
+		count     int
+		one, many string
+	}{
+		{report.Excluded.Copies, "in test, fixture or vendored code", "in test, fixture or vendored code"},
+		{report.Excluded.Generated, "generated", "generated"},
+		{report.Excluded.EntryPoints, "entry point", "entry points"},
+		{report.Excluded.RuntimeNames, "called by name by a runtime or standard interface", "called by name by a runtime or standard interface"},
+		{report.Excluded.Declarations, "interface declaration", "interface declarations"},
+		{report.Excluded.Unreadable, "in an unreadable file", "in unreadable files"},
+	} {
+		switch {
+		case reason.count == 1:
+			excluded = append(excluded, "1 "+reason.one)
+		case reason.count > 1:
+			excluded = append(excluded, fmt.Sprintf("%d %s", reason.count, reason.many))
+		}
 	}
 	var body strings.Builder
 	switch {
@@ -254,7 +295,7 @@ func runDead(opts callersOptions, stdout, stderr io.Writer) int {
 			group = symbol.Confidence
 			heading := symbol.Reason
 			if group == graph.DeadLow {
-				heading = "no resolved caller, but a caller may exist"
+				heading = "no resolved caller, but a caller may exist — " + strings.Join(lowRules, ", ")
 			}
 			fmt.Fprintf(&body, "\n%s · %s\n", group, heading)
 		}
@@ -263,6 +304,9 @@ func runDead(opts callersOptions, stdout, stderr io.Writer) int {
 			fmt.Fprintf(&body, " — %s", symbol.Reason)
 		}
 		body.WriteByte('\n')
+	}
+	if len(excluded) > 0 {
+		fmt.Fprintf(&body, "\nnot listed: %s\n", strings.Join(excluded, ", "))
 	}
 	if _, err := io.WriteString(stdout, body.String()); err != nil {
 		return 1

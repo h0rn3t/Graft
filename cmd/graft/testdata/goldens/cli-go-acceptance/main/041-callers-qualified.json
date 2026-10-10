@@ -7,7 +7,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "grow · method · pkg/queue/queue.go:L9-L9\n  calls ← Push (pkg/queue/queue.go:L7-L7)\n      7: func (q *Queue) Push(v int) { q.items = append(q.items, v); q.grow() }\n",
+  "stdout": "grow · method · pkg/queue/queue.go:L9-L9\n  exact: no unresolved use names it\n  calls ← Push (pkg/queue/queue.go:L7-L7)\n      7: func (q *Queue) Push(v int) { q.items = append(q.items, v); q.grow() }\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

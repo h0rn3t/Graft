@@ -86,12 +86,18 @@ type rawEdge struct {
 	// empty for the file's own package; recvFields are the fields selected
 	// from the receiver before the member, `store` in `s.store.Get()`. A Go
 	// "field" intent records a struct field instead: source is the struct,
-	// name the field, recvType and recvPackage its type. It links nothing.
+	// name the field, targetID its node unless it is embedded, recvType and
+	// recvPackage its type. It links nothing.
 	recvPackage  string
 	recvFields   []string
 	kinds        []Kind
 	argCount     *int
 	implicitSelf bool
+	// literalKey marks a Go composite literal's key: a field of recvType, or
+	// a value when that type is no struct.
+	literalKey bool
+	// line is the 1-based line of the use; zero when it has none.
+	line int
 }
 
 type extractResult struct {
@@ -240,7 +246,7 @@ func extractSource(rel, source string) (extractResult, error) {
 	}
 	ctx := walkCtx{rel: rel, lang: lang, parentID: rel, imported: x.collectImportedSymbols(root)}
 	x.walkNamedChildren(namedChildren(root), ctx)
-	x.nodes[0].BodyText = new(fileResidual(source, x.nodes[1:]))
+	x.nodes[0].BodyText = new(fileResidual(source, slices.DeleteFunc(slices.Clone(x.nodes[1:]), func(node NodeV1) bool { return askValueKind(node.Kind) })))
 	return extractResult{language: label, nodes: x.nodes, rawEdges: x.edges}, nil
 }
 
@@ -271,7 +277,9 @@ func sameNode(a, b *sitter.Node) bool {
 	return a != nil && b != nil && a.Id() == b.Id()
 }
 
-// fileResidual indexes the lines no symbol span covers, on the file node.
+// fileResidual indexes the lines no symbol span covers, on the file node. A
+// package-level constant or variable is no answer find_code ranks, so the
+// caller leaves it out of symbols and its lines stay the file's.
 func fileResidual(source string, symbols []NodeV1) string {
 	lines := strings.Split(source, "\n")
 	covered := make([]bool, len(lines)+2)
@@ -332,15 +340,25 @@ func (x *extractor) walk(node *sitter.Node, ctx walkCtx) {
 	switch {
 	case x.isImport(node, ctx.lang):
 		if specifier := x.importSpecifier(node, ctx.lang); specifier != "" {
-			x.edges = append(x.edges, rawEdge{source: ctx.rel, relation: "imports", specifier: specifier, file: ctx.rel})
+			x.edges = append(x.edges, rawEdge{source: ctx.rel, relation: "imports", specifier: specifier, file: ctx.rel, line: lineOf(node)})
 		}
 		return
 	case slices.Contains(kinds, node.Kind()):
 		if callee, ok := x.calleeName(node, ctx.lang); ok {
 			x.edges = append(x.edges, x.callEdge(node, callee, ctx))
 		}
-	case ctx.lang == langGo && goValuePosition(node):
-		if edge, ok := x.goFunctionValue(node, ctx); ok {
+	case ctx.lang == langGo && (node.Kind() == "const_spec" || node.Kind() == "var_spec") && ctx.parentID == ctx.rel:
+		x.goValueSpec(node, ctx)
+		return
+	case ctx.lang == langGo && node.Kind() == "field_declaration" && ctx.enclosingKind == "struct":
+		x.goField(node, ctx)
+		return
+	case ctx.lang == langGo && node.Kind() == "selector_expression" && !isDirectCallee(node, kinds):
+		if edge, ok := x.goMemberUse(node, ctx); ok {
+			x.edges = append(x.edges, edge)
+		}
+	case ctx.lang == langGo && node.Kind() == "identifier" && !isDirectCallee(node, kinds):
+		if edge, ok := x.goNameUse(node, ctx); ok {
 			x.edges = append(x.edges, edge)
 		}
 	case ctx.lang == langGo && (node.Kind() == "type_identifier" || node.Kind() == "qualified_type") && goTypeUse(node):
@@ -352,7 +370,7 @@ func (x *extractor) walk(node *sitter.Node, ctx walkCtx) {
 		return // the receiver owns the method; its type is no use of it
 	case node.Kind() == "identifier" && !isDirectCallee(node, kinds) && !isDeclarationName(node):
 		if imported, ok := ctx.imported[x.text(node)]; ok {
-			x.edges = append(x.edges, rawEdge{source: ctx.parentID, relation: "references", name: imported.name, specifier: imported.specifier, file: ctx.rel})
+			x.edges = append(x.edges, rawEdge{source: ctx.parentID, relation: "references", name: imported.name, specifier: imported.specifier, file: ctx.rel, line: lineOf(node)})
 		}
 	}
 	if ctx.lang == langJava && node.Kind() == "object_creation_expression" && x.javaAnonymousClass(node, ctx) {
@@ -367,7 +385,7 @@ func (x *extractor) walk(node *sitter.Node, ctx walkCtx) {
 }
 
 func (x *extractor) callEdge(node *sitter.Node, callee callee, ctx walkCtx) rawEdge {
-	edge := rawEdge{source: ctx.parentID, relation: "calls", name: callee.name, viaMember: callee.viaMember, file: ctx.rel, kinds: callee.kinds}
+	edge := rawEdge{source: ctx.parentID, relation: "calls", name: callee.name, viaMember: callee.viaMember, file: ctx.rel, kinds: callee.kinds, line: lineOf(node)}
 	if ctx.lang == langJava {
 		edge.argCount = javaArgCount(node)
 	}
@@ -415,7 +433,6 @@ func (x *extractor) emitDefinition(node *sitter.Node, desc *defDescriptor, ctx w
 	}
 	if ctx.lang == langGo && (desc.kind == "struct" || desc.kind == "interface") {
 		x.edges = append(x.edges, x.goEmbeds(node, id, ctx)...)
-		x.edges = append(x.edges, x.goFields(node, id, ctx)...)
 	}
 	if ctx.lang == langJava {
 		x.edges = append(x.edges, x.javaAnnotationReferences(node, id, ctx)...)
@@ -488,6 +505,11 @@ func (x *extractor) describe(node *sitter.Node, ctx walkCtx) *defDescriptor {
 	return nil
 }
 
+// lineOf is the 1-based line a node starts on.
+func lineOf(node *sitter.Node) int {
+	return int(node.StartPosition().Row) + 1
+}
+
 // spanOf is a node's 1-based inclusive line span, `Lstart-Lend`.
 func spanOf(node *sitter.Node) string {
 	return fmt.Sprintf("L%d-L%d", node.StartPosition().Row+1, node.EndPosition().Row+1)
@@ -515,7 +537,7 @@ func (x *extractor) heritageEdges(node *sitter.Node, classID string, ctx walkCtx
 			continue
 		}
 		for _, target := range namedChildrenOfKind(clause, "identifier", "type_identifier") {
-			edges = append(edges, rawEdge{source: classID, relation: relation, name: x.text(target), file: ctx.rel})
+			edges = append(edges, rawEdge{source: classID, relation: relation, name: x.text(target), file: ctx.rel, line: lineOf(target)})
 		}
 	}
 	return edges

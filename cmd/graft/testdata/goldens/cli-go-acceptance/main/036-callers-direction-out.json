@@ -9,7 +9,7 @@
   "env": {},
   "inputs": {},
   "status": 0,
-  "stdout": "openStore · function · src/store.ts:L7-L7\n  calls → put (src/store.ts:L5-L5)\n",
+  "stdout": "openStore · function · src/store.ts:L7-L7\n  calls → put (src/store.ts:L5-L5)\n      7: export function openStore(): Store { const store = new Store(); store.put('a', 'b'); return store; }\n",
   "stderr": "",
   "files": {},
   "checkFiles": false

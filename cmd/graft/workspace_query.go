@@ -84,24 +84,15 @@ func federateCallers(root, contextDir, symbol string, direction graph.Direction,
 		for index, match := range matches {
 			results[index] = callersResult{symbol: match, hits: graph.EdgeWalk(child.Graph, match, direction, depth)}
 			lines = append(lines, fmt.Sprintf("%s · %s · %s:%s", match.Name, match.Kind, match.Path, match.Span))
+			if bound := boundLine(child.Graph, match, direction); bound != "" {
+				lines = append(lines, strings.TrimSuffix(bound, "\n"))
+			}
 			if len(results[index].hits) == 0 {
 				lines = append(lines, looseNote(direction, match.Name, len(matches)))
 				continue
 			}
 			for _, hit := range results[index].hits {
-				arrow := "←"
-				if direction == graph.DirectionOut {
-					arrow = "→"
-				}
-				label := fmt.Sprintf("%s (unresolved import)", hit.ID)
-				if hit.Node != nil {
-					label = fmt.Sprintf("%s (%s:%s)", hit.Node.Name, hit.Node.Path, hit.Node.Span)
-				}
-				depthLabel := ""
-				if depth > 1 {
-					depthLabel = fmt.Sprintf(" [depth %d]", hit.Depth)
-				}
-				lines = append(lines, fmt.Sprintf("  %s %s %s%s", hit.Relation, arrow, label, depthLabel))
+				lines = append(lines, edgeHitLine(hit, direction, depth))
 			}
 		}
 		blocks = append(blocks, strings.Join(lines, "\n"))

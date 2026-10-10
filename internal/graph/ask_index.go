@@ -56,6 +56,9 @@ func WriteAskIndex(outDir string, graph GraphV1) error {
 	df := askBag{counts: make(map[string]int)}
 	length := 0
 	for _, node := range nodes {
+		if !askRanked(node) {
+			continue
+		}
 		name := askOrderedCounts(node.Name)
 		path := askOrderedCounts(node.Path)
 		body := askOrderedCounts(askNodeBody(node))

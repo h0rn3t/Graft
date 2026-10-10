@@ -258,11 +258,13 @@ func hasMapPath(paths map[string]struct{}, path string) bool {
 	return ok
 }
 
+// mapTopHubs lists the cap symbols of nodes with the most incoming edges. A
+// field is its struct's coupling, never a hub of its own.
 func mapTopHubs(nodes []NodeV1, inDegree map[string]int, cap int) []Hub {
 	hubs := make([]Hub, 0)
 	for _, node := range nodes {
 		degree := inDegree[node.ID]
-		if degree == 0 {
+		if degree == 0 || node.Kind == "field" {
 			continue
 		}
 		hubs = append(hubs, Hub{Name: node.Name, Kind: node.Kind, Path: node.Path, Span: node.Span, InDegree: degree})

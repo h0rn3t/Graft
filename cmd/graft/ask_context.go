@@ -226,7 +226,7 @@ func setAskMethods(wiring graph.GraphV1, hits []graph.AskHit) {
 	type owner struct{ dir, name string }
 	methods := make(map[owner][]graph.NodeV1)
 	for _, node := range wiring.Nodes {
-		if node.Owner != nil {
+		if node.Owner != nil && node.Kind == "method" {
 			key := owner{filepath.Dir(node.Path), *node.Owner}
 			methods[key] = append(methods[key], node)
 		}
@@ -362,7 +362,9 @@ func addAskEditContext(wiring graph.GraphV1, result *graph.AskResult) {
 			id, kind = edge.Source, "caller"
 		}
 		node, ok := nodes[id]
-		if !ok || node.Span == "" || node.Kind == "file" {
+		// A field, constant or variable the anchor uses is in its body
+		// already; the slots go to code around it.
+		if !ok || node.Span == "" || node.Kind == "file" || node.Kind == "field" || node.Kind == "constant" || node.Kind == "variable" {
 			continue
 		}
 		path := "/" + strings.ToLower(node.Path)

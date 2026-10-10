@@ -45,15 +45,15 @@ func TestGeneratedCodeFollowsProductionCode(t *testing.T) {
 			"func generatedOrphan(x int) int {\n\tif x > 0 && x < 9 {\n\t\treturn 1\n\t}\n\treturn 0\n}\n\nfunc lookupRow() {}\n",
 	})
 
-	dead, err := FindDeadCode(graph, root, "")
+	report, err := FindDeadCode(graph, root, "")
 	if err != nil {
 		t.Fatalf("FindDeadCode() error = %v, want nil", err)
 	}
-	if slices.ContainsFunc(dead, func(symbol DeadSymbol) bool { return symbol.Node.Name == "generatedOrphan" }) {
-		t.Errorf("FindDeadCode() = %+v, want generated code left out", dead)
+	if slices.ContainsFunc(report.Symbols, func(symbol DeadSymbol) bool { return symbol.Node.Name == "generatedOrphan" }) {
+		t.Errorf("FindDeadCode() = %+v, want generated code left out", report.Symbols)
 	}
-	if !slices.ContainsFunc(dead, func(symbol DeadSymbol) bool { return symbol.Node.Name == "orphan" }) {
-		t.Errorf("FindDeadCode() = %+v, want production orphan listed", dead)
+	if !slices.ContainsFunc(report.Symbols, func(symbol DeadSymbol) bool { return symbol.Node.Name == "orphan" }) {
+		t.Errorf("FindDeadCode() = %+v, want production orphan listed", report.Symbols)
 	}
 
 	ranked, err := MostComplex(graph, "")

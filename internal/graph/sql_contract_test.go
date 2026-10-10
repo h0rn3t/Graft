@@ -44,7 +44,7 @@ func TestSQLExtractorContract(t *testing.T) {
 			t.Errorf("extractFile(%q, source) node[%d] = %#v, want ID %q and kind %q with path, hash, span", "db/schema.SQL", i, node, want[i].id, want[i].kind)
 		}
 	}
-	resolved, _ := resolveEdges(got.nodes, got.rawEdges, nil)
+	resolved, _, _ := resolveEdges(got.nodes, got.rawEdges, nil)
 	for _, edge := range []EdgeV1{
 		{Source: "db/schema.SQL#app.users", Target: "db/schema.SQL#app.teams", Relation: "references", Confidence: "extracted"},
 		{Source: "db/schema.SQL#app.active_users", Target: "db/schema.SQL#app.users", Relation: "references", Confidence: "extracted"},
@@ -234,7 +234,7 @@ func TestSQLReferenceResolutionContract(t *testing.T) {
 		nodes = append(nodes, got.nodes...)
 		raw = append(raw, got.rawEdges...)
 	}
-	edges, _ := resolveEdges(nodes, raw, nil)
+	edges, _, _ := resolveEdges(nodes, raw, nil)
 	want := EdgeV1{Source: "db/query.sql", Target: "db/app.sql#app.users", Relation: "references", Confidence: "inferred"}
 	if !slices.Contains(edges, want) {
 		t.Errorf("resolveEdges(SQL files) = %#v, want %#v", edges, want)
@@ -299,7 +299,7 @@ func TestSQLNamesDoNotResolveAcrossLanguageFamilies(t *testing.T) {
 		{ID: "schema.sql#foo", Name: "foo", Kind: "function", Path: "schema.sql", Origin: "sql"},
 	}
 	raw := []rawEdge{{source: "main.ts#run", relation: "calls", name: "foo", file: "main.ts"}}
-	if got, _ := resolveEdges(nodes, raw, nil); len(got) != 0 {
+	if got, _, _ := resolveEdges(nodes, raw, nil); len(got) != 0 {
 		t.Errorf("resolveEdges(TypeScript call, SQL function) = %#v, want no cross-language call", got)
 	}
 }

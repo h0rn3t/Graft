@@ -2,6 +2,7 @@
 package main
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -91,12 +92,24 @@ type hitOutput struct {
 	Kind       graph.Kind       `json:"kind,omitempty"`
 	Path       string           `json:"path,omitempty"`
 	Span       string           `json:"span,omitempty"`
+	Line       int              `json:"line,omitempty"`
 }
 
 type matchOutput struct {
 	Symbol symbolOutput `json:"symbol"`
+	Bound  *boundOutput `json:"bound,omitempty"`
 	Hits   []hitOutput  `json:"hits"`
 	Note   string       `json:"note,omitempty"`
+}
+
+// boundOutput says whether a symbol's callers are all the graph knows of
+// ("exact") or may be more ("lower-bound"), and why.
+type boundOutput struct {
+	Kind      string   `json:"kind"`
+	Untyped   int      `json:"untyped,omitempty"`
+	Ambiguous int      `json:"ambiguous,omitempty"`
+	Dispatch  []string `json:"dispatch,omitempty"`
+	Values    int      `json:"values,omitempty"`
 }
 
 type savedOutput struct {
@@ -540,6 +553,12 @@ func writeJSON(w, stderr io.Writer, query string, wiring graph.GraphV1, results 
 	payload := callersOutput{Query: query, Matches: make([]matchOutput, 0, len(results)), Saved: callersSavings(wiring, results)}
 	for _, result := range results {
 		match := matchOutput{Symbol: symbolJSON(result.symbol), Hits: make([]hitOutput, 0, len(result.hits))}
+		if bound, ok := graph.CallerBoundOf(wiring, result.symbol); ok && direction == graph.DirectionIn {
+			match.Bound = &boundOutput{Kind: "exact", Untyped: bound.Untyped, Ambiguous: bound.Ambiguous, Dispatch: bound.Dispatch, Values: bound.Values}
+			if !bound.Exact() {
+				match.Bound.Kind = "lower-bound"
+			}
+		}
 		for _, hit := range result.hits {
 			match.Hits = append(match.Hits, hitJSON(hit))
 		}
@@ -596,6 +615,7 @@ func writeHuman(w io.Writer, root string, wiring graph.GraphV1, results []caller
 	sources := make(map[string][]string)
 	for _, result := range results {
 		fmt.Fprintf(&body, "%s · %s · %s:%s\n", result.symbol.Name, result.symbol.Kind, result.symbol.Path, result.symbol.Span)
+		body.WriteString(boundLine(wiring, result.symbol, direction))
 		if len(result.hits) == 0 {
 			body.WriteString(looseNote(direction, result.symbol.Name, len(results)))
 			body.WriteByte('\n')
@@ -615,7 +635,13 @@ func writeHuman(w io.Writer, root string, wiring graph.GraphV1, results []caller
 					depthLabel = fmt.Sprintf(" [depth %d]", hit.Depth)
 				}
 				fmt.Fprintf(&body, "  %s %s %s%s\n", hit.Relation, arrow, label, depthLabel)
-				if line, number, ok := quoteFor(root, mention, hit, sources); ok {
+				// An incoming edge's line is in the caller's file, an
+				// outgoing one's in the symbol's own.
+				lineFile := result.symbol.Path
+				if direction == graph.DirectionIn && hit.Node != nil {
+					lineFile = hit.Node.Path
+				}
+				if line, number, ok := quoteFor(root, mention, hit, lineFile, sources); ok {
 					fmt.Fprintf(&body, "      %d: %s\n", number, strings.TrimSpace(line))
 				}
 			}
@@ -634,7 +660,7 @@ func symbolJSON(node graph.NodeV1) symbolOutput {
 }
 
 func hitJSON(hit graph.EdgeHit) hitOutput {
-	output := hitOutput{ID: hit.ID, Relation: hit.Relation, Confidence: hit.Confidence, Depth: hit.Depth}
+	output := hitOutput{ID: hit.ID, Relation: hit.Relation, Confidence: hit.Confidence, Depth: hit.Depth, Line: hit.Line}
 	if hit.Node != nil {
 		output.Name = hit.Node.Name
 		output.Kind = hit.Node.Kind
@@ -687,23 +713,89 @@ func looseNote(direction graph.Direction, name string, candidateCount int) strin
 	return fmt.Sprintf("  no indexed %s — the graph has no %s call/reference edges for this symbol as written.%s Check the name (try the bare symbol, or \"Type.method\"), or find its uses with graft grep %q. Fall back to raw grep -rn only for unindexed files", label, movement, ambiguity, name)
 }
 
-// quoteFor returns the first line of hit's span that mention matches. sources
-// caches each file's lines by graph path, nil for a file that cannot be read.
-func quoteFor(root string, mention *regexp.Regexp, hit graph.EdgeHit, sources map[string][]string) (string, int, bool) {
+// boundLine says, under a symbol whose callers are listed, whether they are
+// all the graph knows of or a lower bound, and why: "" for callees and for a
+// symbol the bound does not apply to.
+func boundLine(wiring graph.GraphV1, symbol graph.NodeV1, direction graph.Direction) string {
+	bound, ok := graph.CallerBoundOf(wiring, symbol)
+	if !ok || direction != graph.DirectionIn {
+		return ""
+	}
+	if bound.Exact() {
+		return "  exact: no unresolved use names it\n"
+	}
+	var reasons []string
+	if bound.Untyped > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d use%s of .%s on a receiver of unknown type", bound.Untyped, pluralSuffix(bound.Untyped), symbol.Name))
+	}
+	if bound.Ambiguous > 0 {
+		reasons = append(reasons, fmt.Sprintf("%d use%s of %s matching several definitions", bound.Ambiguous, pluralSuffix(bound.Ambiguous), symbol.Name))
+	}
+	if bound.Values > 0 {
+		reasons = append(reasons, fmt.Sprintf("named as a value %d×, and calls through the value are not traced", bound.Values))
+	}
+	if len(bound.Dispatch) > 0 {
+		names := make([]string, 0, min(len(bound.Dispatch), 3))
+		for _, id := range bound.Dispatch[:min(len(bound.Dispatch), 3)] {
+			_, name, _ := strings.Cut(id, "#")
+			names = append(names, cmp.Or(name, id))
+		}
+		if len(bound.Dispatch) > 3 {
+			names = append(names, fmt.Sprintf("%d more", len(bound.Dispatch)-3))
+		}
+		reasons = append(reasons, "calls through "+strings.Join(names, ", ")+" may reach it")
+	}
+	return "  lower bound: " + strings.Join(reasons, "; ") + "\n"
+}
+
+// edgeHitLine is one hit of a callers walk as the agent answers list it:
+// `calls ← name (path:span) at L12`. An incoming edge's line is in the caller
+// shown; an outgoing one's is in the walked symbol, so it is named only for
+// the symbol's own edges, at depth one.
+func edgeHitLine(hit graph.EdgeHit, direction graph.Direction, depth int) string {
+	arrow, at := "←", " at L%d"
+	if direction == graph.DirectionOut {
+		arrow, at = "→", " from L%d"
+	}
+	label := fmt.Sprintf("%s (unresolved import)", hit.ID)
+	if hit.Node != nil {
+		label = fmt.Sprintf("%s (%s:%s)", hit.Node.Name, hit.Node.Path, hit.Node.Span)
+	}
+	if hit.Line > 0 && (direction == graph.DirectionIn || hit.Depth == 1) {
+		label += fmt.Sprintf(at, hit.Line)
+	}
+	if depth > 1 {
+		label += fmt.Sprintf(" [depth %d]", hit.Depth)
+	}
+	return fmt.Sprintf("  %s %s %s", hit.Relation, arrow, label)
+}
+
+// quoteFor returns the line hit's edge stands on, read from lineFile, or for
+// an edge with no line the first line of hit's span that mention matches.
+// sources caches each file's lines by graph path, nil for a file that cannot
+// be read.
+func quoteFor(root string, mention *regexp.Regexp, hit graph.EdgeHit, lineFile string, sources map[string][]string) (string, int, bool) {
 	if hit.Node == nil || hit.Depth > 1 {
 		return "", 0, false
+	}
+	read := func(file string) []string {
+		lines, cached := sources[file]
+		if !cached {
+			if data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(file))); err == nil {
+				lines = strings.Split(string(data), "\n")
+			}
+			sources[file] = lines
+		}
+		return lines
+	}
+	if lines := read(lineFile); hit.Line > 0 && hit.Line <= len(lines) {
+		return lines[hit.Line-1], hit.Line, true
 	}
 	start, end, ok := spanLines(hit.Node.Span)
 	if !ok {
 		return "", 0, false
 	}
-	lines, cached := sources[hit.Node.Path]
-	if !cached {
-		if data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(hit.Node.Path))); err == nil {
-			lines = strings.Split(string(data), "\n")
-		}
-		sources[hit.Node.Path] = lines
-	}
+	lines := read(hit.Node.Path)
 	for line := max(start, 1); line <= min(end, len(lines)); line++ {
 		if mention.MatchString(lines[line-1]) {
 			return lines[line-1], line, true
