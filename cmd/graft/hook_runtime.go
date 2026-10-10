@@ -264,7 +264,7 @@ func handleHookToolUse(input hookInput, root string, stdout io.Writer) {
 	}
 }
 
-func handleHookCursorPostTool(input hookInput, root string) {
+func handleHookCursorPostTool(input hookInput, root string, stdout io.Writer) {
 	toolName := input.string("tool_name")
 	if isMCPToolName(toolName) || isGraftMCPTool(toolName) {
 		return
@@ -284,6 +284,15 @@ func handleHookCursorPostTool(input hookInput, root string) {
 	use := classifyAndScoreHookUse(toolName, command, payload)
 	use.Host = "cursor"
 	_ = recordHookToolUse(root, hookSessionID(input), use)
+	// Cursor reads additional_context; Claude's hookSpecificOutput is ignored here.
+	if note := hookSearchNudge(input, root); note != "" {
+		data, err := jsonv2.Marshal(struct {
+			AdditionalContext string `json:"additional_context"`
+		}{AdditionalContext: note}, nil)
+		if err == nil {
+			_, _ = stdout.Write(data)
+		}
+	}
 }
 
 func handleHookCursorMCP(input hookInput, root string) {
@@ -768,7 +777,7 @@ func runHook(ctx context.Context, event string, user bool, shim string, stdin io
 	case "tool-savings":
 		handleHookToolUse(input, root, stdout)
 	case "cursor-post-tool":
-		handleHookCursorPostTool(input, root)
+		handleHookCursorPostTool(input, root, stdout)
 	case "cursor-mcp":
 		handleHookCursorMCP(input, root)
 	case "cursor-session-end":

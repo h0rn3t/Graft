@@ -208,7 +208,7 @@ func TestHookRelevantRetrievalGate(t *testing.T) {
 func TestHookOrientationAndSubagentFormatting(t *testing.T) {
 	index := strings.Repeat("X", 3000)
 	got := stripHookANSI(formatHookOrientation(index, 1500, ""))
-	if !strings.Contains(got, "repo map") || !strings.Contains(got, "reach for graft first") || !strings.Contains(got, "Already know the file or symbol to change?") || !strings.Contains(got, "Refactor, rename, or multi-file change?") {
+	if !strings.Contains(got, "repo map") || !strings.Contains(got, "reach for graft first") || !strings.Contains(got, "Already know the symbol?") || !strings.Contains(got, "Refactor, rename, or multi-file change?") {
 		t.Errorf("formatHookOrientation() = %q, want required guidance", got)
 	}
 	if strings.Contains(got, "graft impact") || savings.Length(got) >= 4000 {

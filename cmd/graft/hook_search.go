@@ -42,8 +42,11 @@ func hookSearchNudge(input hookInput, root string) string {
 			paths = []string{path}
 		}
 		search, ok = hookSearchScope(root, cwd, hookSearch{Pattern: pattern, IgnoreCase: toolInput["-i"] == true}, paths)
-	case "Bash":
+	case "Bash", "Shell":
 		command, _ := toolInput["command"].(string)
+		if command == "" {
+			command, _ = toolInput["cmd"].(string)
+		}
 		search, ok = parseHookSearchCommand(root, cwd, command)
 	}
 	if !ok || search.Pattern == "" {

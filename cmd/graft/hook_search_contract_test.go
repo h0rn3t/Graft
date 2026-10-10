@@ -99,6 +99,40 @@ func TestHookSearchNudgeIsCappedPerSession(t *testing.T) {
 	}
 }
 
+func TestCursorPostToolSearchNudge(t *testing.T) {
+	root := indexedHookRepo(t)
+	stdin, err := jsonv2.Marshal(map[string]any{
+		"conversation_id": "cursor-search",
+		"cwd":             root,
+		"tool_name":       "Shell",
+		"tool_input":      map[string]any{"command": `grep -rn "fooBar" .`},
+		"tool_output":     "foo",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stdout, stderr bytes.Buffer
+	if status := runWithInput([]string{"_hook", "cursor-post-tool"}, bytes.NewReader(stdin), &stdout, &stderr); status != 0 {
+		t.Fatalf("runWithInput(cursor-post-tool) status = %d, want 0; stderr = %q", status, stderr.String())
+	}
+	var output struct {
+		AdditionalContext string `json:"additional_context"`
+	}
+	if err := jsonv2.Unmarshal(stdout.Bytes(), &output); err != nil {
+		t.Fatalf("cursor-post-tool stdout = %q, want additional_context (%v)", stdout.String(), err)
+	}
+	if !strings.Contains(output.AdditionalContext, `graft_find_all {"pattern":"fooBar"}`) {
+		t.Errorf("cursor-post-tool context = %q, want the graft_find_all replacement", output.AdditionalContext)
+	}
+	stdout.Reset()
+	if status := runWithInput([]string{"_hook", "cursor-post-tool"}, bytes.NewReader(stdin), &stdout, &stderr); status != 0 {
+		t.Fatalf("runWithInput(cursor-post-tool second) status = %d, want 0; stderr = %q", status, stderr.String())
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("cursor-post-tool second context = %q, want none after the session cap", stdout.String())
+	}
+}
+
 func TestHookSearchNudgeNeedsAGraph(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("CLAUDE_PROJECT_DIR", root)

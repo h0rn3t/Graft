@@ -13,8 +13,9 @@ uncommitted edits; there is no need to run `graft build` after editing.
   hits with code excerpts inlined. For a known symbol, call `graft read` directly.
   Use `--in` when the relevant path is already known.
 - `graft grep "<name or literal>"`: every occurrence over indexed files, grouped
-  by enclosing symbol. Use it for exhaustive work and to jump to a symbol you
-  can name; raw `grep -rn` is only for files graft doesn't index.
+  by enclosing symbol. Use it only when you need every occurrence. A symbol you
+  can already name is `graft read`; several go in one call with repeated `--also`.
+  Raw `grep -rn` is only for files graft doesn't index.
 - `graft skeleton <file>`: a file's signatures and spans, ~10× cheaper than
   reading it.
 - `graft read <symbol>`: first choice for a known symbol; no preceding search
