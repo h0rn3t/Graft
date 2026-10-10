@@ -326,7 +326,7 @@ Where a CLI agent supports user-level `hooks.json`, `init` also installs Graft's
 
 - **a live statusline** — graph size, freshness, context usage, and a stale warning when the code has moved ahead of the graph
 - **auto-sync** — every graft query brings the graph up to date first, so an answer always describes the code as it is right now, uncommitted edits included. A query refreshes only what it reads; the markdown under `graft/` is refreshed by the background rebuild at the end of a turn that touched code. Both are structural and `$0` — auto-sync never calls the LLM on its own
-- **context on tap** — each prompt pulls the matching nodes into the session; editing a file surfaces what depends on it ("blast radius"); new sessions start with the repo map, or, when Claude Code runs graft's MCP server, with one line pointing at its tools, which the server's own instructions already describe
+- **context on tap** — each prompt pulls the matching nodes into the session; editing a file surfaces what depends on it ("blast radius"); new sessions start with the repo map, or, when Claude Code runs graft's MCP server, with one line pointing at its tools, which the server's own instructions already describe; subagents start with the same note, since Claude Code gives them no session-start context and an Explore subagent no CLAUDE.md
 
 <p align="center">
   <img src="assets/graft-hooks-demo.gif" alt="How Claude Code hooks wire graft in: install, graft init, then the hooks loop (session start, user prompt, post tool use, stop) keeps the graph built, read, and committed automatically" width="820"/>

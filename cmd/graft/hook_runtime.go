@@ -749,22 +749,22 @@ func runHook(ctx context.Context, event string, user bool, shim string, stdin io
 				return true
 			})
 		}
-		lines := hookSessionStartLines(ctx, root)
-		index, err := os.ReadFile(filepath.Join(hookContextDir(root), "INDEX.md"))
-		if err == nil {
-			orientation := formatHookOrientation(string(index), 1500, hookStaleBanner(hookIndexFreshness(root)))
-			// Claude Code shows the MCP server's own instructions, which carry
-			// the tool guide; the CLI guide and repo map would repeat it on
-			// every turn.
-			if os.Getenv("CLAUDE_PROJECT_DIR") != "" && hosts.ClaudeMCPWired(root, hookHomeDir()) {
-				orientation = formatHookMCPOrientation(hookStaleBanner(hookIndexFreshness(root)))
+		note := strings.Join(hookSessionStartLines(ctx, root), "\n")
+		if orientation := hookOrientation(root); orientation != "" {
+			if note != "" {
+				note += "\n\n"
 			}
-			if len(lines) > 0 {
-				orientation = strings.Join(lines, "\n") + "\n\n" + orientation
-			}
-			emitHookContext(stdout, "SessionStart", orientation)
-		} else if len(lines) > 0 {
-			emitHookContext(stdout, "SessionStart", strings.Join(lines, "\n"))
+			note += orientation
+		}
+		if note != "" {
+			emitHookContext(stdout, "SessionStart", note)
+		}
+	case "subagent-start":
+		// A subagent gets neither SessionStart's note nor, as Explore,
+		// CLAUDE.md; without this an Explore subagent started with Grep in 9
+		// of 24 delegated questions, with it in none.
+		if orientation := hookOrientation(root); orientation != "" {
+			emitHookContext(stdout, "SubagentStart", orientation)
 		}
 	case "prompt":
 		ctx, cancel := context.WithTimeout(ctx, hookPromptAskTimeout(root))

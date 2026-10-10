@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Subagents start with graft's note.** Claude Code runs no SessionStart hook for a subagent and gives an Explore subagent no CLAUDE.md, so a delegated search began wherever the subagent's own prompt pointed it, often at Grep. `graft init` now adds a `SubagentStart` hook that gives every subagent the note a session starts with: the line pointing at graft's MCP tools, or the CLI guide and repo map when the MCP server is not wired. On the eight benchmark questions about this repository, each delegated to an Explore subagent (Sonnet 5.5, 3 runs per question per arm), the subagent's first call was a graft tool in 24 of 24 runs instead of 15 of 24, and no run went without graft (7 of 24 had). Subagents used 21% fewer tokens and sessions 12% fewer; every answer was correct in both arms. Existing setups get the hook when upkeep rewrites the wiring after the upgrade.
+
 ## 0.5.1-beta.1 - 2026-10-10
 
 ### Changed

@@ -119,19 +119,22 @@ func TestRunHookUserShimStaysSilentWhenProjectIsWired(t *testing.T) {
 	}
 }
 
-func TestHookSessionStartOrientationFollowsClaudeMCP(t *testing.T) {
+func TestHookStartOrientationFollowsClaudeMCP(t *testing.T) {
 	home := hookHomeDir
 	t.Cleanup(func() { hookHomeDir = home })
 	hookHomeDir = func() string { return t.TempDir() }
+	const mcpJSON = `{"mcpServers":{"graft":{"command":"graft","args":["mcp"]}}}`
 	tests := []struct {
-		name          string
-		claudeProject bool
-		mcpJSON       string
-		want, notWant string
+		name, event, hookEvent string
+		claudeProject          bool
+		mcpJSON                string
+		want, notWant          string
 	}{
-		{name: "Claude Code with graft's MCP server", claudeProject: true, mcpJSON: `{"mcpServers":{"graft":{"command":"graft","args":["mcp"]}}}`, want: "graft_find_code", notWant: "repo map"},
-		{name: "Claude Code without it", claudeProject: true, want: "repo map", notWant: "graft_find_code"},
-		{name: "another host with .mcp.json", mcpJSON: `{"mcpServers":{"graft":{"command":"graft","args":["mcp"]}}}`, want: "repo map", notWant: "graft_find_code"},
+		{name: "session in Claude Code with graft's MCP server", event: "session-start", hookEvent: "SessionStart", claudeProject: true, mcpJSON: mcpJSON, want: "graft_find_code", notWant: "repo map"},
+		{name: "session in Claude Code without it", event: "session-start", hookEvent: "SessionStart", claudeProject: true, want: "repo map", notWant: "graft_find_code"},
+		{name: "session in another host with .mcp.json", event: "session-start", hookEvent: "SessionStart", mcpJSON: mcpJSON, want: "repo map", notWant: "graft_find_code"},
+		{name: "subagent in Claude Code with graft's MCP server", event: "subagent-start", hookEvent: "SubagentStart", claudeProject: true, mcpJSON: mcpJSON, want: "graft_find_code", notWant: "repo map"},
+		{name: "subagent in Claude Code without it", event: "subagent-start", hookEvent: "SubagentStart", claudeProject: true, want: "repo map", notWant: "graft_find_code"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -146,11 +149,24 @@ func TestHookSessionStartOrientationFollowsClaudeMCP(t *testing.T) {
 			}
 			t.Setenv("GRAFT_HOOK_SHIM", "")
 			var out bytes.Buffer
-			payload := `{"session_id":"s","hook_event_name":"SessionStart","cwd":` + strconv.Quote(root) + `}`
-			runHook(t.Context(), "session-start", false, "", strings.NewReader(payload), &out, &bytes.Buffer{})
-			if got := out.String(); !strings.Contains(got, tt.want) || strings.Contains(got, tt.notWant) {
-				t.Errorf("runHook(session-start) = %q, want %q and not %q", got, tt.want, tt.notWant)
+			payload := `{"session_id":"s","hook_event_name":"` + tt.hookEvent + `","cwd":` + strconv.Quote(root) + `}`
+			runHook(t.Context(), tt.event, false, "", strings.NewReader(payload), &out, &bytes.Buffer{})
+			got := out.String()
+			if !strings.Contains(got, tt.want) || strings.Contains(got, tt.notWant) || !strings.Contains(got, `"hookEventName":"`+tt.hookEvent+`"`) {
+				t.Errorf("runHook(%s) = %q, want %s context with %q and not %q", tt.event, got, tt.hookEvent, tt.want, tt.notWant)
 			}
 		})
+	}
+}
+
+func TestHookSubagentStartSilentWithoutGraph(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("CLAUDE_PROJECT_DIR", root)
+	t.Setenv("GRAFT_HOOK_SHIM", "")
+	var out bytes.Buffer
+	payload := `{"session_id":"s","hook_event_name":"SubagentStart","agent_type":"Explore","cwd":` + strconv.Quote(root) + `}`
+	runHook(t.Context(), "subagent-start", false, "", strings.NewReader(payload), &out, &bytes.Buffer{})
+	if got := out.String(); got != "" {
+		t.Errorf("runHook(subagent-start, no graph) = %q, want no output", got)
 	}
 }

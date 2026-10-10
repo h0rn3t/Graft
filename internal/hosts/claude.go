@@ -46,7 +46,7 @@ func ClaudeGlobalTargets(home string) []PlannedWrite {
 		return PlannedWrite{HostID: "claude", ID: id, Path: path, Scope: ScopeGlobal, Kind: kind, What: what}
 	}
 	return []PlannedWrite{
-		target("claude-global-hooks", filepath.Join(home, ".claude", "settings.json"), WriteHook, "SessionStart / UserPromptSubmit / PostToolUse / Stop / SubagentStop"),
+		target("claude-global-hooks", filepath.Join(home, ".claude", "settings.json"), WriteHook, "SessionStart / SubagentStart / UserPromptSubmit / PostToolUse / Stop / SubagentStop"),
 		target("claude-global-mcp", filepath.Join(home, ".claude.json"), WriteMCP, "mcpServers.graft"),
 	}
 }
@@ -82,6 +82,7 @@ func graftBlocks(binary, suffix string) []graftBlock {
 		}},
 		{event: "UserPromptSubmit", blocks: []jsonjs.Value{block("", "prompt", 15)}},
 		{event: "SessionStart", blocks: []jsonjs.Value{block("", "session-start", 8)}},
+		{event: "SubagentStart", blocks: []jsonjs.Value{block("", "subagent-start", 8)}},
 		{event: "Stop", blocks: []jsonjs.Value{block("", "stop", 8)}},
 		{event: "SubagentStop", blocks: []jsonjs.Value{block("", "stop", 8)}},
 	}

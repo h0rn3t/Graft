@@ -10,6 +10,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/hosts"
 	"github.com/h0rn3t/Graft/internal/savings"
 )
 
@@ -55,6 +56,22 @@ func hookStaleBanner(freshness *hookFreshness) string {
 		return ""
 	}
 	return fmt.Sprintf("⚠ graft's index may be ahead of your working tree: %d of %d indexed files are not on disk (branch switch or uncommitted move?). If graft names a path that isn't there, don't chase it — `graft grep` the symbol to find where it lives now; run `graft build` to refresh.", freshness.Missing, freshness.Total)
+}
+
+// hookOrientation is the note a session or subagent starts with, or "" when
+// the repo has no graph.
+func hookOrientation(root string) string {
+	index, err := os.ReadFile(filepath.Join(hookContextDir(root), "INDEX.md"))
+	if err != nil {
+		return ""
+	}
+	staleNote := hookStaleBanner(hookIndexFreshness(root))
+	// Claude Code shows the MCP server's own instructions, which carry the
+	// tool guide; the CLI guide and repo map would repeat it on every turn.
+	if os.Getenv("CLAUDE_PROJECT_DIR") != "" && hosts.ClaudeMCPWired(root, hookHomeDir()) {
+		return formatHookMCPOrientation(staleNote)
+	}
+	return formatHookOrientation(string(index), 1500, staleNote)
 }
 
 // formatHookMCPOrientation is the session-start note for a host that already
