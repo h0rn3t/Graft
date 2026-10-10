@@ -78,7 +78,8 @@ type UnresolvedCalls struct {
 	// NameNotInGraph is `f()` or `pkg.f()` with no definition of f in the graph:
 	// a builtin, or a library the repository does not contain.
 	NameNotInGraph int `json:"nameNotInGraph"`
-	// ExternalPackage is a Go `pkg.f()` call into a package outside the repository.
+	// ExternalPackage is a Go `pkg.f()` call into a package outside the
+	// repository, or `x.f()` on a value of a type such a package declares.
 	ExternalPackage int `json:"externalPackage"`
 }
 

@@ -177,19 +177,26 @@ func TestMCPFindAllInlinesNarrowBodiesContract(t *testing.T) {
 	files := fillFixtureFiles()
 	// Settle calls Reconcile, which ranks it first; together their bodies
 	// pass the budget, each alone fits.
-	var reconcile, settle strings.Builder
+	var reconcile, settle, fees strings.Builder
 	reconcile.WriteString("package billing\n\nfunc Reconcile(n int) int {\n\tn += auditMark // reconcile\n")
-	for i := range 120 {
+	for i := range 150 {
 		fmt.Fprintf(&reconcile, "\tn += %d // reconcile row %d of the ledger table\n", i, i)
 	}
 	reconcile.WriteString("\treturn n // reconcile end\n}\n")
 	settle.WriteString("package billing\n\nconst auditMark = 1\n\nfunc Settle(n int) int {\n\tn = Reconcile(n) + auditMark // settle\n")
 	for i := range 60 {
-		fmt.Fprintf(&settle, "\tn -= %d // settle row %d\n", i, i)
+		fmt.Fprintf(&settle, "\tn -= %d // settle row %d of the ledger table\n", i, i)
 	}
 	settle.WriteString("\treturn n // settle end\n}\n")
+	// Five short definitions use feeRate in a file too long to show whole.
+	fees.WriteString("package fees\n\nconst feeRate = 2\n")
+	for _, name := range []string{"Card", "Wire", "Cash", "Check", "Crypto"} {
+		fmt.Fprintf(&fees, "\nfunc %[1]s(n int) int {\n\tn *= feeRate\n\treturn n // %[1]s fee end\n}\n", name)
+	}
+	fees.WriteString("\nfunc feesPadding(n int) int {\n" + strings.Repeat("\tn++\n", 240) + "\treturn n\n}\n")
 	files["billing/reconcile.go"] = reconcile.String()
 	files["billing/settle.go"] = settle.String()
+	files["fees/fees.go"] = fees.String()
 	root, dir := buildFillFixture(t, files)
 	for _, tc := range []struct {
 		name   string
@@ -208,16 +215,21 @@ func TestMCPFindAllInlinesNarrowBodiesContract(t *testing.T) {
 			want: []string{"Start · function · flow/flow.go:L4-L7 · 0 in-edges · L4, L5", "L1: package flow", "whole file flow/flow.go", "▸ L4: func Start(input string) string {"},
 		},
 		{
-			name:   "of two definitions that fit only apart, the shorter comes whole",
-			args:   map[string]any{"pattern": `auditMark //`},
-			want:   []string{"return n // settle end", "  L4: n += auditMark // reconcile"},
-			reject: []string{"return n // reconcile end"},
+			name: "five definitions in a long file come whole",
+			args: map[string]any{"pattern": `\*= feeRate`},
+			want: []string{"return n // Card fee end", "return n // Wire fee end", "return n // Cash fee end", "return n // Check fee end", "return n // Crypto fee end"},
 		},
 		{
-			name:   "a definition larger than the budget keeps its hit lines",
+			name:   "of two definitions that fit only apart, the most called comes whole and the other shows a window",
+			args:   map[string]any{"pattern": `auditMark //`},
+			want:   []string{"return n // reconcile end", "▸ L6: \tn = Reconcile(n) + auditMark // settle", "  ⋮ L"},
+			reject: []string{"return n // settle end"},
+		},
+		{
+			name:   "a definition larger than the budget shows its first line and a window around its hit",
 			args:   map[string]any{"pattern": "entry 599"},
-			want:   []string{"  L605: sum += entries[599] // entry 599"},
-			reject: []string{"▸", "L5: "},
+			want:   []string{"  L4: func Ledger(entries []int) int {", "  ⋮ L5-L", "▸ L605: \tsum += entries[599] // entry 599", "  L607: }"},
+			reject: []string{"L6: \tsum += entries[0] "},
 		},
 		{
 			name:   "a wide search keeps hit lines only",
@@ -231,8 +243,8 @@ func TestMCPFindAllInlinesNarrowBodiesContract(t *testing.T) {
 			if got.isError || !containsAll(got.text, tc.want) || containsAny(got.text, tc.reject) {
 				t.Errorf("mcpCall(graft_find_all, %v) = (%q, isError %t), want text containing %q and none of %q", tc.args, got.text, got.isError, tc.want, tc.reject)
 			}
-			if len(got.text) > mcpGrepBudget+500 {
-				t.Errorf("mcpCall(graft_find_all, %v) = %d bytes, want at most about %d", tc.args, len(got.text), mcpGrepBudget)
+			if len(got.text) > mcpGrepSourceBudget+500 {
+				t.Errorf("mcpCall(graft_find_all, %v) = %d bytes, want at most about %d", tc.args, len(got.text), mcpGrepSourceBudget)
 			}
 		})
 	}

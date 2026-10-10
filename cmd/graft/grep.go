@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -154,13 +155,13 @@ func formatGrepResult(result graph.GrepResult) string {
 
 // inlineGrepSource renders a narrow search with the source around its hits,
 // or returns "" when that adds nothing within budget bytes. Hits that all lie
-// in one small file show that file once, whole, after one line per group;
-// otherwise, when at most three definitions hold the hits, each comes whole,
-// shortest first, while the answer fits: a long one taken first would crowd
-// out the rest, which the agent then reads in another round. Matching lines
-// are marked ▸.
+// in one small file show that file once, whole, after one line per group.
+// Otherwise, when at most six definitions hold the hits, each first shows the
+// lines around them, then the definitions with the most hits, the most called
+// first, grow to their whole source or the widest window that still fits: an
+// agent reads next what a search names but leaves out. Matching lines are
+// marked ▸, and ⋮ stands for the lines a window skips.
 func inlineGrepSource(root string, result graph.GrepResult, budget int) string {
-	const maxDefinitions = 3
 	if len(result.Groups) == 0 {
 		return ""
 	}
@@ -175,7 +176,9 @@ func inlineGrepSource(root string, result graph.GrepResult, budget int) string {
 		}
 		return strings.Split(strings.TrimSuffix(data, "\n"), "\n")
 	}
-	marked := func(lines []string, from, to int, groups ...graph.GrepGroup) string {
+	// marked renders the lines of spans, sorted and disjoint and ending by
+	// line end, marking matches and the lines the spans skip.
+	marked := func(lines []string, spans [][2]int, end int, groups ...graph.GrepGroup) string {
 		matches := make(map[int]bool)
 		for _, group := range groups {
 			for _, hit := range group.Hits {
@@ -183,12 +186,20 @@ func inlineGrepSource(root string, result graph.GrepResult, budget int) string {
 			}
 		}
 		var out strings.Builder
-		for number := from; number <= min(to, len(lines)); number++ {
-			mark := "  "
-			if matches[number] {
-				mark = "▸ "
+		for index, span := range spans {
+			if index > 0 && span[0] > spans[index-1][1]+1 {
+				fmt.Fprintf(&out, "\n  ⋮ L%d-L%d", spans[index-1][1]+1, span[0]-1)
 			}
-			fmt.Fprintf(&out, "\n%sL%d: %s", mark, number, lines[number-1])
+			for number := span[0]; number <= min(span[1], len(lines)); number++ {
+				mark := "  "
+				if matches[number] {
+					mark = "▸ "
+				}
+				fmt.Fprintf(&out, "\n%sL%d: %s", mark, number, lines[number-1])
+			}
+		}
+		if last := spans[len(spans)-1][1]; last < end {
+			fmt.Fprintf(&out, "\n  ⋮ L%d-L%d", last+1, end)
 		}
 		return out.String()
 	}
@@ -205,26 +216,57 @@ func inlineGrepSource(root string, result graph.GrepResult, budget int) string {
 				}
 				fmt.Fprintf(&text, "%s · %s\n", grepGroupHeader(group), strings.Join(at, ", "))
 			}
-			fmt.Fprintf(&text, "\nwhole file %s · %d lines · matches marked ▸%s\n", path, len(lines), marked(lines, 1, len(lines), result.Groups...))
+			fmt.Fprintf(&text, "\nwhole file %s · %d lines · matches marked ▸%s\n", path, len(lines), marked(lines, [][2]int{{1, len(lines)}}, len(lines), result.Groups...))
 			if text.Len() <= budget {
 				return text.String()
 			}
 		}
 	}
-	type definition struct{ group, from, to int }
-	var definitions []definition
+	type definition struct {
+		group, from, to int
+		lines           []string
+		// radius is the window around each hit shown, 0 for none and
+		// wholeRadius for the whole definition.
+		radius int
+	}
+	const (
+		maxDefinitions = 6
+		wholeRadius    = math.MaxInt
+	)
+	var definitions []*definition
 	for i, group := range result.Groups {
 		if group.Symbol == nil {
 			continue
 		}
 		if _, from, to, ok := parseAskPointer(group.Symbol.Path + ":" + group.Symbol.Span); ok {
-			definitions = append(definitions, definition{group: i, from: from, to: to})
+			if lines := read(group.Symbol.Path); lines != nil {
+				definitions = append(definitions, &definition{group: i, from: from, to: to, lines: lines})
+			}
 		}
 	}
 	if len(definitions) == 0 || len(definitions) > maxDefinitions {
 		return ""
 	}
-	slices.SortStableFunc(definitions, func(a, b definition) int { return cmp.Compare(a.to-a.from, b.to-b.from) })
+	slices.SortStableFunc(definitions, func(a, b *definition) int {
+		return cmp.Compare(len(result.Groups[b.group].Hits), len(result.Groups[a.group].Hits))
+	})
+	// spans is the definition's first line and the window of radius around
+	// each hit, merged; a window reaching both ends is the whole definition.
+	spans := func(definition *definition, radius int) [][2]int {
+		if definition.to-definition.from <= radius {
+			return [][2]int{{definition.from, definition.to}}
+		}
+		spans := [][2]int{{definition.from, definition.from}}
+		for _, hit := range result.Groups[definition.group].Hits {
+			from, to := max(definition.from, hit.Line-radius), min(definition.to, hit.Line+radius)
+			if last := &spans[len(spans)-1]; from <= last[1]+1 {
+				last[1] = max(last[1], to)
+			} else {
+				spans = append(spans, [2]int{from, to})
+			}
+		}
+		return spans
+	}
 	sections := make([]string, len(result.Groups))
 	for i, group := range result.Groups {
 		var section strings.Builder
@@ -235,22 +277,29 @@ func inlineGrepSource(root string, result graph.GrepResult, budget int) string {
 		sections[i] = section.String()
 	}
 	render := func() string { return head + "\n\n" + strings.Join(sections, "\n\n") + "\n" }
-	inlined := false
-	for _, definition := range definitions {
+	// grow shows the widest of radii that fits, wider than what it shows.
+	grow := func(definition *definition, radii ...int) {
 		group := result.Groups[definition.group]
-		lines := read(group.Symbol.Path)
-		if lines == nil {
-			continue
+		for _, radius := range radii {
+			if radius <= definition.radius {
+				return
+			}
+			shown := sections[definition.group]
+			sections[definition.group] = grepGroupHeader(group) + marked(definition.lines, spans(definition, radius), definition.to, group)
+			if len(render()) <= budget {
+				definition.radius = radius
+				return
+			}
+			sections[definition.group] = shown
 		}
-		hitLines := sections[definition.group]
-		sections[definition.group] = grepGroupHeader(group) + marked(lines, definition.from, definition.to, group)
-		if len(render()) > budget {
-			sections[definition.group] = hitLines
-			continue
-		}
-		inlined = true
 	}
-	if !inlined {
+	for _, definition := range definitions {
+		grow(definition, 8)
+	}
+	for _, definition := range definitions {
+		grow(definition, wholeRadius, 40, 20)
+	}
+	if !slices.ContainsFunc(definitions, func(definition *definition) bool { return definition.radius > 0 }) {
 		return ""
 	}
 	return render()

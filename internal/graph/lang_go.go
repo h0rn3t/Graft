@@ -2,8 +2,10 @@ package graph
 
 import (
 	"cmp"
+	"maps"
 	"path"
 	"regexp"
+	"slices"
 	"strings"
 	"unicode"
 
@@ -144,6 +146,220 @@ func (x *extractor) goEmbeds(spec *sitter.Node, id string, ctx walkCtx) []rawEdg
 	return edges
 }
 
+// goValuePosition reports whether an identifier or selector stands where Go
+// takes a value — a call argument, the right side of =, := or var, a returned
+// value, a composite literal's element — and so may name a function as a
+// value. A keyed element's key is a field name.
+func goValuePosition(node *sitter.Node) bool {
+	if node.Kind() != "identifier" && node.Kind() != "selector_expression" {
+		return false
+	}
+	parent := node.Parent()
+	if parent == nil {
+		return false
+	}
+	switch parent.Kind() {
+	case "argument_list":
+		return true
+	case "literal_element":
+		keyed := parent.Parent()
+		return keyed == nil || keyed.Kind() != "keyed_element" || sameNode(keyed.ChildByFieldName("value"), parent)
+	case "expression_list":
+		owner := parent.Parent()
+		if owner == nil {
+			return false
+		}
+		switch owner.Kind() {
+		case "return_statement":
+			return true
+		case "assignment_statement", "short_var_declaration":
+			return sameNode(owner.ChildByFieldName("right"), parent)
+		case "var_spec":
+			return sameNode(owner.ChildByFieldName("value"), parent)
+		}
+	}
+	return false
+}
+
+// goFunctionValue is the references intent of a function or method named as
+// a value: `handle` in `register(handle)`, `s.Serve` through the type bound to
+// s, `kit.Helper` in an imported package. A bare name a parameter or local
+// declares is a variable, and a selector on a value of unknown type names
+// nothing to resolve.
+func (x *extractor) goFunctionValue(node *sitter.Node, ctx walkCtx) (rawEdge, bool) {
+	edge := rawEdge{source: ctx.parentID, relation: "references", file: ctx.rel}
+	if node.Kind() == "identifier" {
+		edge.name = x.text(node)
+		_, local := ctx.goLocals[edge.name]
+		return edge, !local
+	}
+	operand, field := node.ChildByFieldName("operand"), node.ChildByFieldName("field")
+	if operand == nil || field == nil {
+		return rawEdge{}, false
+	}
+	edge.name, edge.viaMember = x.text(field), true
+	x.goTypeOperand(&edge, operand, ctx)
+	if _, local := ctx.goLocals[x.text(operand)]; edge.recvType == "" && operand.Kind() == "identifier" && !local {
+		edge.specifier = x.goPackages[x.text(operand)]
+	}
+	return edge, edge.recvType != "" || edge.specifier != ""
+}
+
+// goTypeOperand types the operand a Go selector selects from: a variable
+// bound to a type or the method's receiver, a type assertion `x.(T)`, or a
+// chain of fields on either, `s.store` in `s.store.Get()`. A type qualified
+// by a name the file does not import, like an operand of unknown type, types
+// nothing.
+func (x *extractor) goTypeOperand(edge *rawEdge, operand *sitter.Node, ctx walkCtx) {
+	var fields []string
+	for operand != nil && operand.Kind() == "selector_expression" {
+		fields = append(fields, x.text(operand.ChildByFieldName("field")))
+		operand = operand.ChildByFieldName("operand")
+	}
+	var typeName string
+	switch {
+	case operand == nil:
+	case operand.Kind() == "identifier":
+		typeName = x.bindings.resolveRecvType(x.text(operand), ctx)
+	case operand.Kind() == "type_assertion_expression":
+		typeName = goTypeName(operand.ChildByFieldName("type"), x.source)
+	}
+	if name, pkg, ok := x.goQualifiedType(typeName); ok {
+		slices.Reverse(fields)
+		edge.recvType, edge.recvPackage, edge.recvFields = name, pkg, fields
+	}
+}
+
+// goFields is the field intent of each struct field of a named type: `client`
+// of type `*kit.Client`, and an embedded `kit.Base` under its type's name, as
+// Go names it.
+func (x *extractor) goFields(spec *sitter.Node, id string, ctx walkCtx) []rawEdge {
+	shape := spec.ChildByFieldName("type")
+	if shape == nil || shape.Kind() != "struct_type" {
+		return nil
+	}
+	var edges []rawEdge
+	for _, field := range namedChildrenOfKind(namedChildOfKind(shape, "field_declaration_list"), "field_declaration") {
+		name, pkg, ok := x.goQualifiedType(goTypeName(field.ChildByFieldName("type"), x.source))
+		if !ok {
+			continue
+		}
+		edge := rawEdge{source: id, relation: "field", name: name, recvType: name, recvPackage: pkg, file: ctx.rel}
+		names := namedChildrenOfKind(field, "field_identifier")
+		if len(names) == 0 {
+			edges = append(edges, edge)
+		}
+		for _, fieldName := range names {
+			edge.name = x.text(fieldName)
+			edges = append(edges, edge)
+		}
+	}
+	return edges
+}
+
+// goQualifiedType splits a type name as written into its name and the import
+// path of the package declaring it, empty for the file's own package. It
+// fails for no name, and for a qualifier the file does not import.
+func (x *extractor) goQualifiedType(typeName string) (name, pkg string, ok bool) {
+	qualifier, name, qualified := strings.Cut(typeName, ".")
+	if !qualified {
+		return typeName, "", typeName != ""
+	}
+	pkg = x.goPackages[qualifier]
+	return name, pkg, pkg != ""
+}
+
+// goLocalNames lists the names a Go definition declares inside itself, added
+// to the enclosing definition's: a function's receiver, parameters, results
+// and locals, its closures' included, and the type parameters of a generic
+// function, type or receiver. Such a name is a variable or a type parameter,
+// not the package function or type of that name.
+func (x *extractor) goLocalNames(definition *sitter.Node, enclosing map[string]struct{}) map[string]struct{} {
+	names := maps.Clone(enclosing)
+	if names == nil {
+		names = make(map[string]struct{})
+	}
+	var visit func(*sitter.Node)
+	visit = func(node *sitter.Node) {
+		var declared []*sitter.Node
+		switch node.Kind() {
+		case "parameter_declaration", "variadic_parameter_declaration", "var_spec", "const_spec", "type_parameter_declaration":
+			declared = namedChildrenOfKind(node, "identifier")
+		case "short_var_declaration", "range_clause", "receive_statement":
+			declared = namedChildren(node.ChildByFieldName("left"))
+		case "type_switch_statement":
+			declared = namedChildren(node.ChildByFieldName("alias"))
+		case "type_arguments":
+			// Inside a receiver, `List[T]` declares T.
+			if parameter := goReceiverParameter(definition); parameter != nil && parameter.StartByte() <= node.StartByte() && node.EndByte() <= parameter.EndByte() {
+				for _, element := range namedChildren(node) {
+					declared = append(declared, namedChildrenOfKind(element, "type_identifier")...)
+				}
+			}
+		}
+		for _, name := range declared {
+			if name.Kind() == "identifier" || name.Kind() == "type_identifier" {
+				names[x.text(name)] = struct{}{}
+			}
+		}
+		for _, child := range namedChildren(node) {
+			visit(child)
+		}
+	}
+	visit(definition)
+	return names
+}
+
+// goPredeclaredTypes never name a type of the repository.
+var goPredeclaredTypes = map[string]bool{
+	"any": true, "bool": true, "byte": true, "comparable": true, "complex64": true, "complex128": true,
+	"error": true, "float32": true, "float64": true, "int": true, "int8": true, "int16": true,
+	"int32": true, "int64": true, "rune": true, "string": true, "uint": true, "uint8": true,
+	"uint16": true, "uint32": true, "uint64": true, "uintptr": true,
+}
+
+// goTypeUse reports whether a type name or qualified type uses that type: a
+// parameter, result, field, var, composite literal, assertion or underlying
+// type does. A declaration's own name does not, nor the name part of a
+// qualified type, which counts as the whole, nor an embedded field or
+// interface, which is extends.
+func goTypeUse(node *sitter.Node) bool {
+	parent := node.Parent()
+	if parent == nil || isDeclarationName(node) || parent.Kind() == "qualified_type" {
+		return false
+	}
+	for child := node; parent.Kind() == "pointer_type" || (parent.Kind() == "generic_type" && sameNode(parent.ChildByFieldName("type"), child)); {
+		child, parent = parent, parent.Parent()
+		if parent == nil {
+			return false
+		}
+	}
+	switch parent.Kind() {
+	case "field_declaration":
+		return parent.ChildByFieldName("name") != nil
+	case "type_elem":
+		grandparent := parent.Parent()
+		return grandparent == nil || grandparent.Kind() != "interface_type"
+	}
+	return true
+}
+
+// goTypeReference is the references intent of a type use: `Item` to the type
+// of that name in the user's package, `kit.Config` through the file's imports.
+// A predeclared type, a type parameter and a qualifier that is no import name
+// nothing to resolve.
+func (x *extractor) goTypeReference(node *sitter.Node, ctx walkCtx) (rawEdge, bool) {
+	edge := rawEdge{source: ctx.parentID, relation: "references", file: ctx.rel, kinds: goTypeKinds}
+	if node.Kind() == "qualified_type" {
+		edge.name = x.text(node.ChildByFieldName("name"))
+		edge.specifier = x.goPackages[x.text(node.ChildByFieldName("package"))]
+		return edge, edge.name != "" && edge.specifier != ""
+	}
+	edge.name = x.text(node)
+	_, local := ctx.goLocals[edge.name]
+	return edge, !local && !goPredeclaredTypes[edge.name]
+}
+
 // goReceiverVar is the receiver parameter's name: `w` in `func (w *Worker)`.
 func goReceiverVar(node *sitter.Node, source []byte) string {
 	if parameter := goReceiverParameter(node); parameter != nil {
@@ -190,8 +406,8 @@ func (w *bindingWalk) goDefName(node *sitter.Node) (string, bool) {
 	return "", false
 }
 
-// goTypeName is a declared type's bare name, unwrapping a pointer, type
-// arguments and a package qualifier: `Store` in `*store.Store[K]`.
+// goTypeName is a type's name as written, unwrapping a pointer and type
+// arguments: `store.Store` in `*store.Store[K]`.
 func goTypeName(node *sitter.Node, source []byte) string {
 	if node != nil && node.Kind() == "pointer_type" {
 		node = lastNamedChild(node)
@@ -202,7 +418,7 @@ func goTypeName(node *sitter.Node, source []byte) string {
 	case node.Kind() == "type_identifier":
 		return nodeText(node, source)
 	case node.Kind() == "qualified_type":
-		return nodeText(node.ChildByFieldName("name"), source)
+		return nodeText(node.ChildByFieldName("package"), source) + "." + nodeText(node.ChildByFieldName("name"), source)
 	}
 	return ""
 }
@@ -272,6 +488,11 @@ func (w *bindingWalk) handleGo(node *sitter.Node, scope []string) {
 			if name.Kind() != "identifier" || index >= len(expressions) {
 				continue
 			}
+			// `t, ok := t.(T)` retypes t in its block only, and a binding
+			// holds for the whole function.
+			if assertion := expressions[index]; assertion.Kind() == "type_assertion_expression" && w.text(assertion.ChildByFieldName("operand")) == w.text(name) {
+				continue
+			}
 			if typeName := w.goExpressionType(expressions[index]); typeName != "" {
 				w.bindings.set(scopePath, w.text(name), typeName)
 			}
@@ -279,8 +500,8 @@ func (w *bindingWalk) handleGo(node *sitter.Node, scope []string) {
 	}
 }
 
-// goExpressionType reads a composite literal's type, or X from a NewX(...) or
-// pkg.NewX(...) call.
+// goExpressionType reads the type of a composite literal or a type assertion,
+// X from a NewX(...) call, or pkg.X from a pkg.NewX(...) call.
 func (w *bindingWalk) goExpressionType(expression *sitter.Node) string {
 	if expression.Kind() == "unary_expression" {
 		for _, child := range namedChildren(expression) {
@@ -291,15 +512,20 @@ func (w *bindingWalk) goExpressionType(expression *sitter.Node) string {
 		}
 	}
 	switch expression.Kind() {
-	case "composite_literal":
+	case "composite_literal", "type_assertion_expression":
 		return goTypeName(expression.ChildByFieldName("type"), w.source)
 	case "call_expression":
 		function := expression.ChildByFieldName("function")
+		qualifier := ""
 		if function != nil && function.Kind() == "selector_expression" {
-			function = function.ChildByFieldName("field")
+			operand := function.ChildByFieldName("operand")
+			if operand == nil || operand.Kind() != "identifier" {
+				return ""
+			}
+			qualifier, function = w.text(operand)+".", function.ChildByFieldName("field")
 		}
 		if function != nil && goConstructorName.MatchString(w.text(function)) {
-			return w.text(function)[len("New"):]
+			return qualifier + w.text(function)[len("New"):]
 		}
 	}
 	return ""

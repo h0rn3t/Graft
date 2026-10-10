@@ -82,6 +82,10 @@ type resolveIndex struct {
 	rustCrateRoots    []string
 	classParents      map[string][]string
 	goModules         []goModule
+	// goEmbeds holds the extends intents of each Go type by the type's ID,
+	// and goFields its field intents by the type's ID and the field's name.
+	goEmbeds map[string][]rawEdge
+	goFields map[string]rawEdge
 	// sqlTypesBySegment holds the SQL type definitions with a dotted name,
 	// keyed by its last segment: `users` finds `app.users`.
 	sqlTypesBySegment map[string][]NodeV1
@@ -98,6 +102,7 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) ([]E
 		goFilesByDir: make(map[string][]string), javaFilesBySuffix: make(map[string][]string),
 		cFilesBySuffix: make(map[string][]string), classParents: make(map[string][]string),
 		goModules: goModules, sqlTypesBySegment: make(map[string][]NodeV1), family: make(map[string]string),
+		goEmbeds: make(map[string][]rawEdge), goFields: make(map[string]rawEdge),
 	}
 	pushSuffixes := func(index map[string][]string, node NodeV1) {
 		parts := strings.Split(node.Path, "/")
@@ -157,12 +162,13 @@ func resolveEdges(nodes []NodeV1, rawEdges []rawEdge, goModules []goModule) ([]E
 		if !ok || source.Name == "" {
 			continue
 		}
-		if edge.relation == "extends" {
-			parent := edge.name
-			if strings.HasSuffix(edge.file, ".go") { // methods are owned by `Type`, never `pkg.Type`
-				parent = parent[strings.LastIndexByte(parent, '.')+1:]
-			}
-			ix.classParents[source.Name] = append(ix.classParents[source.Name], parent)
+		switch {
+		case strings.HasSuffix(edge.file, ".go") && edge.relation == "extends":
+			ix.goEmbeds[edge.source] = append(ix.goEmbeds[edge.source], edge)
+		case strings.HasSuffix(edge.file, ".go") && edge.relation == "field":
+			ix.goFields[edge.source+"\x00"+edge.name] = edge
+		case edge.relation == "extends":
+			ix.classParents[source.Name] = append(ix.classParents[source.Name], edge.name)
 		}
 	}
 
@@ -221,6 +227,8 @@ func (ix *resolveIndex) resolveImportTarget(edge rawEdge) string {
 func (ix *resolveIndex) resolveReference(edge rawEdge, add func(string, string, Relation, Confidence)) {
 	source := ix.byID[edge.source]
 	switch {
+	case strings.HasSuffix(edge.file, ".go"):
+		ix.resolveGoReference(edge, add)
 	case edge.specifier != "":
 		target := ix.resolveImport(edge.specifier, edge.file)
 		if _, ok := ix.byID[target]; !ok {
@@ -271,7 +279,16 @@ func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relat
 			ix.unresolved.ReceiverUnknown++
 			return
 		}
-		hit := ix.resolveTypedMember(edge.recvType, edge.name, edge.file, edge.argCount)
+		var hit resolved
+		if strings.HasSuffix(edge.file, ".go") {
+			var external bool
+			if hit, external = ix.resolveGoMember(edge); external {
+				ix.unresolved.ExternalPackage++
+				return
+			}
+		} else {
+			hit = ix.resolveTypedMember(edge.recvType, edge.name, edge.file, edge.argCount)
+		}
 		if hit.ambiguous {
 			ix.unresolved.MemberAmbiguous++
 			return
@@ -297,6 +314,13 @@ func (ix *resolveIndex) resolveCall(edge rawEdge, add func(string, string, Relat
 		}
 	}
 	hit, ok := ix.resolveName(edge.name, edge.file, kinds)
+	if !ok && !hit.ambiguous && strings.HasSuffix(edge.file, ".go") {
+		// A Go conversion `T(x)` uses the type T; it calls nothing.
+		if conversion, found := ix.resolveName(edge.name, edge.file, goTypeKinds); found {
+			add(edge.source, conversion.id, "references", "inferred")
+			return
+		}
+	}
 	if !ok && pyExtension.MatchString(edge.file) {
 		if class, found := ix.resolveName(edge.name, edge.file, []Kind{"class"}); found || class.ambiguous {
 			hit, ok = class, found
@@ -398,12 +422,6 @@ func (ix *resolveIndex) resolveTypedMember(recvType, name, file string, argCount
 				}
 				if index := slices.IndexFunc(candidates, func(c NodeV1) bool { return c.Path == file }); index >= 0 {
 					return resolved{id: candidates[index].ID, confidence: "extracted"}
-				}
-				// Go: one copy of the method in the caller's own package wins.
-				if local := slices.DeleteFunc(slices.Clone(candidates), func(c NodeV1) bool {
-					return !strings.HasSuffix(file, ".go") || path.Dir(c.Path) != path.Dir(file)
-				}); len(local) == 1 {
-					return resolved{id: local[0].ID, confidence: "inferred"}
 				}
 				return resolved{ambiguous: true}
 			}

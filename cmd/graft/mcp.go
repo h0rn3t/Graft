@@ -3,14 +3,17 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -514,6 +517,12 @@ func (c *mcpConnection) writeValue(value any) error {
 // more than one narrower follow-up; grepRemainderNote says where that tail is.
 const mcpGrepBudget = 8_000
 
+// mcpGrepSourceBudget caps a narrow graft_find_all answer that shows the
+// source around its hits. Two definitions an agent reads together, such as a
+// 149-line function and the 57-line one it calls, fit in it where they do not
+// in mcpGrepBudget, and the agent's next round would read the one left out.
+const mcpGrepSourceBudget = 10_000
+
 type mcpResult struct {
 	text string
 	// isError marks a malformed request or a fault. An expected miss — no
@@ -708,7 +717,11 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		}
 		fitted := fitGrepResult(result, mcpGrepBudget)
 		text := scopeNote + formatGrepResult(fitted)
-		if inlined := inlineGrepSource(root, fitted, mcpGrepBudget); inlined != "" {
+		budget := mcpGrepSourceBudget
+		if fitted.Truncated.Hits > 0 {
+			budget = mcpGrepBudget // hits past the cap make no narrow search
+		}
+		if inlined := inlineGrepSource(root, fitted, budget); inlined != "" {
 			text = scopeNote + inlined
 		}
 		if note := grepRemainderNote(result, fitted); note != "" {
@@ -772,6 +785,16 @@ func mcpTraceCalls(root, contextDir, symbol string, args map[string]any, cache *
 	if len(matches) == 0 {
 		return mcpResult{text: "no symbol \"" + symbol + "\" in the graph — check spelling or run `graft build`" + similarSymbols(symbol, *loaded)}
 	}
+	// Production first, definitions and edges alike, and only as many edges
+	// as mcpGrepBudget holds: a type most of the code takes has hundreds of
+	// users, past what a host shows inline. The rest are counted per file.
+	copied := func(node *graph.NodeV1) int {
+		if node != nil && (node.Generated || graph.IsCopyPath(node.Path)) {
+			return 1
+		}
+		return 0
+	}
+	slices.SortStableFunc(matches, func(a, b graph.NodeV1) int { return cmp.Compare(copied(&a), copied(&b)) })
 	depth := mcpDepthValue(args["depth"])
 	results := make([]callersResult, len(matches))
 	for index, match := range matches {
@@ -779,31 +802,56 @@ func mcpTraceCalls(root, contextDir, symbol string, args map[string]any, cache *
 	}
 
 	var body strings.Builder
+	dropped := make(map[string]int)
 	for _, result := range results {
 		fmt.Fprintf(&body, "%s · %s · %s:%s\n", result.symbol.Name, result.symbol.Kind, result.symbol.Path, result.symbol.Span)
 		if len(result.hits) == 0 {
 			body.WriteString(looseNote(direction, result.symbol.Name, len(results)))
 			body.WriteByte('\n')
-		} else {
-			for _, hit := range result.hits {
-				arrow := "←"
-				if direction == graph.DirectionOut {
-					arrow = "→"
-				}
-				label := fmt.Sprintf("%s (unresolved import)", hit.ID)
-				if hit.Node != nil {
-					label = fmt.Sprintf("%s (%s:%s)", hit.Node.Name, hit.Node.Path, hit.Node.Span)
-				}
-				depthLabel := ""
-				if depth > 1 {
-					depthLabel = fmt.Sprintf(" [depth %d]", hit.Depth)
-				}
-				fmt.Fprintf(&body, "  %s %s %s%s\n", hit.Relation, arrow, label, depthLabel)
+		}
+		hits := slices.Clone(result.hits)
+		slices.SortStableFunc(hits, func(a, b graph.EdgeHit) int { return cmp.Compare(copied(a.Node), copied(b.Node)) })
+		for _, hit := range hits {
+			arrow := "←"
+			if direction == graph.DirectionOut {
+				arrow = "→"
 			}
+			label, path := fmt.Sprintf("%s (unresolved import)", hit.ID), hit.ID
+			if hit.Node != nil {
+				label, path = fmt.Sprintf("%s (%s:%s)", hit.Node.Name, hit.Node.Path, hit.Node.Span), hit.Node.Path
+			}
+			depthLabel := ""
+			if depth > 1 {
+				depthLabel = fmt.Sprintf(" [depth %d]", hit.Depth)
+			}
+			line := fmt.Sprintf("  %s %s %s%s\n", hit.Relation, arrow, label, depthLabel)
+			if body.Len()+len(line) > mcpGrepBudget {
+				dropped[path]++
+				continue
+			}
+			body.WriteString(line)
 		}
 		body.WriteByte('\n')
 	}
 	text := strings.TrimRight(body.String(), "\n")
+	if len(dropped) > 0 {
+		const shown = 8
+		total := 0
+		for _, count := range dropped {
+			total += count
+		}
+		paths := slices.SortedFunc(maps.Keys(dropped), func(a, b string) int {
+			return cmp.Or(cmp.Compare(copied(&graph.NodeV1{Path: a}), copied(&graph.NodeV1{Path: b})), cmp.Compare(dropped[b], dropped[a]), strings.Compare(a, b))
+		})
+		parts := make([]string, 0, shown+1)
+		for _, path := range paths[:min(shown, len(paths))] {
+			parts = append(parts, fmt.Sprintf("%s (%d)", path, dropped[path]))
+		}
+		if len(paths) > shown {
+			parts = append(parts, fmt.Sprintf("%d more files", len(paths)-shown))
+		}
+		text += fmt.Sprintf("\n\nand %d more: %s — graft_find_all on the name lists every use", total, strings.Join(parts, ", "))
+	}
 	if saved := callersSavings(*loaded, results); saved != nil {
 		recordQuerySavings(contextDir, len(text), saved.BaselineChars)
 	}

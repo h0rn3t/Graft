@@ -98,3 +98,28 @@ func TestAskExplicitCopyScopes(t *testing.T) {
 		})
 	}
 }
+
+func TestAskTestContrastQueries(t *testing.T) {
+	for _, tt := range []struct{ query, path string }{
+		{query: "QueryCache prefer production over testdata copies", path: "cmd/graft/testdata/cache.go"},
+		{query: "QueryCache picks the non-test definition", path: "src/cache_test.go"},
+		{query: "QueryCache test duplicates", path: "tests/cache.go"},
+		{query: "QueryCache skips vendor", path: "vendor/example/cache.go"},
+		{query: "QueryCache excludes generated files", path: "generated/cache.go"},
+	} {
+		t.Run(tt.query, func(t *testing.T) {
+			t.Parallel()
+			wiring := GraphV1{Nodes: []NodeV1{
+				{ID: "copy", Name: "QueryCache", Kind: "function", Path: tt.path, Span: "L1-L3"},
+				{ID: "production", Name: "QueryCache", Kind: "function", Path: "src/cache.go", Span: "L1-L3"},
+			}}
+			result, err := Ask(wiring, tt.query, AskOptions{NoGraphRank: true})
+			if err != nil {
+				t.Fatalf("Ask(%q) error = %v, want nil", tt.query, err)
+			}
+			if len(result.Hits) == 0 || result.Hits[0].Pointer != "src/cache.go:L1-L3" {
+				t.Errorf("Ask(%q).Hits = %v, want src/cache.go:L1-L3 first: the query sets %s apart, it does not ask for it", tt.query, result.Hits, tt.path)
+			}
+		})
+	}
+}

@@ -1,5 +1,107 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Go functions used as values are referenced.** A function or method passed
+  or stored as a value — a call argument (`mux.HandleFunc(p, handle)`,
+  `slices.ContainsFunc(xs, isSpace)`), a composite literal's field or element
+  (`RunE: run`), the right side of `=`, `:=` or `var`, a returned value, a
+  method value (`t.Cleanup(srv.Close)`) or an imported package's function
+  (`kit.Helper`) — gets an inferred `references` edge from the code that names
+  it. Handlers, cobra commands and callbacks had no callers, so `callers` and
+  `blast` missed their users and `dead` listed them. A name resolves only to
+  the one function of the caller's package, a method only through the type
+  bound to its receiver, and a parameter or local of the same name hides the
+  function. On this repository, 38 edges are added, each checked against its
+  source line as a real use, and `dead --all` lists 78 functions instead of
+  90, every one dropped a function passed as a value.
+- **Go types are referenced by the code that uses them.** A parameter, result,
+  field or `var` type, a composite literal (`&Store{}`), a conversion
+  (`ID(n)`, `kit.Option(f)`), a type assertion or switch case, `new(T)` and a
+  defined type's underlying type (`type IDs []ID`) each give an inferred
+  `references` edge to the in-repo type, so `callers` and `blast` of a struct
+  or interface list its users; before, only its methods and embeddings
+  reached it. A type parameter of the same name hides the type, a method's
+  receiver is no use of its own type, an embedded field stays `extends`, and
+  predeclared and external types link nothing. On this repository, 2,641
+  edges are added (12,638 instead of 9,950 in all); a sample of 30 checked
+  against their source lines were all real uses.
+- **Go method calls resolve in the package of the receiver's type.** A
+  receiver typed `*kit.Client` binds `c.Do()` to `Client.Do` of the package
+  the file imports as `kit`, never to a `Client` another package or the
+  caller's own declares; a receiver of a standard-library or other external
+  type (`*sql.DB`, `*testing.T`, `bytes.Buffer`) links nothing and counts as
+  an external package call. A type assertion types its value, in
+  `v.(*kit.Client).Do()` and `c, ok := v.(*kit.Client)`, and a field chain
+  follows each field's declared type in its struct's package, `s.store.Get()`
+  and promoted fields of embedded types included. `t, ok := t.(T)` keeps t's
+  own type outside its block. On golang.org/x/tools, 445 ambiguous member
+  calls drop to 0 and 1,958 calls of unknown receiver gain one. Outside
+  testdata, 522 edges are added (14 sampled against their source lines were
+  all real calls) and 423 removed. In 382 of the removed, the calling file
+  names a same-named type of another package, which the old edge confused
+  with the repository's: `t.Run` landed on a testdata `T.Run`, `buf.String`
+  on an internal `Buffer.String`. Of 15 sampled from the other 41, 13 were
+  such misses and 2 were right, found through `w := pw.NewEncoder()`: a
+  `NewX` method of a variable no longer types its result. On this
+  repository, 24 call edges are added and none removed. The extractor
+  version (`go-v17`) changed: the first query after upgrading re-parses the
+  repository once.
+
+### Changed
+
+- **`graft_find_all` shows the source around hits in up to six
+  definitions.** Each definition first shows the lines near its hits, then
+  the ones with the most hits, the most called first, grow to their whole
+  source or the widest window that fits; `⋮ L60-L82` stands for skipped
+  lines. Such an answer may use 10,000 bytes, not 8,000, unless hits were cut
+  at the cap. Before, more than three definitions got no source at all, and a
+  definition too long to fit kept only its hit line, so the agent's next round
+  read it: 0.5 rounds per recorded Sonnet 5.5 session, 18.5% of its tokens,
+  only re-read what the search had named. Replaying the 1,423 recorded
+  `graft_find_code`/`graft_find_all` calls of Haiku, Sonnet and Opus sessions,
+  the symbol the agent read next is now whole in the answer 125 times of 255
+  for Sonnet (48 before), 65 of 451 for Haiku (42) and 30 of 47 for Opus (21),
+  and the line range it read is shown 20 times of 106 (4); answers grow from
+  3,187 to 4,656 characters on average for Sonnet. Ten definitions gained one
+  more for Sonnet but doubled Haiku's answers that nothing read after. In a
+  Sonnet 5.5 sweep, a question every session opened with the same
+  `graft_find_all` took one round instead of two, 29,800 tokens instead of
+  43,800, in 6 runs of 6; with Opus 5.5, 29,900 instead of 48,300. Where the
+  agent needed nothing more, the larger answer costs about 1,500 tokens a
+  session. Over eight questions, six runs each, sessions used 0.94 of the
+  tokens with Sonnet 5.5, 0.90 with Opus 5.5 and 0.98 with Haiku 5.5, whose
+  sessions seldom reached a changed answer.
+- **Ranked search keeps tests behind when a query sets them apart.**
+  `graft_find_code` and `graft ask` stop placing tests and copies after
+  production code when a query names them ("test", "testdata", "vendor"),
+  unless it also contrasts them with production code: "prefer the production
+  definition over testdata copies", "non-test", "skip", "exclude". Such a
+  query asks for the code that tells them apart, and ranked the test about it
+  first. On 88 recorded queries, the expected symbol ranks first in 38
+  instead of 25 (in 12 of 15 queries about `graft read` choosing a
+  definition, instead of 0), and recall rises from 0.411 to 0.456; two other
+  frozen graphs give 36 for 23 and 33 for 22, with recall 0.397 to 0.442 and
+  0.546 unchanged. Of 339 recorded `graft_find_code` queries, the 47 with
+  such contrast change and the rest answer byte for byte as before. Opus 5.5
+  sessions opening with such a query answered after it, 26,100 tokens and
+  one call, where they took 56,000 tokens and three calls.
+- **Ranked search ignores type uses.** `graft_find_code` and `graft ask`
+  spread relevance along calls and references, and a type most functions
+  take would tie them all together: with type uses in that walk, recall on
+  88 recorded queries fell from 0.549 to 0.535. They are left out of it, and
+  the 88 queries rank exactly as before. `graft map` hubs and the coupling
+  count in `graft_find_all` do count them, so central types such as a
+  graph's node and edge structs now appear among the hubs.
+- **`graft_trace_calls` stays within the answer budget.** A type used across
+  the code has hundreds of users, past the size Claude Code shows inline. The
+  answer lists production definitions and edges first, tests and copies
+  after, up to the 8,000 bytes `graft_find_all` also keeps to, then counts the
+  rest per file: `and 174 more: internal/graph/extract.go (5), …`.
+  `graft callers` on the command line still lists every edge.
+
 ## 0.5.0-rc.8 - 2026-10-10
 
 ### Changed

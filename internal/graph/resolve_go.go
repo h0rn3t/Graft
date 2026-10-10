@@ -14,6 +14,19 @@ var goTypeKinds = []Kind{"struct", "interface", "type"}
 // name in the embedding type's package, a qualified `pkg.Base` to the one Base
 // in an in-repo directory named pkg. Anything else stays an external target.
 func (ix *resolveIndex) resolveGoEmbed(edge rawEdge, add func(string, string, Relation, Confidence)) {
+	hits := ix.goEmbedded(edge)
+	switch {
+	case len(hits) != 1:
+		add(edge.source, edge.name, "extends", "inferred")
+	case hits[0].Path == edge.file:
+		add(edge.source, hits[0].ID, "extends", "extracted")
+	default:
+		add(edge.source, hits[0].ID, "extends", "inferred")
+	}
+}
+
+// goEmbedded lists the in-repo types an embedding intent can name.
+func (ix *resolveIndex) goEmbedded(edge rawEdge) []NodeV1 {
 	pkg, name, qualified := strings.Cut(edge.name, ".")
 	if !qualified {
 		pkg, name = "", edge.name
@@ -28,42 +41,167 @@ func (ix *resolveIndex) resolveGoEmbed(edge rawEdge, add func(string, string, Re
 			hits = append(hits, candidate)
 		}
 	}
-	switch {
-	case len(hits) != 1:
-		add(edge.source, edge.name, "extends", "inferred")
-	case hits[0].Path == edge.file:
-		add(edge.source, hits[0].ID, "extends", "extracted")
-	default:
-		add(edge.source, hits[0].ID, "extends", "inferred")
-	}
+	return hits
 }
 
 // resolveGoPackageCall binds `pkg.F()` to the function F of the in-repo
-// package the file imports as pkg. A test file's copy of F is chosen only
-// when the call is made from a test file too.
+// package the file imports as pkg, or a conversion `pkg.T(x)` to its type.
 func (ix *resolveIndex) resolveGoPackageCall(edge rawEdge, add func(string, string, Relation, Confidence)) {
-	file := resolveGoImport(edge.specifier, ix.goModules, ix.goFilesByDir)
-	if file == edge.specifier {
+	hits, external := ix.goPackageDecls(edge.name, edge.specifier, edge.file, []Kind{"function"})
+	if external {
 		ix.unresolved.ExternalPackage++
 		return
 	}
-	dir := path.Dir(file)
-	fromTest := strings.HasSuffix(edge.file, "_test.go")
-	var hits []NodeV1
-	for _, candidate := range ix.globalName[edge.name] {
-		if candidate.Kind == "function" && path.Dir(candidate.Path) == dir && strings.HasSuffix(candidate.Path, ".go") &&
-			(fromTest || !strings.HasSuffix(candidate.Path, "_test.go")) {
-			hits = append(hits, candidate)
-		}
-	}
 	switch len(hits) {
 	case 0:
+		if types, _ := ix.goPackageDecls(edge.name, edge.specifier, edge.file, goTypeKinds); len(types) == 1 {
+			add(edge.source, types[0].ID, "references", "inferred")
+			return
+		}
 		ix.unresolved.NameNotInGraph++
 	case 1:
 		add(edge.source, hits[0].ID, "calls", "inferred")
 	default:
 		ix.unresolved.NameAmbiguous++
 	}
+}
+
+// goPackageDecls lists the declarations of the given kinds named name in the
+// in-repo package specifier imports, or in file's own package for no
+// specifier, or reports the package as external. A test file's copy is listed
+// only for a use from a test file too.
+func (ix *resolveIndex) goPackageDecls(name, specifier, file string, kinds []Kind) (hits []NodeV1, external bool) {
+	dir := path.Dir(file)
+	if specifier != "" {
+		imported := resolveGoImport(specifier, ix.goModules, ix.goFilesByDir)
+		if imported == specifier {
+			return nil, true
+		}
+		dir = path.Dir(imported)
+	}
+	fromTest := strings.HasSuffix(file, "_test.go")
+	for _, candidate := range ix.globalName[name] {
+		if slices.Contains(kinds, candidate.Kind) && path.Dir(candidate.Path) == dir && strings.HasSuffix(candidate.Path, ".go") &&
+			(fromTest || !strings.HasSuffix(candidate.Path, "_test.go")) {
+			hits = append(hits, candidate)
+		}
+	}
+	return hits, false
+}
+
+// resolveGoReference binds a function or method named as a value, or a type
+// used, as an inferred reference: `kit.Helper` and `kit.Config` to that
+// package's declaration, `s.Serve` through the type bound to s, a bare name
+// to the one declaration of its package. A miss or a tie links nothing, and
+// a declaration naming itself is no reference.
+func (ix *resolveIndex) resolveGoReference(edge rawEdge, add func(string, string, Relation, Confidence)) {
+	kinds := edge.kinds
+	if kinds == nil {
+		kinds = []Kind{"function"}
+	}
+	target := ""
+	switch {
+	case edge.specifier != "":
+		if hits, _ := ix.goPackageDecls(edge.name, edge.specifier, edge.file, kinds); len(hits) == 1 {
+			target = hits[0].ID
+		}
+	case edge.viaMember:
+		hit, _ := ix.resolveGoMember(edge)
+		target = hit.id
+	default:
+		if hit, ok := ix.resolveName(edge.name, edge.file, kinds); ok {
+			target = hit.id
+		}
+	}
+	if target != "" && target != edge.source {
+		add(edge.source, target, "references", "inferred")
+	}
+}
+
+// resolveGoMember binds a Go selector to the method of its receiver's type:
+// recvType in its package, then down recvFields, each field typed in its
+// struct's package, the way Go promotes fields and methods of embedded types.
+// A receiver of a type outside the repository is external; a miss or a tie
+// links nothing.
+func (ix *resolveIndex) resolveGoMember(edge rawEdge) (hit resolved, external bool) {
+	types, external := ix.goPackageDecls(edge.recvType, edge.recvPackage, edge.file, goTypeKinds)
+	for _, field := range edge.recvFields {
+		if len(types) != 1 {
+			break
+		}
+		var fields []rawEdge
+		for _, level := range ix.goPromotion(types[0]) {
+			for _, typ := range level {
+				if record, ok := ix.goFields[typ.ID+"\x00"+field]; ok {
+					fields = append(fields, record)
+				}
+			}
+			if len(fields) > 0 {
+				break
+			}
+		}
+		if len(fields) != 1 {
+			return resolved{}, false
+		}
+		types, external = ix.goPackageDecls(fields[0].recvType, fields[0].recvPackage, fields[0].file, goTypeKinds)
+	}
+	if len(types) != 1 {
+		return resolved{}, external
+	}
+	for _, level := range ix.goPromotion(types[0]) {
+		var methods []NodeV1
+		for _, typ := range level {
+			methods = append(methods, ix.goMethods(typ, edge.name, edge.file)...)
+		}
+		switch {
+		case len(methods) == 1:
+			return memberHit(methods[0], edge.file), false
+		case len(methods) > 1:
+			if index := slices.IndexFunc(methods, func(method NodeV1) bool { return method.Path == edge.file }); index >= 0 {
+				return resolved{id: methods[index].ID, confidence: "extracted"}, false
+			}
+			return resolved{ambiguous: true}, false
+		}
+	}
+	return resolved{}, false
+}
+
+// goPromotion lists a Go type, then the types it embeds, each in its own
+// package, by embedding depth up to 3: a selector names a field or method of
+// the shallowest depth that has one.
+func (ix *resolveIndex) goPromotion(typ NodeV1) [][]NodeV1 {
+	levels := [][]NodeV1{{typ}}
+	visited := map[string]bool{typ.ID: true}
+	for depth := range 3 {
+		var next []NodeV1
+		for _, outer := range levels[depth] {
+			for _, embed := range ix.goEmbeds[outer.ID] {
+				if hits := ix.goEmbedded(embed); len(hits) == 1 && !visited[hits[0].ID] {
+					visited[hits[0].ID] = true
+					next = append(next, hits[0])
+				}
+			}
+		}
+		if len(next) == 0 {
+			break
+		}
+		levels = append(levels, next)
+	}
+	return levels
+}
+
+// goMethods lists the methods named name that typ declares in its package; a
+// test file's method is listed only for a use from a test file too.
+func (ix *resolveIndex) goMethods(typ NodeV1, name, file string) []NodeV1 {
+	fromTest := strings.HasSuffix(file, "_test.go")
+	var methods []NodeV1
+	for _, method := range ix.ownerMethod[typ.Name+"."+name] {
+		if path.Dir(method.Path) == path.Dir(typ.Path) && strings.HasSuffix(method.Path, ".go") &&
+			(fromTest || !strings.HasSuffix(method.Path, "_test.go")) {
+			methods = append(methods, method)
+		}
+	}
+	return methods
 }
 
 // addGoImplements links Go types to the in-repo interfaces they satisfy, and

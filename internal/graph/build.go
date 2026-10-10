@@ -18,7 +18,7 @@ import (
 // ExtractorID names the native extractor in its cache and fingerprint sidecars.
 // Bump it whenever extraction output or a grammar version changes, so a graph
 // built by an older extractor is never trusted as fresh.
-const ExtractorID = "go-v15"
+const ExtractorID = "go-v17"
 
 var goModuleLine = regexp.MustCompile(`(?m)^\s*module\s+(\S+)`)
 
@@ -62,6 +62,8 @@ type cachedEdge struct {
 	Name         string   `json:"name,omitempty"`
 	ViaMember    bool     `json:"viaMember,omitempty"`
 	RecvType     string   `json:"recvType,omitempty"`
+	RecvPackage  string   `json:"recvPackage,omitempty"`
+	RecvFields   []string `json:"recvFields,omitempty"`
 	Kinds        []Kind   `json:"kinds,omitempty"`
 	ArgCount     *int     `json:"argCount,omitempty"`
 	ImplicitSelf bool     `json:"implicitSelf,omitempty"`
@@ -241,7 +243,8 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 				rawEdges = append(rawEdges, rawEdge{
 					source: edge.Source, relation: edge.Relation, targetID: edge.TargetID,
 					specifier: edge.Specifier, name: edge.Name, viaMember: edge.ViaMember,
-					recvType: edge.RecvType, kinds: edge.Kinds, argCount: edge.ArgCount,
+					recvType: edge.RecvType, recvPackage: edge.RecvPackage, recvFields: edge.RecvFields,
+					kinds: edge.Kinds, argCount: edge.ArgCount,
 					implicitSelf: edge.ImplicitSelf, file: edge.File,
 				})
 			}
@@ -269,7 +272,8 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 			entry.RawEdges = append(entry.RawEdges, cachedEdge{
 				Source: edge.source, Relation: edge.relation, TargetID: edge.targetID,
 				Specifier: edge.specifier, Name: edge.name, ViaMember: edge.viaMember,
-				RecvType: edge.recvType, Kinds: edge.kinds, ArgCount: edge.argCount,
+				RecvType: edge.recvType, RecvPackage: edge.recvPackage, RecvFields: edge.recvFields,
+				Kinds: edge.kinds, ArgCount: edge.argCount,
 				ImplicitSelf: edge.implicitSelf, File: edge.file,
 			})
 		}

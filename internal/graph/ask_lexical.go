@@ -31,7 +31,11 @@ const (
 
 var (
 	askWantsTestsPattern = regexp.MustCompile(`(?i)\b(tests?|testdata|specs?|coverage|assert(?:ion)?s?|fixtures?|mocks?|generated|vendor(?:ed)?)\b`)
-	askTestPathPattern   = regexp.MustCompile(`(?i)(^|/)(tests?|__tests__|spec|testdata|fixtures?|__fixtures__|generated|__generated__|vendor)(/|$)` +
+	// askTestContrastPattern marks a query that names tests only to set them
+	// apart from production code — "prefer production over testdata copies",
+	// "skip vendor" — and so asks for the production code that does it.
+	askTestContrastPattern = regexp.MustCompile(`(?i)\b(production|prod|non-?tests?|cop(?:y|ies)|duplicates?|skip(?:s|ped|ping)?|exclud(?:e|es|ed|ing)|ignor(?:e|es|ed|ing))\b`)
+	askTestPathPattern     = regexp.MustCompile(`(?i)(^|/)(tests?|__tests__|spec|testdata|fixtures?|__fixtures__|generated|__generated__|vendor)(/|$)` +
 		`|(_test|\.(?:test|spec|gen|generated|pb))\.[a-z]+$|(^|/)(test_[^/]+|conftest)\.py$|(^|/)zz_generated[._]`)
 	askSpanStartPattern = regexp.MustCompile(`^L(\d+)-L\d+$`)
 )
@@ -363,6 +367,25 @@ func askLink(adjacency map[string][]string, source, target string) {
 	adjacency[source] = append(adjacency[source], target)
 }
 
+// askRankEdge reports whether an edge carries relevance between the symbols
+// it links: a walk relation, unless it is a Go type use. A type most
+// functions take would tie them all together and hand each its rank.
+func askRankEdge(edge EdgeV1, goTypes map[string]struct{}) bool {
+	_, typeUse := goTypes[edge.Target]
+	return isWalkRelation(edge.Relation) && (edge.Relation != "references" || !typeUse)
+}
+
+// askGoTypes are the IDs of the graph's Go type declarations.
+func askGoTypes(nodes []NodeV1) map[string]struct{} {
+	types := make(map[string]struct{})
+	for _, node := range nodes {
+		if slices.Contains(goTypeKinds, node.Kind) && strings.HasSuffix(node.Path, ".go") {
+			types[node.ID] = struct{}{}
+		}
+	}
+	return types
+}
+
 func askPrepareTopology(wiring GraphV1, keep func(string) bool) askTopology {
 	topology := askTopology{ids: make(map[string]struct{}), adjacency: make(map[string][]string)}
 	for _, node := range wiring.Nodes {
@@ -373,8 +396,9 @@ func askPrepareTopology(wiring GraphV1, keep func(string) bool) askTopology {
 	if len(topology.ids) == 0 {
 		return topology
 	}
+	goTypes := askGoTypes(wiring.Nodes)
 	for _, edge := range wiring.Edges {
-		if !isWalkRelation(edge.Relation) {
+		if !askRankEdge(edge, goTypes) {
 			continue
 		}
 		_, source := topology.ids[edge.Source]
@@ -404,8 +428,9 @@ func askPreparePartitions(wiring GraphV1, partitionOf func(string) (string, bool
 		}
 		topology.ids[node.ID] = struct{}{}
 	}
+	goTypes := askGoTypes(wiring.Nodes)
 	for _, edge := range wiring.Edges {
-		if !isWalkRelation(edge.Relation) {
+		if !askRankEdge(edge, goTypes) {
 			continue
 		}
 		partition, ok := partitionByID[edge.Source]
@@ -983,7 +1008,7 @@ func askLexical(wiring GraphV1, query string, limit float64, prefix string, opts
 	graphRank := !opts.NoGraphRank
 	compare := localeCompare()
 	q := askUniqueTerms(query)
-	wantsTests := askWantsTestsPattern.MatchString(query) || askTestPathPattern.MatchString(prefix)
+	wantsTests := (askWantsTestsPattern.MatchString(query) && !askTestContrastPattern.MatchString(query)) || askTestPathPattern.MatchString(prefix)
 	generated := make(map[string]bool)
 	for _, node := range wiring.Nodes {
 		if node.Generated {

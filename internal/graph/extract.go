@@ -74,14 +74,21 @@ var grammars = map[language]func() *sitter.Language{
 }
 
 type rawEdge struct {
-	source       string
-	relation     Relation
-	file         string
-	targetID     string
-	specifier    string
-	name         string
-	viaMember    bool
-	recvType     string
+	source    string
+	relation  Relation
+	file      string
+	targetID  string
+	specifier string
+	name      string
+	viaMember bool
+	recvType  string
+	// recvPackage is the import path of the Go package declaring recvType,
+	// empty for the file's own package; recvFields are the fields selected
+	// from the receiver before the member, `store` in `s.store.Get()`. A Go
+	// "field" intent records a struct field instead: source is the struct,
+	// name the field, recvType and recvPackage its type. It links nothing.
+	recvPackage  string
+	recvFields   []string
 	kinds        []Kind
 	argCount     *int
 	implicitSelf bool
@@ -110,6 +117,9 @@ type walkCtx struct {
 	enclosingClass string
 	goReceiverVar  string
 	imported       map[string]importBinding
+	// goLocals names what the enclosing Go function's parameters and locals
+	// declare; nil outside a function.
+	goLocals map[string]struct{}
 }
 
 type defDescriptor struct {
@@ -329,6 +339,17 @@ func (x *extractor) walk(node *sitter.Node, ctx walkCtx) {
 		if callee, ok := x.calleeName(node, ctx.lang); ok {
 			x.edges = append(x.edges, x.callEdge(node, callee, ctx))
 		}
+	case ctx.lang == langGo && goValuePosition(node):
+		if edge, ok := x.goFunctionValue(node, ctx); ok {
+			x.edges = append(x.edges, edge)
+		}
+	case ctx.lang == langGo && (node.Kind() == "type_identifier" || node.Kind() == "qualified_type") && goTypeUse(node):
+		if edge, ok := x.goTypeReference(node, ctx); ok {
+			x.edges = append(x.edges, edge)
+		}
+		return
+	case ctx.lang == langGo && node.Kind() == "parameter_list" && node.Parent() != nil && sameNode(node.Parent().ChildByFieldName("receiver"), node):
+		return // the receiver owns the method; its type is no use of it
 	case node.Kind() == "identifier" && !isDirectCallee(node, kinds) && !isDeclarationName(node):
 		if imported, ok := ctx.imported[x.text(node)]; ok {
 			x.edges = append(x.edges, rawEdge{source: ctx.parentID, relation: "references", name: imported.name, specifier: imported.specifier, file: ctx.rel})
@@ -336,6 +357,11 @@ func (x *extractor) walk(node *sitter.Node, ctx walkCtx) {
 	}
 	if ctx.lang == langJava && node.Kind() == "object_creation_expression" && x.javaAnonymousClass(node, ctx) {
 		return
+	}
+	// A closure in a package-level var is no definition, but its parameters
+	// hide package functions all the same.
+	if ctx.lang == langGo && ctx.goLocals == nil && node.Kind() == "func_literal" {
+		ctx.goLocals = x.goLocalNames(node, nil)
 	}
 	x.walkNamedChildren(namedChildren(node), ctx)
 }
@@ -345,7 +371,11 @@ func (x *extractor) callEdge(node *sitter.Node, callee callee, ctx walkCtx) rawE
 	if ctx.lang == langJava {
 		edge.argCount = javaArgCount(node)
 	}
-	edge.recvType = x.bindings.resolveRecvType(callee.receiver, ctx)
+	if ctx.lang == langGo && callee.viaMember {
+		x.goTypeOperand(&edge, node.ChildByFieldName("function").ChildByFieldName("operand"), ctx)
+	} else {
+		edge.recvType = x.bindings.resolveRecvType(callee.receiver, ctx)
+	}
 	if edge.recvType == "" && callee.receiver != "" {
 		edge.specifier = x.goPackages[callee.receiver] // `pkg.F()` names a package, not a receiver
 	}
@@ -385,6 +415,7 @@ func (x *extractor) emitDefinition(node *sitter.Node, desc *defDescriptor, ctx w
 	}
 	if ctx.lang == langGo && (desc.kind == "struct" || desc.kind == "interface") {
 		x.edges = append(x.edges, x.goEmbeds(node, id, ctx)...)
+		x.edges = append(x.edges, x.goFields(node, id, ctx)...)
 	}
 	if ctx.lang == langJava {
 		x.edges = append(x.edges, x.javaAnnotationReferences(node, id, ctx)...)
@@ -404,6 +435,9 @@ func (x *extractor) emitDefinition(node *sitter.Node, desc *defDescriptor, ctx w
 	}
 	if desc.kind == "function" || desc.kind == "method" {
 		child.imported = x.withoutShadowedImports(ctx.imported, node)
+	}
+	if ctx.lang == langGo {
+		child.goLocals = x.goLocalNames(node, ctx.goLocals)
 	}
 	x.walkNamedChildren(namedChildren(node), child)
 }

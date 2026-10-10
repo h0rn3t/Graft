@@ -111,3 +111,57 @@ func containsAll(text string, parts []string) bool {
 	}
 	return true
 }
+
+func TestMCPTraceCallsCapsWideTypeContract(t *testing.T) {
+	t.Setenv("GRAFT_NO_REFRESH", "1")
+	root := t.TempDir()
+	files := map[string]string{
+		"go.mod":                "module example.com/m\n",
+		"model/model.go":        "package model\n\ntype Config struct{}\n",
+		"model/model_test.go":   "package model\n\nimport \"testing\"\n\nfunc TestConfig(t *testing.T) { _ = Config{} }\n",
+		"model/narrow/small.go": "package narrow\n\nimport \"example.com/m/model\"\n\nfunc Small(c model.Config) {}\n",
+	}
+	// A testdata copy of the package, whose path sorts first, has as many users.
+	for _, dir := range []string{"model", "aa/testdata"} {
+		for file := range 40 {
+			var body strings.Builder
+			fmt.Fprintf(&body, "package model\n\n")
+			for i := range 10 {
+				fmt.Fprintf(&body, "func use%02d_%02d(c Config) {}\n\n", file, i)
+			}
+			files[fmt.Sprintf("%s/use%02d.go", dir, file)] = body.String()
+		}
+	}
+	files["aa/testdata/model.go"] = files["model/model.go"]
+	for path, text := range files {
+		writeFixtureFile(t, root, path, text)
+	}
+	dir := filepath.Join(root, "graft")
+	built, err := graph.BuildGraph(root, sourcefiles.Options{OutDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := graph.Write(built.Graph, dir); err != nil {
+		t.Fatal(err)
+	}
+
+	got := mcpCall(t.Context(), root, dir, "", "graft_trace_calls", map[string]any{"symbol": "Config"})
+	if got.isError || len(got.text) > mcpGrepBudget+1000 {
+		t.Fatalf("mcpCall(graft_trace_calls, Config) = (%d bytes, isError %t), want at most ~%d bytes", len(got.text), got.isError, mcpGrepBudget)
+	}
+	if !regexp.MustCompile(`and \d+ more: model/use\d\d\.go \(10\)`).MatchString(got.text) {
+		t.Errorf("mcpCall(graft_trace_calls, Config) = %q…, want the files past the cap named with their counts", got.text[max(0, len(got.text)-600):])
+	}
+	// The production definition and its users come before a copy's or a
+	// test's, so a cap cuts those first.
+	if production, copied := strings.Index(got.text, "Config · struct · model/model.go"), strings.Index(got.text, "Config · struct · aa/testdata/model.go"); production < 0 || (copied >= 0 && copied < production) || !strings.Contains(got.text, "use00_00 (model/use00.go") {
+		t.Errorf("mcpCall(graft_trace_calls, Config) = %q…, want the production Config and its users first", got.text[:min(len(got.text), 600)])
+	}
+	if test, small := strings.Index(got.text, "TestConfig"), strings.Index(got.text, "Small (model/narrow/small.go"); small < 0 || (test >= 0 && test < small) {
+		t.Errorf("mcpCall(graft_trace_calls, Config) lists Small at %d and TestConfig at %d, want production first", small, test)
+	}
+	whole := mcpCall(t.Context(), root, dir, "", "graft_trace_calls", map[string]any{"symbol": "Small", "direction": "out"})
+	if whole.isError || strings.Contains(whole.text, "more:") {
+		t.Errorf("mcpCall(graft_trace_calls, Small out) = (%q, isError %t), want every edge and no remainder note", whole.text, whole.isError)
+	}
+}
