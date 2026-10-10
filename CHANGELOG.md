@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.1-beta.1 - 2026-10-10
+
+### Changed
+
+- **A symbol you can already name is `graft read`, not `grep`.** The instruction block and the session-start note told agents to `graft grep` a symbol they could already name. On Composer 2.5 that turned one lookup into several `graft grep` rounds, so the multi-file task used no fewer rounds than reading the files. `graft grep` and `graft_find_all` stay for every occurrence. A known symbol is `graft read`, several of them in one call with `--also`; a known file is `graft skeleton`, then read.
+- **Cursor gets the search nudge.** After Grep or a shell search, Cursor's `postToolUse` hook returns `additional_context` with the same replacement Claude Code already shows, once per session. Cursor's Shell tool is recognized next to Bash.
+
 ## 0.5.0 - 2026-10-10
 
 ### Added
