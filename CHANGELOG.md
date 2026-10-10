@@ -1,5 +1,51 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **Answers open with the call flow among their hits.** When three or more
+  nodes of one call chain link the functions a `graft_find_code` answer (or
+  `graft ask --source`) ranks, or a `graft_read_symbol` batch reads, the
+  answer starts with one line such as `call flow: Start (flow/flow.go:L4) →
+  prepare (flow/flow.go:L10) → [normalize (flow/flow.go:L22)] → finish
+  (flow/flow.go:L25)`. A step may pass through one function outside the set,
+  shown in brackets; a `(dispatch)` step goes from an interface method to its
+  implementation, and inferred steps say so. The functions in the chain get
+  their complete source first. Agents used to walk such chains one
+  `graft_trace_calls` call per round.
+- **`graft_find_all` shows the code around a narrow search.** When the hits
+  fall in at most three definitions, each comes whole with its matching lines
+  marked `▸`; when every hit lies in one file of at most 220 lines, that file
+  comes once, whole, after one line per enclosing symbol. Answers stay within
+  the 8,000-byte cap, and a wider search keeps its hit lines only.
+
+### Changed
+
+- **Ranked answers spend their budget on complete source.** `graft_find_code`
+  and `graft ask --source` showed an 8-line excerpt of each hit and stopped
+  near 40% of the budget; in recorded sessions, 47 of 57 reads that followed a
+  `graft_find_code` call asked for a definition the answer had just shown in
+  part. Now, best hit first, an excerpt becomes its complete definition while
+  the answer fits — below the top hit and off the call flow, only a
+  definition within a fifth of the budget, which covers nine in ten of the
+  definitions agents went on to read; a file of at most 220 lines whose hits
+  span at least 60% of it is shown once, whole; and an unnamed implementation
+  of an interface with three or more implementations, off the call flow, shows
+  only its signature. A query that names the top hit no longer decides
+  whether it comes whole. Edit intent and `full: true` are unchanged.
+- **Measured.** Replaying 247 recorded calls, the definitions agents read next
+  were already complete in 46% of `graft_find_code` answers (was 12%) and 20%
+  of `graft_find_all` answers (was 0%), for answers about 1.6× and 1.9× as
+  long. On Claude Haiku 5.5 (8 tasks, 48 sessions per build, all answers
+  correct), sessions took 17% fewer rounds and 17% fewer tokens (95% CI
+  9–24%) and cost 11% less (95% CI 1–21%), with Read calls down from 0.25 to
+  0.15 per session. On Claude Opus 5.5 at low effort, sessions took 12% fewer
+  rounds (95% CI 9–15%) and 6.5% fewer tokens (95% CI 2–10%); cost fell 6%,
+  within noise. On Claude Sonnet 5.5 at low effort, which answers in two to
+  four rounds, the result was neutral: 9% fewer rounds, tokens and cost within
+  3% of before.
+
 ## 0.5.0-rc.6 - 2026-10-09
 
 ### Added

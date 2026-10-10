@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
 func runGrep(opts callersOptions, stdout, stderr io.Writer) int {
@@ -148,6 +150,106 @@ func formatGrepResult(result graph.GrepResult) string {
 		output.WriteByte('\n')
 	}
 	return strings.TrimRight(output.String(), "\n") + "\n"
+}
+
+// inlineGrepSource renders a narrow search with the source around its hits,
+// or returns "" when that adds nothing within budget bytes. Hits that all lie
+// in one small file show that file once, whole, after one line per group;
+// otherwise, when at most three definitions hold the hits, each comes whole,
+// best group first, while the answer fits. Matching lines are marked ▸.
+func inlineGrepSource(root string, result graph.GrepResult, budget int) string {
+	const maxDefinitions = 3
+	if len(result.Groups) == 0 {
+		return ""
+	}
+	head := grepHeader(result)
+	if note := grepTruncationNote(result); note != "" {
+		head += "\n" + note
+	}
+	read := func(path string) []string {
+		data, readable, err := sourcefiles.Read(filepath.Join(root, filepath.FromSlash(path)))
+		if err != nil || !readable {
+			return nil
+		}
+		return strings.Split(strings.TrimSuffix(data, "\n"), "\n")
+	}
+	marked := func(lines []string, from, to int, groups ...graph.GrepGroup) string {
+		matches := make(map[int]bool)
+		for _, group := range groups {
+			for _, hit := range group.Hits {
+				matches[hit.Line] = true
+			}
+		}
+		var out strings.Builder
+		for number := from; number <= min(to, len(lines)); number++ {
+			mark := "  "
+			if matches[number] {
+				mark = "▸ "
+			}
+			fmt.Fprintf(&out, "\n%sL%d: %s", mark, number, lines[number-1])
+		}
+		return out.String()
+	}
+
+	path := result.Groups[0].Path
+	if len(result.Groups) > 1 && !slices.ContainsFunc(result.Groups, func(group graph.GrepGroup) bool { return group.Path != path }) {
+		if lines := read(path); lines != nil && len(lines) <= askWholeFileLines {
+			var text strings.Builder
+			text.WriteString(head + "\n\n")
+			for _, group := range result.Groups {
+				at := make([]string, len(group.Hits))
+				for i, hit := range group.Hits {
+					at[i] = fmt.Sprintf("L%d", hit.Line)
+				}
+				fmt.Fprintf(&text, "%s · %s\n", grepGroupHeader(group), strings.Join(at, ", "))
+			}
+			fmt.Fprintf(&text, "\nwhole file %s · %d lines · matches marked ▸%s\n", path, len(lines), marked(lines, 1, len(lines), result.Groups...))
+			if text.Len() <= budget {
+				return text.String()
+			}
+		}
+	}
+	definitions := 0
+	for _, group := range result.Groups {
+		if group.Symbol != nil {
+			definitions++
+		}
+	}
+	if definitions == 0 || definitions > maxDefinitions {
+		return ""
+	}
+	sections := make([]string, len(result.Groups))
+	for i, group := range result.Groups {
+		var section strings.Builder
+		section.WriteString(grepGroupHeader(group))
+		for _, hit := range group.Hits {
+			fmt.Fprintf(&section, "\n  L%d: %s", hit.Line, hit.Text)
+		}
+		sections[i] = section.String()
+	}
+	render := func() string { return head + "\n\n" + strings.Join(sections, "\n\n") + "\n" }
+	inlined := false
+	for i, group := range result.Groups {
+		if group.Symbol == nil {
+			continue
+		}
+		_, from, to, ok := parseAskPointer(group.Symbol.Path + ":" + group.Symbol.Span)
+		lines := read(group.Symbol.Path)
+		if !ok || lines == nil {
+			continue
+		}
+		hitLines := sections[i]
+		sections[i] = grepGroupHeader(group) + marked(lines, from, to, group)
+		if len(render()) > budget {
+			sections[i] = hitLines
+			continue
+		}
+		inlined = true
+	}
+	if !inlined {
+		return ""
+	}
+	return render()
 }
 
 // grepCopyPattern marks a pattern that itself asks for tests or copies.

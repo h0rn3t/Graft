@@ -83,7 +83,8 @@ func TestAskEditIndexedTypeReference(t *testing.T) {
 func TestAskEditFocusedSourceAndFullExpansion(t *testing.T) {
 	root := t.TempDir()
 	buildAskEditFixture(t, root)
-	compact := runAskEditJSON(t, root, "invoice processing focusneedle", "--source", "--limit", "1")
+	// A budget below the complete definition keeps the query-focused excerpt.
+	compact := runAskEditJSON(t, root, "invoice processing focusneedle", "--source", "--limit", "1", "--budget", "200")
 	full := runAskEditJSON(t, root, "invoice processing focusneedle", "--full", "--limit", "1", "--budget", "64000")
 	if len(compact.Hits) != 1 || len(full.Hits) != 1 {
 		t.Fatalf("ask source hits = (%d, %d), want (1, 1)", len(compact.Hits), len(full.Hits))
@@ -234,7 +235,9 @@ func TestMCPAskEditReferenceReplay(t *testing.T) {
 		}
 		return result.text
 	}
-	args := map[string]any{"query": "invoice processing focusneedle", "limit": float64(1)}
+	// A budget below the complete definition keeps the compact excerpt, whose
+	// reference differs from the full source's.
+	args := map[string]any{"query": "invoice processing focusneedle", "limit": float64(1), "budget": float64(200)}
 	plain := call(args)
 	if strings.Contains(plain, "ref:") || !strings.Contains(plain, "focusneedle :=") {
 		t.Errorf("mcpCall without seen = %q, want source without references", plain)
@@ -251,12 +254,13 @@ func TestMCPAskEditReferenceReplay(t *testing.T) {
 	if !strings.Contains(replay, "unchanged; source already supplied") || strings.Contains(replay, "focusneedle :=") || !strings.Contains(replay, match[1]) {
 		t.Errorf("mcpCall(seen=ref) = %q, want pointer reference without repeated source", replay)
 	}
-	args["full"] = true
+	args["full"], args["budget"] = true, float64(2000)
 	full := call(args)
 	if strings.Contains(full, "unchanged;") || !strings.Contains(full, "expansiontail") {
 		t.Errorf("mcpCall(full=true, seen=compact ref) = %q, want full source", full)
 	}
 	delete(args, "full")
+	args["budget"] = float64(200)
 	args["seen"] = []any{}
 	reset := call(args)
 	if strings.Contains(reset, "unchanged;") || !strings.Contains(reset, "focusneedle :=") || !strings.Contains(reset, match[1]) {

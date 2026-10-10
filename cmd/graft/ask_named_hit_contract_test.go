@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -49,7 +50,7 @@ func TestAskExpandsNamedTopHit(t *testing.T) {
 	}{
 		{name: "query names the function", query: "probedrift fast paths", budget: "2000", wantFull: true},
 		{name: "qualified mention", query: "how does drift.ProbeDrift work", budget: "2000", wantFull: true},
-		{name: "descriptive query", query: "how does drift probing work", budget: "2000", wantFull: false},
+		{name: "descriptive query, budget to spare", query: "how does drift probing work", budget: "2000", wantFull: true},
 		{name: "definition exceeds half the budget", query: "ProbeDrift fast paths", budget: "256", wantFull: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -66,7 +67,9 @@ func TestAskExpandsNamedTopHit(t *testing.T) {
 			if len(result.Hits) == 0 || !strings.HasPrefix(result.Hits[0].Title, "ProbeDrift") {
 				t.Fatalf("ask(%q) hits = %+v, want ProbeDrift first", tc.query, result.Hits)
 			}
-			if got := result.Hits[0].Code == body; got != tc.wantFull {
+			// Complete as its own definition or inside its whole file.
+			got := !slices.ContainsFunc(strings.Split(body, "\n"), func(line string) bool { return !strings.Contains(result.Hits[0].Code, line) })
+			if got != tc.wantFull {
 				t.Errorf("ask(%q, budget %s) top hit complete = %t, want %t; code %q", tc.query, tc.budget, got, tc.wantFull, result.Hits[0].Code)
 			}
 		})

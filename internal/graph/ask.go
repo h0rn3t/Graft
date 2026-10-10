@@ -149,6 +149,9 @@ type AskResult struct {
 	// Distinctive is the query term rarest in the graph, suggested as a next
 	// search when the answer is weak; it is not part of the JSON contract.
 	Distinctive string `json:"-"`
+	// Flow is the call chain among the hits, one "call flow:" line for text
+	// output; it is not part of the JSON contract.
+	Flow string `json:"-"`
 }
 
 // AskRankingGroup is one file queue used by file-aware ranking.

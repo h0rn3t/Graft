@@ -16,7 +16,7 @@ import (
 const (
 	hookSep                  = "\x1b[38;5;244m · \x1b[0m"
 	hookOrientationDirective = "[graft] This repo is indexed by graft. To find, understand, or change code, reach for graft first; it answers from a prebuilt graph with exact file:line, faster than grep/read. Pick the ONE tool that fits and act on its answer. Most tasks need a single call. If one isn't enough, switch to the tool that fits the next need; don't call the same tool again and again or re-ask a question reworded:\n" +
-		"  • graft ask \"<task>\" --source: locate + understand. Ranked nodes with the code inlined at each file:line (the ≤8-line crux; add --full for the whole span). The default for \"how does X work\" / \"where is Y\".\n" +
+		"  • graft ask \"<task>\" --source: locate + understand. Ranked nodes with the code inlined at each file:line (whole definitions while --budget lasts, ≤8-line excerpts past it; --full for every span). The default for \"how does X work\" / \"where is Y\".\n" +
 		"  • graft grep \"<literal>\": exhaustive find. Every occurrence, grouped by enclosing symbol; use when you need them ALL (ask is ranked top-N and misses instances).\n" +
 		"  • graft skeleton <file>: a file's whole API in ~200 tokens, every signature + span, ~10x cheaper than reading the file.\n" +
 		"  • graft callers <sym> [--direction out] [--depth N|all]: exact edges. Who calls it (default), what it calls (--direction out), or the full blast radius (--depth 2, or --depth all for every connected source). Run before you change a symbol.\n" +

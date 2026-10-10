@@ -42,6 +42,24 @@ func writeReadBatch(root string, workspace graph.WorkspaceGraphs, opts callersOp
 		}
 		items = append(items, item)
 	}
+	// Request order breaks ties in the flow, so it is read before the sort.
+	flow := ""
+	if len(workspace.Loaded) == 1 {
+		wiring := workspace.Loaded[0].Graph
+		order := make(map[string]int)
+		for i, item := range items {
+			if item.Result != nil {
+				order[item.Result.ID] = i
+			}
+		}
+		named := make([]graph.NodeV1, len(items))
+		for _, node := range wiring.Nodes {
+			if i, ok := order[node.ID]; ok {
+				named[i] = node
+			}
+		}
+		flow, _ = callFlow(wiring, named)
+	}
 	// Parents precede children so source is emitted only once for contained spans.
 	slices.SortStableFunc(items, func(a, b readBatchItem) int {
 		if a.Result == nil || b.Result == nil {
@@ -63,7 +81,7 @@ func writeReadBatch(root string, workspace graph.WorkspaceGraphs, opts callersOp
 			codes[i], items[i].Result.Code = items[i].Result.Code, ""
 		}
 	}
-	if savings.Tokens(savings.Length(diagnostics+renderReadBatch(items, opts.jsonOutput))) > budget {
+	if savings.Tokens(savings.Length(diagnostics+renderReadBatch(items, opts.jsonOutput, flow))) > budget {
 		writeDiagnostic(stderr, "batch metadata exceeds budget; increase budget or request fewer symbols\n")
 		return 1
 	}
@@ -87,7 +105,7 @@ func writeReadBatch(root string, workspace graph.WorkspaceGraphs, opts callersOp
 			}
 		}
 		// Source and every reference to it must fit together.
-		if savings.Tokens(savings.Length(diagnostics+renderReadBatch(items, opts.jsonOutput))) > budget {
+		if savings.Tokens(savings.Length(diagnostics+renderReadBatch(items, opts.jsonOutput, flow))) > budget {
 			item.Status, item.Result.Code = "omitted", ""
 			for _, j := range covered {
 				items[j].Status, items[j].CoveredBy = "omitted", ""
@@ -97,13 +115,13 @@ func writeReadBatch(root string, workspace graph.WorkspaceGraphs, opts callersOp
 	if _, err := io.WriteString(stderr, diagnostics); err != nil {
 		return 1
 	}
-	if _, err := io.WriteString(stdout, renderReadBatch(items, opts.jsonOutput)); err != nil {
+	if _, err := io.WriteString(stdout, renderReadBatch(items, opts.jsonOutput, flow)); err != nil {
 		return 1
 	}
 	return 0
 }
 
-func renderReadBatch(items []readBatchItem, asJSON bool) string {
+func renderReadBatch(items []readBatchItem, asJSON bool, flow string) string {
 	if asJSON {
 		data, _ := json.Marshal(struct {
 			Results []readBatchItem `json:"results"`
@@ -111,6 +129,9 @@ func renderReadBatch(items []readBatchItem, asJSON bool) string {
 		return string(data) + "\n"
 	}
 	var out strings.Builder
+	if flow != "" {
+		out.WriteString(flow + "\n\n")
+	}
 	for _, item := range items {
 		switch item.Status {
 		case "ok":

@@ -54,14 +54,14 @@ var mcpAliases = map[string]string{
 var mcpTools = []mcpToolDefinition{
 	{
 		Name:        "graft_find_code",
-		Description: "Discover code when the symbol or location is unknown. Returns ranked source excerpts and exact spans; a query naming the top hit returns it whole. If you already know a symbol, use graft_read_symbol directly; do not search again to expand a known hit.",
+		Description: "Discover code when the symbol or location is unknown. Returns ranked hits with exact spans and their source, whole while the budget lasts, and the call flow among them. If you already know a symbol, use graft_read_symbol directly; do not search again to expand a known hit.",
 		AlwaysLoad:  true,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"query":  map[string]any{"type": "string", "description": "what you want to understand, in plain words"},
 				"limit":  map[string]any{"type": "number", "description": "max ranked matches (default 5)"},
-				"full":   map[string]any{"type": "boolean", "description": "inline whole definitions instead of ≤8-line excerpts"},
+				"full":   map[string]any{"type": "boolean", "description": "inline every definition whole, past the budget fit"},
 				"budget": map[string]any{"type": "integer", "minimum": 128, "maximum": 64000, "description": "response budget in estimated tokens, default 2000"},
 				"intent": map[string]any{"type": "string", "enum": []string{"lookup", "edit"}, "description": "edit adds direct callers, dependencies and tests"},
 				"seen":   map[string]any{"type": "array", "maxItems": 256, "items": map[string]any{"type": "string"}, "description": "content refs: [] returns refs; prior refs omit unchanged source"},
@@ -708,6 +708,9 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		}
 		fitted := fitGrepResult(result, mcpGrepBudget)
 		text := scopeNote + formatGrepResult(fitted)
+		if inlined := inlineGrepSource(root, fitted, mcpGrepBudget); inlined != "" {
+			text = scopeNote + inlined
+		}
 		if note := grepRemainderNote(result, fitted); note != "" {
 			text += note + "\n"
 		}
