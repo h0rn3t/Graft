@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`graft_find_all` completes the shortest definitions first.** When the
+  hits fall in up to three definitions that do not all fit the 8,000-byte
+  answer, the shorter ones come whole and a long one keeps its hit lines.
+  Before, a long definition ranked first could take the budget, and the agent
+  read the shorter ones it crowded out in another round. Replaying 339
+  recorded calls, answers are 10% shorter for Claude Haiku 5.5's searches,
+  21% for Sonnet 5.5's and 29% for Opus 5.5's. The definitions agents read
+  next are as often already complete as before.
+- **`graft_find_all` names the symbols holding the hits it leaves out.** The
+  closing note gives a file's symbols when its remaining hits lie in one or
+  two of them, as in `cmd/graft/hook_metrics_test.go (12 in
+  TestHookPriceTable)`, so an agent can read that definition directly or
+  answer from its name. A file spread over more symbols is only counted.
+
+### Fixed
+
+- **Tests and copies left out of a `graft_find_all` answer no longer count
+  as truncated.** The answer said "(truncated: N more hits beyond the cap —
+  narrow with --in or refine the pattern)" for hits in tests, testdata and
+  generated code that it lists only in the closing note, though nothing had
+  reached the cap. In recorded sessions, agents followed it with another
+  search narrowed to the test file.
+
 ## 0.5.0-rc.7 - 2026-10-10
 
 ### Added

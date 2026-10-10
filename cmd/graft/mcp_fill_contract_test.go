@@ -174,7 +174,23 @@ func TestMCPFindCodeImplementationsContract(t *testing.T) {
 
 func TestMCPFindAllInlinesNarrowBodiesContract(t *testing.T) {
 	t.Setenv("GRAFT_NO_REFRESH", "1")
-	root, dir := buildFillFixture(t, fillFixtureFiles())
+	files := fillFixtureFiles()
+	// Settle calls Reconcile, which ranks it first; together their bodies
+	// pass the budget, each alone fits.
+	var reconcile, settle strings.Builder
+	reconcile.WriteString("package billing\n\nfunc Reconcile(n int) int {\n\tn += auditMark // reconcile\n")
+	for i := range 120 {
+		fmt.Fprintf(&reconcile, "\tn += %d // reconcile row %d of the ledger table\n", i, i)
+	}
+	reconcile.WriteString("\treturn n // reconcile end\n}\n")
+	settle.WriteString("package billing\n\nconst auditMark = 1\n\nfunc Settle(n int) int {\n\tn = Reconcile(n) + auditMark // settle\n")
+	for i := range 60 {
+		fmt.Fprintf(&settle, "\tn -= %d // settle row %d\n", i, i)
+	}
+	settle.WriteString("\treturn n // settle end\n}\n")
+	files["billing/reconcile.go"] = reconcile.String()
+	files["billing/settle.go"] = settle.String()
+	root, dir := buildFillFixture(t, files)
 	for _, tc := range []struct {
 		name   string
 		args   map[string]any
@@ -190,6 +206,12 @@ func TestMCPFindAllInlinesNarrowBodiesContract(t *testing.T) {
 			name: "hits crowded into one small file show that file once",
 			args: map[string]any{"pattern": "input"},
 			want: []string{"Start · function · flow/flow.go:L4-L7 · 0 in-edges · L4, L5", "L1: package flow", "whole file flow/flow.go", "▸ L4: func Start(input string) string {"},
+		},
+		{
+			name:   "of two definitions that fit only apart, the shorter comes whole",
+			args:   map[string]any{"pattern": `auditMark //`},
+			want:   []string{"return n // settle end", "  L4: n += auditMark // reconcile"},
+			reject: []string{"return n // reconcile end"},
 		},
 		{
 			name:   "a definition larger than the budget keeps its hit lines",

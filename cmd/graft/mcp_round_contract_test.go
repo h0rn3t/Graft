@@ -94,8 +94,8 @@ func TestMCPFindAllNamesFilesPastTheCapContract(t *testing.T) {
 	}
 
 	capped := mcpCall(t.Context(), root, dir, "", "graft_find_all", map[string]any{"pattern": "needle"})
-	if capped.isError || len(capped.text) > mcpGrepBudget+1000 || !regexp.MustCompile(`more hits in: src/wide\.ts \(\d+\)`).MatchString(capped.text) {
-		t.Errorf("mcpCall(graft_find_all, needle) = (%d bytes, isError %t, %q…), want at most ~%d bytes naming src/wide.ts as holding more hits", len(capped.text), capped.isError, capped.text[:min(len(capped.text), 300)], mcpGrepBudget)
+	if capped.isError || len(capped.text) > mcpGrepBudget+1000 || !regexp.MustCompile(`more hits in: src/wide\.ts \(\d+ in wide\)`).MatchString(capped.text) {
+		t.Errorf("mcpCall(graft_find_all, needle) = (%d bytes, isError %t, %q…), want at most ~%d bytes naming src/wide.ts and its function wide as holding more hits", len(capped.text), capped.isError, capped.text[:min(len(capped.text), 300)], mcpGrepBudget)
 	}
 	whole := mcpCall(t.Context(), root, dir, "", "graft_find_all", map[string]any{"pattern": "needle", "in": "src/narrow.ts"})
 	if whole.isError || strings.Contains(whole.text, "more hits in:") {

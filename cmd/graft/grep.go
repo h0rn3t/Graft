@@ -156,7 +156,9 @@ func formatGrepResult(result graph.GrepResult) string {
 // or returns "" when that adds nothing within budget bytes. Hits that all lie
 // in one small file show that file once, whole, after one line per group;
 // otherwise, when at most three definitions hold the hits, each comes whole,
-// best group first, while the answer fits. Matching lines are marked ▸.
+// shortest first, while the answer fits: a long one taken first would crowd
+// out the rest, which the agent then reads in another round. Matching lines
+// are marked ▸.
 func inlineGrepSource(root string, result graph.GrepResult, budget int) string {
 	const maxDefinitions = 3
 	if len(result.Groups) == 0 {
@@ -209,15 +211,20 @@ func inlineGrepSource(root string, result graph.GrepResult, budget int) string {
 			}
 		}
 	}
-	definitions := 0
-	for _, group := range result.Groups {
-		if group.Symbol != nil {
-			definitions++
+	type definition struct{ group, from, to int }
+	var definitions []definition
+	for i, group := range result.Groups {
+		if group.Symbol == nil {
+			continue
+		}
+		if _, from, to, ok := parseAskPointer(group.Symbol.Path + ":" + group.Symbol.Span); ok {
+			definitions = append(definitions, definition{group: i, from: from, to: to})
 		}
 	}
-	if definitions == 0 || definitions > maxDefinitions {
+	if len(definitions) == 0 || len(definitions) > maxDefinitions {
 		return ""
 	}
+	slices.SortStableFunc(definitions, func(a, b definition) int { return cmp.Compare(a.to-a.from, b.to-b.from) })
 	sections := make([]string, len(result.Groups))
 	for i, group := range result.Groups {
 		var section strings.Builder
@@ -229,19 +236,16 @@ func inlineGrepSource(root string, result graph.GrepResult, budget int) string {
 	}
 	render := func() string { return head + "\n\n" + strings.Join(sections, "\n\n") + "\n" }
 	inlined := false
-	for i, group := range result.Groups {
-		if group.Symbol == nil {
-			continue
-		}
-		_, from, to, ok := parseAskPointer(group.Symbol.Path + ":" + group.Symbol.Span)
+	for _, definition := range definitions {
+		group := result.Groups[definition.group]
 		lines := read(group.Symbol.Path)
-		if !ok || lines == nil {
+		if lines == nil {
 			continue
 		}
-		hitLines := sections[i]
-		sections[i] = grepGroupHeader(group) + marked(lines, from, to, group)
+		hitLines := sections[definition.group]
+		sections[definition.group] = grepGroupHeader(group) + marked(lines, definition.from, definition.to, group)
 		if len(render()) > budget {
-			sections[i] = hitLines
+			sections[definition.group] = hitLines
 			continue
 		}
 		inlined = true
@@ -258,8 +262,9 @@ var grepCopyPattern = regexp.MustCompile(`(?i)test|spec|fixture|mock|vendor|gene
 // fitGrepResult keeps the top-ranked hits whose rendered groups fit in budget
 // bytes and counts the rest as truncated, leaving result itself untouched.
 // While production code matches, tests and copies (testdata, fixtures,
-// generated and vendored code) are only counted, unless the pattern asks for
-// them.
+// generated and vendored code) are left for grepRemainderNote to name, unless
+// the pattern asks for them; they are not past the cap, and a truncation note
+// would send the agent to narrow the search for them.
 func fitGrepResult(result graph.GrepResult, budget int) graph.GrepResult {
 	isCopy := func(group graph.GrepGroup) bool { return group.Generated || graph.IsCopyPath(group.Path) }
 	production := slices.DeleteFunc(slices.Clone(result.Groups), isCopy)
@@ -267,7 +272,6 @@ func fitGrepResult(result graph.GrepResult, budget int) graph.GrepResult {
 		for _, group := range result.Groups {
 			if isCopy(group) {
 				result.TotalHits -= len(group.Hits)
-				result.Truncated.Hits += len(group.Hits)
 			}
 		}
 		result.Groups = production
@@ -328,18 +332,35 @@ func grepTruncationNote(result graph.GrepResult) string {
 }
 
 // grepRemainderNote names the files holding the hits fitGrepResult dropped,
-// most hits first, so a capped answer still says where to narrow.
+// most hits first, so a capped answer still says where to narrow. A file whose
+// dropped hits lie in one or two symbols names them too, a definition to read
+// by name; a file spread over more is only counted, since a few of many names
+// would be noise.
 func grepRemainderNote(full, fitted graph.GrepResult) string {
+	key := func(group graph.GrepGroup) string {
+		if group.Symbol == nil {
+			return group.Path
+		}
+		return group.Path + "\x00" + group.Symbol.Name + "\x00" + group.Symbol.Span
+	}
+	kept := make(map[string]int)
+	for _, group := range fitted.Groups {
+		kept[key(group)] += len(group.Hits)
+	}
 	dropped := make(map[string]int)
+	names := make(map[string][]string)
 	generated := make(map[string]bool)
 	for _, group := range full.Groups {
-		dropped[group.Path] += len(group.Hits)
+		rest := len(group.Hits) - kept[key(group)]
+		if rest <= 0 {
+			continue
+		}
+		dropped[group.Path] += rest
 		generated[group.Path] = group.Generated
+		if group.Symbol != nil {
+			names[group.Path] = append(names[group.Path], group.Symbol.Name)
+		}
 	}
-	for _, group := range fitted.Groups {
-		dropped[group.Path] -= len(group.Hits)
-	}
-	maps.DeleteFunc(dropped, func(_ string, count int) bool { return count <= 0 })
 	if len(dropped) == 0 {
 		return ""
 	}
@@ -353,10 +374,14 @@ func grepRemainderNote(full, fitted graph.GrepResult) string {
 	paths := slices.SortedFunc(maps.Keys(dropped), func(a, b string) int {
 		return cmp.Or(cmp.Compare(copyRank(a), copyRank(b)), cmp.Compare(dropped[b], dropped[a]), strings.Compare(a, b))
 	})
-	const shown = 8
+	const shown, named = 8, 2
 	parts := make([]string, 0, shown+1)
 	for _, path := range paths[:min(shown, len(paths))] {
-		parts = append(parts, fmt.Sprintf("%s (%d)", path, dropped[path]))
+		part := fmt.Sprintf("%s (%d", path, dropped[path])
+		if in := names[path]; len(in) > 0 && len(in) <= named {
+			part += " in " + strings.Join(in, ", ")
+		}
+		parts = append(parts, part+")")
 	}
 	if len(paths) > shown {
 		parts = append(parts, fmt.Sprintf("%d more files", len(paths)-shown))
