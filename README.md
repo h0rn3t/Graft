@@ -96,12 +96,27 @@ git commit -m "wire in graft"
 
 Щоб оновити встановлення, запустіть ту саму команду `go install ...@latest`.
 
-### Встановлення останньої версії `main` через Go
+### Встановлення найновішої версії, разом із beta і rc
 
-`@latest` встановлює найновіший тегований реліз. Щоб запустити останній коміт `main`, завантажте його напряму з GitHub; `GOPROXY=direct` оминає кеш проксі модулів, тож ви отримаєте щойно запушений коміт:
+`@latest` встановлює лише найновіший стабільний реліз і пропускає beta- та rc-теги, тож нові можливості спершу виходять у них. Щоб встановити найновіший тег, хоч стабільний, хоч beta чи rc:
 
 ```bash
-GOPROXY=direct go install github.com/h0rn3t/Graft/cmd/graft@main
+export GOPRIVATE=github.com/h0rn3t/Graft
+v=$(go list -m -versions github.com/h0rn3t/Graft | tr ' ' '\n' | tail -1)
+go install github.com/h0rn3t/Graft/cmd/graft@$v
+graft --version
+```
+
+`go list -m -versions` перелічує всі теги від старішого до новішого, тож останній і є найновішим. Конкретну версію можна встановити напряму, наприклад `go install github.com/h0rn3t/Graft/cmd/graft@v0.6.0-beta.4`; усі релізи та їхні зміни є на сторінці [Releases](https://github.com/h0rn3t/Graft/releases) і в [CHANGELOG.md](CHANGELOG.md).
+
+`GOPRIVATE` змушує Go брати Graft прямо з GitHub, оминаючи `proxy.golang.org` і `sum.golang.org`; залежності й далі йдуть через проксі. Одразу після нового тега проксі ще якийсь час (зазвичай до пів години) відповідає `unknown revision` і `404 Not Found`, і без `GOPRIVATE` команда `go install` падає на перевірці контрольної суми.
+
+### Встановлення останньої версії `main` через Go
+
+Щоб запустити останній коміт `main`, завантажте його напряму з GitHub; з `GOPRIVATE` ви отримаєте щойно запушений коміт, навіть поки проксі модулів його ще не бачить:
+
+```bash
+GOPRIVATE=github.com/h0rn3t/Graft go install github.com/h0rn3t/Graft/cmd/graft@main
 graft init
 ```
 

@@ -96,12 +96,27 @@ Each teammate generates their own local graph with `graft build` or `graft init`
 
 To update a Go installation, run the same `go install ...@latest` command.
 
-### Install the latest `main` with Go
+### Install the newest version, beta and rc included
 
-`@latest` installs the newest tagged release. To run the tip of `main` instead, fetch it straight from GitHub; `GOPROXY=direct` bypasses the module proxy cache, so you get the commit that was just pushed:
+`@latest` installs only the newest stable release and skips beta and rc tags, so new features ship in those first. To install the newest tag, stable, beta or rc:
 
 ```bash
-GOPROXY=direct go install github.com/h0rn3t/Graft/cmd/graft@main
+export GOPRIVATE=github.com/h0rn3t/Graft
+v=$(go list -m -versions github.com/h0rn3t/Graft | tr ' ' '\n' | tail -1)
+go install github.com/h0rn3t/Graft/cmd/graft@$v
+graft --version
+```
+
+`go list -m -versions` lists every tag from oldest to newest, so the last one is the newest. A given version installs directly, for example `go install github.com/h0rn3t/Graft/cmd/graft@v0.6.0-beta.4`; every release and its changes are on the [Releases](https://github.com/h0rn3t/Graft/releases) page and in [CHANGELOG.md](CHANGELOG.md).
+
+`GOPRIVATE` makes Go fetch Graft straight from GitHub, past `proxy.golang.org` and `sum.golang.org`; dependencies still come through the proxy. Right after a new tag the proxy keeps answering `unknown revision` and `404 Not Found` for a while (usually up to half an hour), and without `GOPRIVATE` `go install` fails verifying the checksum.
+
+### Install the latest `main` with Go
+
+To run the tip of `main`, fetch it straight from GitHub; with `GOPRIVATE` you get the commit that was just pushed, even before the module proxy sees it:
+
+```bash
+GOPRIVATE=github.com/h0rn3t/Graft go install github.com/h0rn3t/Graft/cmd/graft@main
 graft init
 ```
 
