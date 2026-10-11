@@ -113,9 +113,9 @@ type showLoadedMsg struct {
 	notes string
 }
 
-// runShow draws a symbol between its callers and callees. With a terminal on
-// both ends it runs in Bubble Tea, and with no symbol named it starts at the
-// symbol search; otherwise it prints the drawing once.
+// runShow draws a symbol between its callers and callees, the most used one
+// when none is named. With a terminal on both ends it runs in Bubble Tea;
+// otherwise it prints the drawing once.
 func runShow(ctx context.Context, opts callersOptions, stdin io.Reader, stdout, stderr io.Writer) int {
 	in, inFile := stdin.(*os.File)
 	out, outFile := stdout.(*os.File)
@@ -127,11 +127,7 @@ func runShow(ctx context.Context, opts callersOptions, stdin io.Reader, stdout, 
 	case view == nil:
 		return 1
 	case view.search != nil:
-		names := make([]string, 0, 5)
-		for _, node := range view.search.found[:min(len(view.search.found), 5)] {
-			names = append(names, node.Name)
-		}
-		writeDiagnostic(stderr, "✗ name a symbol to draw: graft show <symbol> — or run it in a terminal to search for one. The most used here: %s\n", strings.Join(names, ", "))
+		writeDiagnostic(stderr, "✗ the graph has no symbol to draw — run graft build, or name one: graft show <symbol>\n")
 		return 1
 	}
 	width := showStaticWidth
@@ -146,8 +142,8 @@ func runShow(ctx context.Context, opts callersOptions, stdin io.Reader, stdout, 
 	return 0
 }
 
-// loadShowView loads the graph and opens the symbol opts names, or the
-// symbol search when it names none. It returns nil, having said why on
+// loadShowView loads the graph and opens the symbol opts names, or the most
+// used symbol when it names none. It returns nil, having said why on
 // stderr, when there is no graph or the name picks no single symbol.
 func loadShowView(opts callersOptions, stderr io.Writer) *showView {
 	root, loaded, ok := loadAnalysisGraph(opts, stderr)
@@ -253,8 +249,9 @@ func (m showModel) View() tea.View {
 	return view
 }
 
-// newShowView starts graft show at node, or at the symbol search when node
-// is nil.
+// newShowView starts graft show at node or, when node is nil, at the most
+// used symbol; it starts at the symbol search only when the graph has no
+// symbol to draw.
 func newShowView(root string, wiring graph.GraphV1, node *graph.NodeV1) *showView {
 	view := &showView{
 		root: root, wiring: wiring, degrees: graph.InDegree(wiring.Edges),
@@ -263,7 +260,10 @@ func newShowView(root string, wiring graph.GraphV1, node *graph.NodeV1) *showVie
 	if node == nil {
 		view.search = &showSearch{}
 		view.find("")
-		return view
+		if len(view.search.found) == 0 {
+			return view
+		}
+		node, view.search = &view.search.found[0], nil
 	}
 	view.jump(*node)
 	return view

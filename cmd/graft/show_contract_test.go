@@ -37,7 +37,7 @@ func buildShowRepo(t *testing.T) string {
 }
 
 // showRepoView opens the view of one node of the built show repository, or
-// its symbol search when id is empty.
+// of its most used symbol when id is empty.
 func showRepoView(t *testing.T, root, id string) *showView {
 	t.Helper()
 	loaded, err := graph.Read(graph.WiringPath(filepath.Join(root, "graft")))
@@ -171,15 +171,24 @@ func TestShowWithoutASymbol(t *testing.T) {
 	root := buildShowRepo(t)
 	t.Chdir(root)
 	var stdout, stderr bytes.Buffer
-	if status := run([]string{"show", "--no-refresh"}, &stdout, &stderr); status != 1 {
-		t.Fatalf("run(show) piped status = %d, want 1; stderr = %q", status, stderr.String())
+	if status := run([]string{"show", "--no-refresh"}, &stdout, &stderr); status != 0 {
+		t.Fatalf("run(show) piped status = %d, want 0; stderr = %q", status, stderr.String())
 	}
-	// Piped, there is no search to open: it says what to name, and names the
-	// most used symbols.
-	for _, want := range []string{"name a symbol", "graft show <symbol>", "Serve, parse, reply"} {
-		if !strings.Contains(stderr.String(), want) {
-			t.Errorf("run(show) piped stderr = %q, want it to contain %q", stderr.String(), want)
+	// It draws the most used symbol of the graph under the working directory.
+	for _, want := range []string{"callers (2)", "callees (2)", "│ Serve", "│ app/app.go:L3-L6"} {
+		if !strings.Contains(stdout.String(), want) {
+			t.Errorf("run(show) piped stdout = %q, want it to contain %q", stdout.String(), want)
 		}
+	}
+}
+
+func TestShowWithNothingToDraw(t *testing.T) {
+	view := newShowView(t.TempDir(), graph.GraphV1{}, nil)
+	if view.search == nil || len(view.trail) != 0 {
+		t.Fatalf("newShowView(empty graph): search %t, trail %q; want the search open and nothing opened", view.search != nil, showTrail(view))
+	}
+	if quit := pressShow(view, "esc"); !quit {
+		t.Errorf("press(esc) on the search with nothing opened: quit %t, want true", quit)
 	}
 }
 
@@ -268,29 +277,40 @@ func TestShowSearch(t *testing.T) {
 		wantTrail  string
 		wantQuit   bool
 	}{
-		{name: "starts with the most used symbols", wantSearch: true, wantFound: mostUsed},
-		{name: "a prefix", keys: "p a r", wantSearch: true, wantQuery: "par", wantFound: []string{"app/app.go#parse"}},
-		{name: "case does not matter", keys: "P A R", wantSearch: true, wantQuery: "PAR", wantFound: []string{"app/app.go#parse"}},
-		{name: "exact names, the most used first", keys: "s e r v e", wantSearch: true, wantQuery: "serve", wantFound: []string{"app/app.go#Serve", "web/web.go#Serve"}},
+		{name: "slash lists the most used symbols", wantSearch: true, wantFound: mostUsed, wantTrail: "Serve"},
+		{name: "a prefix", keys: "p a r", wantSearch: true, wantQuery: "par", wantFound: []string{"app/app.go#parse"}, wantTrail: "Serve"},
+		{name: "case does not matter", keys: "P A R", wantSearch: true, wantQuery: "PAR", wantFound: []string{"app/app.go#parse"}, wantTrail: "Serve"},
+		{
+			name: "exact names, the most used first", keys: "s e r v e", wantSearch: true, wantQuery: "serve",
+			wantFound: []string{"app/app.go#Serve", "web/web.go#Serve"}, wantTrail: "Serve",
+		},
 		{
 			name: "anywhere in the name", keys: "e", wantSearch: true, wantQuery: "e",
-			wantFound: []string{"app/app.go#Serve", "app/app.go#parse", "app/app.go#reply", "web/web.go#Serve"},
+			wantFound: []string{"app/app.go#Serve", "app/app.go#parse", "app/app.go#reply", "web/web.go#Serve"}, wantTrail: "Serve",
 		},
-		{name: "test copies come last", keys: "a d m", wantSearch: true, wantQuery: "adm", wantFound: []string{"app/app.go#Admin", "app/app_test.go#Admin"}},
-		{name: "backspace deletes", keys: "p a r x backspace", wantSearch: true, wantQuery: "par", wantFound: []string{"app/app.go#parse"}},
-		{name: "keys that act elsewhere are typed", keys: "q t / j", wantSearch: true, wantQuery: "qt/j"},
-		{name: "enter opens the match", keys: "p a r enter", wantTrail: "parse"},
-		{name: "enter opens the chosen match", keys: "down down up enter", wantTrail: "parse"},
-		{name: "enter with no match stays", keys: "z z z enter", wantSearch: true, wantQuery: "zzz"},
-		{name: "slash searches again", keys: "p a r enter /", wantSearch: true, wantFound: mostUsed, wantTrail: "parse"},
-		{name: "escape goes back to the graph", keys: "p a r enter / s e esc", wantTrail: "parse"},
-		{name: "escape with no graph quits", keys: "esc", wantSearch: true, wantFound: mostUsed, wantQuit: true},
-		{name: "ctrl-c quits", keys: "p a r ctrl+c", wantSearch: true, wantQuery: "par", wantFound: []string{"app/app.go#parse"}, wantQuit: true},
+		{
+			name: "test copies come last", keys: "a d m", wantSearch: true, wantQuery: "adm",
+			wantFound: []string{"app/app.go#Admin", "app/app_test.go#Admin"}, wantTrail: "Serve",
+		},
+		{name: "backspace deletes", keys: "p a r x backspace", wantSearch: true, wantQuery: "par", wantFound: []string{"app/app.go#parse"}, wantTrail: "Serve"},
+		{name: "keys that act elsewhere are typed", keys: "q t / j", wantSearch: true, wantQuery: "qt/j", wantTrail: "Serve"},
+		{name: "enter opens the match", keys: "p a r enter", wantTrail: "Serve › parse"},
+		{name: "enter opens the chosen match", keys: "down down up enter", wantTrail: "Serve › parse"},
+		{name: "enter with no match stays", keys: "z z z enter", wantSearch: true, wantQuery: "zzz", wantTrail: "Serve"},
+		{name: "slash searches again", keys: "p a r enter /", wantSearch: true, wantFound: mostUsed, wantTrail: "Serve › parse"},
+		{name: "escape goes back to the graph", keys: "p a r enter / s e esc", wantTrail: "Serve › parse"},
+		{name: "escape goes back to the most used symbol", keys: "s e esc", wantTrail: "Serve"},
+		{
+			name: "ctrl-c quits", keys: "p a r ctrl+c", wantSearch: true, wantQuery: "par",
+			wantFound: []string{"app/app.go#parse"}, wantTrail: "Serve", wantQuit: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// With no symbol named, graft show draws the most used one,
+			// Serve; slash opens the search over it.
 			view := showRepoView(t, root, "")
-			quit := pressShow(view, tt.keys)
+			quit := pressShow(view, "/ "+tt.keys)
 			var query string
 			var found []string
 			if view.search != nil {
@@ -307,7 +327,7 @@ func TestShowSearch(t *testing.T) {
 	}
 
 	view := showRepoView(t, root, "")
-	pressShow(view, "p a r")
+	pressShow(view, "/ p a r")
 	lines := view.frame(60, 10, true)
 	if len(lines) != 10 {
 		t.Errorf("search frame(60, 10) has %d rows, want 10", len(lines))

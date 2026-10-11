@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`graft show` with no symbol draws the most used one.** It opens the graph in `graft/` where it runs at the symbol most edges point at, in a terminal and piped alike, instead of starting at the symbol search or, piped, failing; `/` still searches. Only a graph with no symbol to draw starts at the search, and piped it says to run `graft build` or name a symbol.
+
 ## 0.6.0-beta.3 - 2026-10-11
 
 ### Added

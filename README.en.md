@@ -377,7 +377,7 @@ graft map [dir]                      # directory clusters, local hubs, and globa
 graft map --max-dirs N --json        # choose the detail level and return JSON
 graft path <from> <to> [dir]         # shortest call chain between two symbols, through interface implementations
 graft path main Store.Get -d 6       # cap the chain at 6 steps (default 10); --json for scripts
-graft show [symbol] [dir]            # draw a symbol between its callers and callees; in a terminal walk it, unfold a call tree (t), search (/)
+graft show [symbol] [dir]            # draw a symbol (the most used one by default) between its callers and callees; in a terminal walk it, unfold a call tree (t), search (/)
 graft dead [dir]                     # functions and methods nothing calls, high and medium confidence, and what it left out
 graft dead --all --in src/           # also the low-confidence ones, each with its reason
 graft complexity [dir]               # the most complex functions by cyclomatic complexity
@@ -589,7 +589,9 @@ hotspots: run · function · cmd/graft/main.go:L99-L103 · 31←  programSpec ·
 symbol in a box, callers on the left, callees on the right, arrows pointing the
 way the calls go, dashed where an edge is inferred. The fields, constants and
 variables a symbol reads or writes stay out of its columns; draw a field itself
-to see who reads and writes it. Piped, it prints the drawing once, plain:
+to see who reads and writes it. With no symbol, `graft show` draws the most
+used symbol of the graph in `graft/` where it runs. Piped, it prints the
+drawing once, plain:
 
 ```
 callers (2)                                 callees (2)
@@ -610,8 +612,7 @@ with a spinner while the graph refreshes and loads:
   closes it or climbs to its parent, `Tab` turns the tree from callees to
   callers, `Enter` makes the row's symbol the root. A symbol already above
   its row is marked `↻` and stops there.
-- `/` searches for a symbol by name. `graft show` with no symbol starts there,
-  listing the most used symbols first.
+- `/` searches for a symbol by name, the most used symbols first.
 
 ```
 callees of Serve  tab: callers
