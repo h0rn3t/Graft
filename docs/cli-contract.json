@@ -31,7 +31,7 @@
       ],
       "backend": "go",
       "stdout": "`✓ wiring: <n> nodes (<byKind>), <e> edges, <c> cards [<langs>]`, `  parsed: <p> of <f> files (<r> replayed from cache)`, optional `  seeded: …`, `  → <C>`, then the gitignore footer",
-      "stderr": "`\\r`-rewritten parsing progress, a trailing newline, `⚠ -e \"<ext>\": no parser registered…` plus the supported list, per-file `✗ <error>` lines",
+      "stderr": "on a terminal, a Bubble Tea spinner and bar with the file being read, left as `✓ read <n> files`; otherwise `\\r`-rewritten parsing progress; a trailing newline, `⚠ -e \"<ext>\": no parser registered…` plus the supported list, per-file `✗ <error>` lines",
       "exit": {
         "0": "built (including per-file extraction errors reported on stderr)",
         "1": "`✗ --include-dir \"<n>\": dot-directories are never overridable` / `expected a bare directory name, not a path`, `✗ --only-dir: expected a non-empty repo-relative path`, or an uncaught build error"
@@ -154,12 +154,13 @@
     },
     {
       "name": "show",
-      "usage": "graft show [options] <symbol> [dir]",
+      "usage": "graft show [options] [symbol] [dir]",
       "options": ["--in <path>", "--no-refresh"],
       "backend": "go",
-      "stdout": "with a terminal on stdin and stdout, an interactive view on the alternate screen: the symbol in a box, its callers on the left and callees on the right joined by arrows, the selected edge and the line of code it stands for, keys to move, open a neighbor and go back; otherwise the same drawing once, plain, as tall as the longer column and as wide as the terminal or 100 columns",
-      "exit": { "0": "drawn, or the interactive view quit", "1": "`✗ no graph — run graft build first`, a multi-repo workspace root, an unknown symbol or prefix, a name several symbols share (listed), or a terminal that refused raw mode" },
-      "effects": ["refresh: see queryRefresh", "interactive: raw mode and the alternate screen, both restored on quit or on SIGTERM", "reads the source files of the edges it quotes"]
+      "stdout": "with a terminal on stdin and stdout, a Bubble Tea program on the alternate screen: a spinner while the graph loads, then the symbol in a box with its callers on the left and callees on the right joined by arrows (fields, constants and variables left out), the selected edge and the line of code it stands for; `t` an unfolding call tree, `/` a symbol search, where it starts when no symbol is named; otherwise the same drawing once, plain, as tall as the longer column and as wide as the terminal or 100 columns",
+      "stderr": "refresh notes and errors, after the terminal is handed back when interactive",
+      "exit": { "0": "drawn, or the interactive view quit", "1": "`✗ no graph — run graft build first`, a multi-repo workspace root, an unknown symbol or prefix, a name several symbols share (listed), or piped with no symbol named (`✗ name a symbol to draw…` with the most used ones)", "130": "interrupted by a signal while interactive" },
+      "effects": ["refresh: see queryRefresh", "interactive: raw mode and the alternate screen, both restored on quit or on a signal", "reads the source files of the edges it quotes"]
     },
     {
       "name": "dead",

@@ -14,15 +14,6 @@ func isTerminal(file *os.File) bool {
 	return err == nil
 }
 
-// terminalSize returns the terminal's width and height in cells.
-func terminalSize(file *os.File) (int, int, error) {
-	size, err := unix.IoctlGetWinsize(int(file.Fd()), unix.TIOCGWINSZ)
-	if err != nil {
-		return 0, 0, err
-	}
-	return int(size.Col), int(size.Row), nil
-}
-
 // makeRaw puts the terminal into raw mode and returns a restore function.
 func makeRaw(file *os.File) (func(), error) {
 	fd := int(file.Fd())

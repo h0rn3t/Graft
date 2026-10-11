@@ -263,6 +263,18 @@ func allDigits(value string) bool {
 	return value != ""
 }
 
+// InDegree counts, for each node ID, the edges a walk follows into it: the
+// calls, references, writes, imports and inheritance pointing at it.
+func InDegree(edges []EdgeV1) map[string]int {
+	degrees := make(map[string]int)
+	for _, edge := range edges {
+		if isWalkRelation(edge.Relation) {
+			degrees[edge.Target]++
+		}
+	}
+	return degrees
+}
+
 func isWalkRelation(relation Relation) bool {
 	switch relation {
 	case "calls", "references", "writes", "imports", "implements", "extends":

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`graft show` runs in Bubble Tea, unfolds a call tree and searches.** In a terminal the view is a [Bubble Tea](https://github.com/charmbracelet/bubbletea) program styled with Lip Gloss, and a spinner shows while the graph refreshes and loads; a refresh note or an error is printed once the terminal is handed back. `t` turns the drawing into a call tree drawn with `lipgloss/tree`: `→` opens a row, `←` closes it or climbs to its parent, `Tab` turns it from callees to callers, `Enter` makes the row's symbol the root, and a symbol already above its row is marked `↻` and stops the branch. `/` searches for a symbol by name — an exact name first, then a prefix, then anywhere in the name, each by how many edges point at it, test and fixture copies last — and `graft show` with no symbol starts there, listing the most used symbols. Piped with no symbol, it says to name one and lists the most used.
+- **`graft build` shows a spinner and a bar on a terminal.** The parsing progress is a Bubble Tea program with the file being read, and leaves `✓ read <n> files` when it ends; piped output keeps the plain `parsing i/n: file` line.
+
+### Changed
+
+- **`graft show` leaves fields, constants and variables out of its columns.** The values a symbol reads or writes are no calls, and on this repository they were up to half of a function's callees; draw a field itself to see who reads and writes it.
+
 ## 0.6.0-beta.2 - 2026-10-11
 
 ### Added

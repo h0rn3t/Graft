@@ -61,14 +61,19 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		}
 	}
 
+	if rootErr, ok := buildRootError(root); ok && opts.workspaceChildName == "" {
+		// The TypeScript CLI's top-level handler prints the thrown message alone.
+		writeDiagnostic(stderr, "%s\n", rootErr)
+		return 1
+	}
 	var onProgress func(index, total int, file string)
-	progressTTY := opts.workspaceChildName == "" && buildProgressEnabled(stderr)
-	if opts.workspaceChildName == "" {
+	finishProgress := func() {}
+	switch {
+	case opts.workspaceChildName != "":
+	case buildProgressEnabled(stderr):
+		onProgress, finishProgress = startBuildProgress(stderr)
+	default:
 		onProgress = func(index, total int, file string) {
-			if progressTTY {
-				writeDiagnostic(stderr, "%s", formatBuildProgress(index, total, file))
-				return
-			}
 			runes := []rune(file)
 			if len(runes) > buildProgressLegacyWidth {
 				runes = runes[:buildProgressLegacyWidth]
@@ -76,16 +81,12 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 			writeDiagnostic(stderr, "\rparsing %d/%d: %-50s", index+1, total, string(runes))
 		}
 	}
-	if rootErr, ok := buildRootError(root); ok && opts.workspaceChildName == "" {
-		// The TypeScript CLI's top-level handler prints the thrown message alone.
-		writeDiagnostic(stderr, "%s\n", rootErr)
-		return 1
-	}
 	built, err := graph.BuildGraph(root, sourcefiles.Options{
 		OutDir: contextDir, OnlyDirs: onlyDirs, Extensions: opts.extensions,
 		NoReuse: opts.noReuse, NoSeed: opts.contextDir != "" || (opts.workspaceChildName == "" && os.Getenv("GRAFT_DIR") != ""),
 		OnProgress: onProgress,
 	})
+	finishProgress()
 	if err != nil {
 		if opts.workspaceChildName == "" {
 			writeDiagnostic(stderr, "\n")

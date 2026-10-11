@@ -99,7 +99,7 @@ func BuildRepoMap(wiring GraphV1, opts RepoMapOptions) RepoMap {
 			allFilePaths = append(allFilePaths, node.Path)
 		}
 	}
-	inDegree := mapInDegree(wiring.Edges)
+	inDegree := InDegree(wiring.Edges)
 	scopes := mapScopes(wiring)
 
 	var dirs []DirEntry
@@ -278,16 +278,6 @@ func mapTopHubs(nodes []NodeV1, inDegree map[string]int, cap int) []Hub {
 		)
 	})
 	return hubs[:min(len(hubs), cap)]
-}
-
-func mapInDegree(edges []EdgeV1) map[string]int {
-	degrees := make(map[string]int)
-	for _, edge := range edges {
-		if isWalkRelation(edge.Relation) {
-			degrees[edge.Target]++
-		}
-	}
-	return degrees
 }
 
 func mapSortedLanguages(paths []string) []string {

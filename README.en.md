@@ -377,7 +377,7 @@ graft map [dir]                      # directory clusters, local hubs, and globa
 graft map --max-dirs N --json        # choose the detail level and return JSON
 graft path <from> <to> [dir]         # shortest call chain between two symbols, through interface implementations
 graft path main Store.Get -d 6       # cap the chain at 6 steps (default 10); --json for scripts
-graft show <symbol> [dir]            # draw a symbol between its callers and callees; walk the graph with arrow keys in a terminal
+graft show [symbol] [dir]            # draw a symbol between its callers and callees; in a terminal walk it, unfold a call tree (t), search (/)
 graft dead [dir]                     # functions and methods nothing calls, high and medium confidence, and what it left out
 graft dead --all --in src/           # also the low-confidence ones, each with its reason
 graft complexity [dir]               # the most complex functions by cyclomatic complexity
@@ -587,11 +587,9 @@ hotspots: run · function · cmd/graft/main.go:L99-L103 · 31←  programSpec ·
 
 `graft show <symbol>` draws a symbol between its callers and its callees: the
 symbol in a box, callers on the left, callees on the right, arrows pointing the
-way the calls go, dashed where an edge is inferred. In a terminal it is
-interactive — `↑↓` choose an edge, `←→` switch between callers and callees,
-`Enter` opens the chosen symbol, `Backspace` goes back the way you came, `q`
-quits — and the footer names the selected edge and quotes the line of code it
-stands for. Piped, it prints the drawing once, plain:
+way the calls go, dashed where an edge is inferred. The fields, constants and
+variables a symbol reads or writes stay out of its columns; draw a field itself
+to see who reads and writes it. Piped, it prints the drawing once, plain:
 
 ```
 callers (2)                                 callees (2)
@@ -600,6 +598,26 @@ Admin app.go:9 ─┐  │ Serve            │ ┌─▶ parse app.go:16
 Main app.go:13 ─┴─▶│ function         │─┴─▶ reply app.go:18
                    │ app/app.go:L3-L6 │
                    ╰──────────────────╯
+```
+
+In a terminal it runs in [Bubble Tea](https://github.com/charmbracelet/bubbletea),
+with a spinner while the graph refreshes and loads:
+
+- `↑↓` choose an edge, `←→` switch between callers and callees, `Enter` opens
+  the chosen symbol, `Backspace` goes back the way you came, `q` quits; the
+  footer names the selected edge and quotes the line of code it stands for.
+- `t` turns the drawing into a call tree you can unfold: `→` opens a row, `←`
+  closes it or climbs to its parent, `Tab` turns the tree from callees to
+  callers, `Enter` makes the row's symbol the root. A symbol already above
+  its row is marked `↻` and stops there.
+- `/` searches for a symbol by name. `graft show` with no symbol starts there,
+  listing the most used symbols first.
+
+```
+callees of Serve  tab: callers
+▾ Serve · function · app/app.go:L3-L6
+├── · parse app.go:16
+╰── · reply app.go:18
 ```
 
 A name several symbols share lists them; qualify it (`Type.method`, `pkg.Fn`)

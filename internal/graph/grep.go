@@ -118,7 +118,7 @@ func Grep(wiring GraphV1, repoRoot, pattern string, opts GrepOptions) (GrepResul
 		return GrepResult{}, err
 	}
 
-	inDegree := grepInDegree(wiring.Edges)
+	inDegree := InDegree(wiring.Edges)
 	symbolsByPath := grepSymbols(wiring.Nodes)
 	groupIndexes := make(map[string]int)
 	hitPaths := make(map[string]struct{})
@@ -247,16 +247,6 @@ func grepSymbolRef(node NodeV1) GrepSymbolRef {
 		name = node.ID[hash+1:]
 	}
 	return GrepSymbolRef{ID: node.ID, Name: name, Kind: node.Kind, Path: node.Path, Span: node.Span}
-}
-
-func grepInDegree(edges []EdgeV1) map[string]int {
-	degrees := make(map[string]int)
-	for _, edge := range edges {
-		if isWalkRelation(edge.Relation) {
-			degrees[edge.Target]++
-		}
-	}
-	return degrees
 }
 
 func grepSavings(nodes []NodeV1, paths map[string]struct{}) *GrepSavings {

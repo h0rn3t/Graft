@@ -4,22 +4,41 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
+
+	"charm.land/bubbles/v2/progress"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
 )
 
-// buildProgressBarWidth is the number of cells in the TTY parsing bar.
-// buildProgressFileWidth caps the file label so the whole line stays within
-// an 80-column terminal alongside the counter, bar, and percent.
+// buildProgressLegacyWidth pads the plain parsing line piped output keeps.
+// buildProgressFileWidth caps the file the terminal's progress line names.
 const (
-	buildProgressBarWidth      = 20
-	buildProgressFileWidth     = 30
-	buildProgressLegacyWidth   = 50
-	buildProgressTerminalWidth = 80
+	buildProgressLegacyWidth = 50
+	buildProgressFileWidth   = 30
 )
 
-// buildProgressEnabled reports whether stderr is a terminal that can repaint
-// one line with carriage returns. Piped output keeps the legacy plain
-// "parsing i/n: file" line so tests, goldens, and logs stay stable.
+// buildProgress draws graft build's parsing on a terminal in Bubble Tea: a
+// spinner, a bar filling as files are read, and the file being read.
+type buildProgress struct {
+	spinner      spinner.Model
+	bar          progress.Model
+	index, total int
+	file         string
+	done         bool
+}
+
+// buildStepMsg says the build is reading file, the index-th of total from zero.
+type buildStepMsg struct {
+	index, total int
+	file         string
+}
+
+// buildDoneMsg says the build has read every file.
+type buildDoneMsg struct{}
+
+// buildProgressEnabled reports whether stderr is a terminal the progress can
+// redraw. Piped output keeps the legacy plain "parsing i/n: file" line so
+// tests, goldens, and logs stay stable.
 func buildProgressEnabled(w io.Writer) bool {
 	file, ok := w.(*os.File)
 	if !ok {
@@ -28,33 +47,71 @@ func buildProgressEnabled(w io.Writer) bool {
 	return isTerminal(file)
 }
 
-// formatBuildProgress renders one repaintable parsing line with a bar:
-// "\rparsing 3/9: [██████░░░░░░░░░░░░░░]  33% src/store.ts".
-// index is zero-based; a non-positive total renders a full bar instead of
-// dividing by zero.
-func formatBuildProgress(index, total int, file string) string {
-	percent := 100
-	filled := buildProgressBarWidth
-	if total > 0 {
-		percent = (index + 1) * 100 / total
-		filled = (index + 1) * buildProgressBarWidth / total
+// startBuildProgress shows the build's progress on the terminal w until
+// finish is called; finish leaves the count of files read on w's last line,
+// as the plain progress leaves its last, and returns once w is free.
+func startBuildProgress(w io.Writer) (step func(index, total int, file string), finish func()) {
+	program := tea.NewProgram(newBuildProgress(), tea.WithInput(nil), tea.WithOutput(w))
+	done := make(chan struct{})
+	var final tea.Model
+	go func() {
+		defer close(done)
+		final, _ = program.Run() // best effort: the progress only decorates the build
+	}()
+	step = func(index, total int, file string) {
+		program.Send(buildStepMsg{index: index, total: total, file: file})
 	}
-	if filled < 0 {
-		filled = 0
+	finish = func() {
+		program.Send(buildDoneMsg{})
+		<-done
+		// Bubble Tea erases its line on the way out.
+		if model, ok := final.(buildProgress); ok {
+			writeDiagnostic(w, "%s", model.summary())
+		}
 	}
-	if filled > buildProgressBarWidth {
-		filled = buildProgressBarWidth
+	return step, finish
+}
+
+func newBuildProgress() buildProgress {
+	return buildProgress{
+		spinner: spinner.New(spinner.WithSpinner(spinner.MiniDot)),
+		bar:     progress.New(progress.WithWidth(20), progress.WithoutPercentage()),
 	}
-	if percent < 0 {
-		percent = 0
+}
+
+func (m buildProgress) Init() tea.Cmd {
+	return m.spinner.Tick
+}
+
+func (m buildProgress) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case buildStepMsg:
+		m.index, m.total, m.file = msg.index, msg.total, msg.file
+	case buildDoneMsg:
+		m.done = true
+		return m, tea.Quit
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
 	}
-	if percent > 100 {
-		percent = 100
+	return m, nil
+}
+
+// summary is the progress's last word: how many files the build read. Files
+// replayed from the cache count too, so read, not parsed.
+func (m buildProgress) summary() string {
+	return fmt.Sprintf("✓ read %d file%s", m.total, pluralSuffix(m.total))
+}
+
+func (m buildProgress) View() tea.View {
+	switch {
+	case m.done:
+		return tea.NewView(m.summary())
+	case m.total == 0:
+		return tea.NewView(m.spinner.View() + " reading the repository…")
 	}
-	bar := strings.Repeat("█", filled) + strings.Repeat("░", buildProgressBarWidth-filled)
-	runes := []rune(file)
-	if len(runes) > buildProgressFileWidth {
-		runes = runes[:buildProgressFileWidth]
-	}
-	return fmt.Sprintf("\rparsing %d/%d: [%s] %3d%% %-30s", index+1, total, bar, percent, string(runes))
+	percent := float64(m.index+1) / float64(m.total)
+	return tea.NewView(fmt.Sprintf("%s parsing %d/%d %s %3d%% %s",
+		m.spinner.View(), m.index+1, m.total, m.bar.ViewAs(percent), int(percent*100), clip(m.file, buildProgressFileWidth)))
 }

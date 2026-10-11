@@ -307,9 +307,13 @@ func queryOptions(parsed invocation) callersOptions {
 	}
 	args := parsed.args
 	switch opts.command {
-	case "ask", "callers", "skeleton", "grep", "read", "show":
+	case "ask", "callers", "skeleton", "grep", "read":
 		opts.query = args[0]
 		args = args[1:]
+	case "show":
+		if len(args) > 0 {
+			opts.query, args = args[0], args[1:]
+		}
 	case "path":
 		opts.query, opts.target = args[0], args[1]
 		args = args[2:]
