@@ -153,6 +153,15 @@
       "effects": ["refresh: see queryRefresh"]
     },
     {
+      "name": "show",
+      "usage": "graft show [options] <symbol> [dir]",
+      "options": ["--in <path>", "--no-refresh"],
+      "backend": "go",
+      "stdout": "with a terminal on stdin and stdout, an interactive view on the alternate screen: the symbol in a box, its callers on the left and callees on the right joined by arrows, the selected edge and the line of code it stands for, keys to move, open a neighbor and go back; otherwise the same drawing once, plain, as tall as the longer column and as wide as the terminal or 100 columns",
+      "exit": { "0": "drawn, or the interactive view quit", "1": "`✗ no graph — run graft build first`, a multi-repo workspace root, an unknown symbol or prefix, a name several symbols share (listed), or a terminal that refused raw mode" },
+      "effects": ["refresh: see queryRefresh", "interactive: raw mode and the alternate screen, both restored on quit or on SIGTERM", "reads the source files of the edges it quotes"]
+    },
+    {
       "name": "dead",
       "usage": "graft dead [options] [dir]",
       "options": ["--in <path>", "--all", "--json", "--no-refresh"],
@@ -267,7 +276,7 @@
     }
   ],
   "queryRefresh": {
-    "commands": ["ask", "skeleton", "grep", "map", "callers", "blast", "path", "dead", "complexity", "hotspots", "cycles", "routes"],
+    "commands": ["ask", "skeleton", "grep", "map", "callers", "blast", "path", "show", "dead", "complexity", "hotspots", "cycles", "routes"],
     "disabledBy": ["--no-refresh", "GRAFT_NO_REFRESH"],
     "effects": [
       "no wiring.json: takes <C>/.cache/.sync.lock and tries a worktree seed; an empty <C>/.cache/ is left behind even outside a worktree",

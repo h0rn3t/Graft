@@ -48,6 +48,7 @@
 - [Agent integration](#agent-integration) — [MCP server](#mcp-server) · [Claude Code](#claude-code)
 - [CLI](#cli)
 - [Search & orient](#search--orient-graft-grep--graft-map) (`graft grep` / `graft map`)
+- [Call graph in the terminal](#call-graph-in-the-terminal-graft-show) (`graft show`)
 - [Code health & architecture](#code-health--architecture) (`graft path` / `dead` / `complexity` / `hotspots` / `cycles` / `routes`)
 - [Monorepos, submodules & multi-repo folders](#monorepos-submodules--multi-repo-folders)
 - [Tested on your popular repos](#tested-on-your-popular-repos)
@@ -376,6 +377,7 @@ graft map [dir]                      # directory clusters, local hubs, and globa
 graft map --max-dirs N --json        # choose the detail level and return JSON
 graft path <from> <to> [dir]         # shortest call chain between two symbols, through interface implementations
 graft path main Store.Get -d 6       # cap the chain at 6 steps (default 10); --json for scripts
+graft show <symbol> [dir]            # draw a symbol between its callers and callees; walk the graph with arrow keys in a terminal
 graft dead [dir]                     # functions and methods nothing calls, high and medium confidence, and what it left out
 graft dead --all --in src/           # also the low-confidence ones, each with its reason
 graft complexity [dir]               # the most complex functions by cyclomatic complexity
@@ -580,6 +582,29 @@ test/               3 files · 0 symbols
 
 hotspots: run · function · cmd/graft/main.go:L99-L103 · 31←  programSpec · function · cmd/graft/commander.go:L114-L160 · 18←  runWithInput · function · cmd/graft/main.go:L109-L141 · 13←  ...
 ```
+
+## Call graph in the terminal (`graft show`)
+
+`graft show <symbol>` draws a symbol between its callers and its callees: the
+symbol in a box, callers on the left, callees on the right, arrows pointing the
+way the calls go, dashed where an edge is inferred. In a terminal it is
+interactive — `↑↓` choose an edge, `←→` switch between callers and callees,
+`Enter` opens the chosen symbol, `Backspace` goes back the way you came, `q`
+quits — and the footer names the selected edge and quotes the line of code it
+stands for. Piped, it prints the drawing once, plain:
+
+```
+callers (2)                                 callees (2)
+                   ╭──────────────────╮
+Admin app.go:9 ─┐  │ Serve            │ ┌─▶ parse app.go:16
+Main app.go:13 ─┴─▶│ function         │─┴─▶ reply app.go:18
+                   │ app/app.go:L3-L6 │
+                   ╰──────────────────╯
+```
+
+A name several symbols share lists them; qualify it (`Type.method`, `pkg.Fn`)
+or narrow with `--in <path>`. Test and fixture copies yield to the production
+definition.
 
 ## Code health & architecture
 

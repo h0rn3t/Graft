@@ -14,6 +14,15 @@ func isTerminal(file *os.File) bool {
 	return windows.GetConsoleMode(windows.Handle(file.Fd()), &mode) == nil
 }
 
+// terminalSize returns the console window's width and height in cells.
+func terminalSize(file *os.File) (int, int, error) {
+	var info windows.ConsoleScreenBufferInfo
+	if err := windows.GetConsoleScreenBufferInfo(windows.Handle(file.Fd()), &info); err != nil {
+		return 0, 0, err
+	}
+	return int(info.Window.Right-info.Window.Left) + 1, int(info.Window.Bottom-info.Window.Top) + 1, nil
+}
+
 // makeRaw switches the console to raw virtual-terminal input and returns a restore function.
 func makeRaw(file *os.File) (func(), error) {
 	handle := windows.Handle(file.Fd())

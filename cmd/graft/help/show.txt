@@ -1,0 +1,18 @@
+Usage: graft show [options] <symbol> [dir]
+
+Draw a symbol between its callers and its callees in the terminal ($0, no LLM).
+In a terminal it is interactive: ↑↓ choose an edge, ←→ switch between callers
+and callees, Enter opens the chosen symbol, Backspace goes back, q quits; the
+footer quotes the line of code each edge stands for. Piped, it prints the
+drawing once
+
+Arguments:
+  symbol        bare name, qualified (Class.method), or package-qualified
+                (pkg.Fn)
+  dir           repository root (default: nearest ancestor with a graft/
+                index)
+
+Options:
+  --in <path>   narrow matches to nodes at or under this path prefix
+  --no-refresh  skip the freshness check — answer from the graph as-is
+  -h, --help    display help for command

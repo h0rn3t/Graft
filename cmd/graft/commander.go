@@ -142,6 +142,7 @@ func programSpec() *commandSpec {
 	add(program, "graft grep [options] <pattern> [dir]", "-i, --ignore-case", "--fixed", "--in <path>", "--json", "--no-refresh")
 	add(program, "graft map [options] [dir]", "--max-dirs <n>", "--json", "--no-refresh")
 	add(program, "graft path [options] <from> <to> [dir]", "-d, --depth <n>", "--in <path>", "--json", "--no-refresh")
+	add(program, "graft show [options] <symbol> [dir]", "--in <path>", "--no-refresh")
 	add(program, "graft dead [options] [dir]", "--in <path>", "--all", "--json", "--no-refresh")
 	add(program, "graft complexity [options] [dir]", "-n, --limit <n>", "--threshold <n>", "--in <path>", "--json", "--no-refresh")
 	add(program, "graft hotspots [options] [dir]", "--commits <n>", "-n, --limit <n>", "--in <path>", "--json", "--no-refresh")

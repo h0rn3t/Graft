@@ -228,6 +228,8 @@ func dispatchWithInput(ctx context.Context, parsed invocation, stdin io.Reader, 
 		return runMap(opts, stdout, stderr)
 	case "path":
 		return runPath(opts, stdout, stderr)
+	case "show":
+		return runShow(ctx, opts, stdin, stdout, stderr)
 	case "dead":
 		return runDead(opts, stdout, stderr)
 	case "complexity":
@@ -305,7 +307,7 @@ func queryOptions(parsed invocation) callersOptions {
 	}
 	args := parsed.args
 	switch opts.command {
-	case "ask", "callers", "skeleton", "grep", "read":
+	case "ask", "callers", "skeleton", "grep", "read", "show":
 		opts.query = args[0]
 		args = args[1:]
 	case "path":

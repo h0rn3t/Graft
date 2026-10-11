@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`graft show <symbol>` draws the call graph in the terminal.** The symbol sits in a box between its callers on the left and its callees on the right, joined by box-drawing lines whose arrows point the way the calls go, dashed where the edge is inferred. Callers are listed by file and line of the call, callees in the order the symbol calls them, each with the file and line the edge stands at. With a terminal on both ends the view is interactive, on the alternate screen: `↑↓` choose an edge, `←→` switch between callers and callees, `Enter` opens the chosen symbol and `Backspace` goes back to where the cursor was, `q` quits; the footer names the selected edge and quotes the line of code it stands for, and long columns scroll with the cursor and count what is above and below. Piped, it prints the drawing once without colors, 100 columns wide. A name several symbols share lists them instead of guessing, and test or fixture copies yield to the production definition. It takes `--in <path>` and `--no-refresh`, and refreshes the graph first like every query.
+
 ## 0.6.0-beta.1 - 2026-10-10
 
 ### Added

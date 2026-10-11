@@ -47,6 +47,10 @@ Commands:
   path [options] <from> <to> [dir]  Shortest call chain from one symbol to
                                     another, through interface implementations
                                     ($0, no LLM)
+  show [options] <symbol> [dir]     Draw a symbol between its callers and
+                                    callees in the terminal — interactive in a
+                                    TTY: walk the call graph with the arrow
+                                    keys ($0, no LLM)
   dead [options] [dir]              Functions and methods nothing calls, ranked
                                     by how sure that is ($0, no LLM)
   complexity [options] [dir]        Most complex functions; --threshold N fails
