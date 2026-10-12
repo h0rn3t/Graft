@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`graft read` on a name several definitions share answers with the most used one.** `graft_read_symbol` (`graft read`) answered "ambiguous symbol (N matches); select an exact node ID" whenever two definitions outside test and fixture code shared a name, which cost the agent a round to pick an ID. Now the definition with the most incoming edges answers, and its note names the others, up to five: on golang.org/x/tools, `read Load` returns `go/packages`' `Load` with the note `4 definitions match Load; this is the most used, also: go/loader/loader.go#Config.Load, …`. When the most used are tied, nothing tells them apart and the list of IDs stays. Test and fixture copies still yield to the production definition first.
+- **The prompt hook stays quiet unless the prompt names the code it would show.** A ranked answer is put in front of a prompt only when the prompt shares a word of three or more letters with the top hit's name. On this repository's 54 recorded user prompts, the hook had added unrelated code to 23. Examples: `inputUSDPerMtok`, for a model name found only in its price table, to "run the sweep on sonnet 5.5 low"; `mapContractGraph` to a release-version prompt; `mdText`, for the `md` of `RESEARCH.md` or `README.md`. Now it adds code to 8: the 15 it dropped were all of that kind, and it keeps every prompt that named a command or function (`graft routes`, `show`, `LSP`) and all 5 of the 8 benchmark questions it answered before.
+- **`graft build` of an unchanged tree keeps the language server's edges.** A rebuild ran the whole language-server pass again even when no file had changed: 14.7 s instead of 1.7 s on this repository with `gopls`, and minutes on a large one. The fingerprint now records that the graph holds a complete pass for exactly its file contents (`"lsp": true`). A build whose files all hash the same keeps that pass's edges and says so, and the graph comes out byte-identical to a fresh pass. A query-time refresh, a build without the server, or a pass cut short by its 10-minute budget clears the mark, so the next build asks the server again, as does `--no-reuse`.
+
 ## 0.6.0-beta.4 - 2026-10-11
 
 ### Changed

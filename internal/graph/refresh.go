@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -186,6 +187,30 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 	}
 	note := strings.Join(notes, "; ")
 	return RefreshResult{Refreshed: true, Drift: drift, Note: note}
+}
+
+// ReuseLSPEdges adds to graph the language-server edges of the graph last
+// written to outDir, and reports whether it did. It does so only when that
+// graph was enriched by a language server (WriteLSPFingerprint) with this
+// extractor and from the same contents as files, so a build of an unchanged
+// tree need not wait for the server again. A refresh or a build without the
+// server writes a plain fingerprint, after which the server is asked anew.
+func ReuseLSPEdges(graph *GraphV1, outDir string, files map[string]FingerprintFile) bool {
+	fingerprint, err := ReadFingerprint(outDir, ExtractorID)
+	if err != nil || fingerprint == nil || !fingerprint.LSP {
+		return false
+	}
+	if !maps.EqualFunc(fingerprint.Files, files, func(prior, current FingerprintFile) bool {
+		return prior.Hash != "" && prior.Hash == current.Hash
+	}) {
+		return false
+	}
+	prior, err := Read(WiringPath(outDir))
+	if err != nil {
+		return false
+	}
+	carryOverLSPEdges(graph, *prior)
+	return true
 }
 
 // carryOverLSPEdges keeps the compiler-resolved call edges of a graph built

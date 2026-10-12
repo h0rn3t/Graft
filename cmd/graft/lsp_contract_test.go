@@ -74,6 +74,61 @@ func TestBuildLSPAddsCompilerResolvedCallEdge(t *testing.T) {
 	}
 }
 
+func TestBuildLSPReusesAnUnchangedTree(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake language server launcher uses a POSIX shell")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("POSIX shell is unavailable")
+	}
+	t.Setenv("GRAFT_DIR", "")
+	root := t.TempDir()
+	sourcePath := filepath.Join(root, "main.go")
+	source := "package main\n\nfunc target() {}\nfunc caller() { receiver.Call() }\n"
+	if err := os.WriteFile(sourcePath, []byte(source), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	installFakeLSPServer(t, "gopls", sourcePath)
+	// Builds run in order on one tree: the server is asked again only when
+	// a file changed or --no-reuse says so, and the edge is kept either way.
+	for _, step := range []struct {
+		name      string
+		edit      string
+		flags     []string
+		wantAsked bool
+	}{
+		{name: "first build", wantAsked: true},
+		{name: "unchanged tree"},
+		{name: "--no-reuse", flags: []string{"--no-reuse"}, wantAsked: true},
+		{name: "after --no-reuse"},
+		{name: "a file changed", edit: source + "\n// edited\n", wantAsked: true},
+		{name: "unchanged again"},
+	} {
+		if step.edit != "" {
+			if err := os.WriteFile(sourcePath, []byte(step.edit), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var stdout, stderr strings.Builder
+		args := append([]string{"build", root}, step.flags...)
+		if status := run(args, &stdout, &stderr); status != 0 {
+			t.Fatalf("%s: run(%v) status = %d, want 0; stderr = %q", step.name, args, status, stderr.String())
+		}
+		if asked := strings.Contains(stderr.String(), "\rsummarizing"); asked != step.wantAsked {
+			t.Errorf("%s: run(%v) asked the language server = %t, want %t; stderr = %q", step.name, args, asked, step.wantAsked, stderr.String())
+		}
+		loaded, err := graph.Read(graph.WiringPath(filepath.Join(root, "graft")))
+		if err != nil {
+			t.Fatalf("%s: Read(%q) error = %v", step.name, graph.WiringPath(filepath.Join(root, "graft")), err)
+		}
+		if !slices.ContainsFunc(loaded.Edges, func(edge graph.EdgeV1) bool {
+			return edge.Source == "main.go#caller" && edge.Target == "main.go#target" && edge.Confidence == "lsp_resolved"
+		}) {
+			t.Errorf("%s: run(%v) edges = %#v, want the LSP-resolved caller to target edge", step.name, args, loaded.Edges)
+		}
+	}
+}
+
 func TestHookSyncSkipsLSP(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("fake language server launcher uses a POSIX shell")

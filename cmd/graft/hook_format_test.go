@@ -148,6 +148,7 @@ func TestHookRetrievalFormatting(t *testing.T) {
 func TestHookRelevantRetrievalGate(t *testing.T) {
 	base := func() graph.AskResult {
 		return graph.AskResult{
+			Query:    "verify the pkce code",
 			Mode:     "lexical",
 			Coverage: new(1.0),
 			Hits: []graph.AskHit{
@@ -182,6 +183,30 @@ func TestHookRelevantRetrievalGate(t *testing.T) {
 	}
 	if len(session.InjectedPointers) != 0 || session.Nudges != 0 {
 		t.Errorf("relevantHookRetrieval(weak) recorded pointers %v, nudges %d, want none", session.InjectedPointers, session.Nudges)
+	}
+
+	// The prompt must share a word of three or more letters with the top
+	// hit's name, whatever the coverage says.
+	for _, tc := range []struct {
+		name, query, title string
+		coverage, strong   float64
+		want               bool
+	}{
+		{name: "shared name word", query: "почини verify в pkce", title: "verify · function", coverage: 1, strong: 1, want: true},
+		{name: "top hit not named", query: "why does EnsureFreshGraph skip", title: "refreshBeforeQuery · function", coverage: 0.6, strong: 0.3, want: false},
+		{name: "identifier part", query: "how is the fresh graph kept", title: "EnsureFreshGraph · function", coverage: 0.6, strong: 0.5, want: true},
+		{name: "body word only", query: "запусти замер haiku", title: "inputUSDPerMtok · function", coverage: 1, strong: 0, want: false},
+		{name: "two-letter word", query: "сохрани в RESEARCH.md", title: "mdText · function", coverage: 0.34, strong: 0.34, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			result := base()
+			result.Query, result.Coverage, result.CoverageStrong = tc.query, new(tc.coverage), new(tc.strong)
+			result.Hits[0].Title = tc.title
+			got := relevantHookRetrieval(&result, fresh(), 3, "")
+			if (got != "") != tc.want {
+				t.Errorf("relevantHookRetrieval(%q, top %q) = %q, want injected %t", tc.query, tc.title, got, tc.want)
+			}
+		})
 	}
 
 	session = fresh()

@@ -234,7 +234,7 @@ Graft's native extractor is deterministic and local. It supports:
 - **C**: `.c`, `.h`
 - **C++**: `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh`
 
-`graft build` adds compiler-grade call edges by default when `rust-analyzer`, `clangd`, `gopls`, `pyright`, or `typescript-language-server` is installed (turn it off with `--no-lsp` or `GRAFT_NO_LSP=1`). A file with an unsupported extension is skipped and reported rather than guessed.
+`graft build` adds compiler-grade call edges by default when `rust-analyzer`, `clangd`, `gopls`, `pyright`, or `typescript-language-server` is installed (turn it off with `--no-lsp` or `GRAFT_NO_LSP=1`). When no file changed since the server's last complete pass, a rebuild keeps that pass's edges instead of asking it again; `--no-reuse` asks again. A file with an unsupported extension is skipped and reported rather than guessed.
 
 - **Generic extraction** — Rust, C, and C++ use tags queries for symbols and calls.
 - **Compiler-grade edges (by default)** — `graft build` adds precise
@@ -361,7 +361,7 @@ graft build --extensions .ts .py     # restrict source extensions
 graft build --include-dir <name>     # re-include a normally excluded dot-directory
 graft build --only-dir <path>        # build one repository-relative subtree
 graft build --no-lsp                 # skip the language server (used by default when on PATH)
-graft build --no-reuse               # re-parse every file instead of replaying the extraction cache
+graft build --no-reuse               # re-parse every file and ask the language server again instead of reusing caches
 graft build --follow-submodules      # include initialized submodules and persist the choice
 graft build --no-follow-submodules   # restore the default submodule boundary
 graft build --follow-nested-repos    # include nested git clones not tracked by the superproject

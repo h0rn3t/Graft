@@ -220,6 +220,19 @@ func relevantHookRetrieval(result *graph.AskResult, session *sessionState, cap i
 	if askWeakMatch(*result) {
 		return ""
 	}
+	// A ranked answer also needs the prompt to share a word of three or more
+	// letters with the top hit's name: on recorded prompts, a model name found
+	// only in a price table's body, or "md" of README.md matching mdText, put
+	// unrelated code in front of the turn.
+	if result.Coverage != nil || result.CoverageStrong != nil {
+		name, _, _ := strings.Cut(result.Hits[0].Title, " · ")
+		names := graph.AskTerms(name)
+		if !slices.ContainsFunc(graph.AskTerms(result.Query), func(term string) bool {
+			return len(term) >= 3 && slices.Contains(names, term)
+		}) {
+			return ""
+		}
+	}
 	// Only a strong top hit is inlined; every other hit is a pointer. A
 	// revision covers the hit's code whether or not it is shown, plus whether
 	// it was held back, so a changed body and a pointer later sent inlined are

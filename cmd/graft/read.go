@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -185,6 +186,29 @@ func resolveReadSelector(workspace graph.WorkspaceGraphs, selector string, budge
 			}
 			notes = append(notes, "also matches copies: "+strings.Join(copies, ", "))
 			matches = production
+		} else if len(production) > 1 {
+			// Several definitions share the name: the one most used answers,
+			// naming the rest, instead of costing a round to pick an ID. A tie
+			// gives no reason to prefer one and still lists them.
+			uses := make(map[int]map[string]int)
+			used := func(m readMatch) int {
+				if uses[m.child] == nil {
+					uses[m.child] = graph.InDegree(workspace.Loaded[m.child].Graph.Edges)
+				}
+				return uses[m.child][m.node.ID]
+			}
+			slices.SortStableFunc(production, func(a, b readMatch) int { return cmp.Compare(used(b), used(a)) })
+			if used(production[0]) > used(production[1]) {
+				var others []string
+				for _, m := range production[1:] {
+					others = append(others, m.id)
+				}
+				if len(others) > 5 {
+					others = append(others[:5], fmt.Sprintf("%d more", len(others)-5))
+				}
+				notes = append(notes, fmt.Sprintf("%d definitions match %s; this is the most used, also: %s", len(production), production[0].node.Name, strings.Join(others, ", ")))
+				matches = production[:1]
+			}
 		}
 	}
 	if len(matches) == 1 {

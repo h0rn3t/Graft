@@ -63,6 +63,9 @@ type LSPResult struct {
 	Added   int    // Number of new compiler-resolved edges.
 	Queried int    // Number of source definitions with call-hierarchy results.
 	Server  string // Resolved executable path, or empty when no server applies.
+	// Complete reports that the server started and every source file was
+	// asked before the budget ran out, so the edges cover the whole graph.
+	Complete bool
 }
 
 const (
@@ -208,6 +211,7 @@ func EnrichWithLSP(ctx context.Context, graph *GraphV1, root string) LSPResult {
 	}
 	close(next)
 	workers.Wait()
+	result.Complete = ctx.Err() == nil
 
 	existing := make(map[string]struct{}, len(graph.Edges))
 	for _, edge := range graph.Edges {

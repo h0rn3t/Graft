@@ -88,7 +88,7 @@ func TestHookPromptInlinesOnlyAStrongTopHit(t *testing.T) {
 	}
 
 	session := emptySessionState()
-	strong := graph.AskResult{Mode: "lexical", Hits: hits(), Coverage: coverage(1), CoverageStrong: coverage(1)}
+	strong := graph.AskResult{Query: "how does verify check a token", Mode: "lexical", Hits: hits(), Coverage: coverage(1), CoverageStrong: coverage(1)}
 	got := relevantHookRetrieval(&strong, &session, 3, "name:")
 	if !strings.Contains(got, "```\nfunction verify() {") {
 		t.Errorf("relevantHookRetrieval(strong top) = %q, want the top hit's code inlined", got)
@@ -103,7 +103,7 @@ func TestHookPromptInlinesOnlyAStrongTopHit(t *testing.T) {
 	}
 
 	session = emptySessionState()
-	moderate := graph.AskResult{Mode: "lexical", Hits: hits(), Coverage: coverage(0.8), CoverageStrong: coverage(0.3)}
+	moderate := graph.AskResult{Query: strong.Query, Mode: "lexical", Hits: hits(), Coverage: coverage(0.8), CoverageStrong: coverage(0.3)}
 	got = relevantHookRetrieval(&moderate, &session, 3, "name:")
 	if strings.Contains(got, "```") || !strings.Contains(got, " 1. verify · function: src/auth.ts:L1-L4 — function verify()") {
 		t.Errorf("relevantHookRetrieval(moderate top) = %q, want pointer lines only", got)

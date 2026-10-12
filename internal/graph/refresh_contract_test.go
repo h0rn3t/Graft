@@ -549,6 +549,72 @@ func TestEnsureFreshGraphReprobesAfterLockContract(t *testing.T) {
 	})
 }
 
+func TestReuseLSPEdgesContract(t *testing.T) {
+	lspEdge := EdgeV1{Source: "src/a.ts#a", Target: "src/b.ts#b", Relation: "calls", Confidence: "lsp_resolved"}
+	for _, tc := range []struct {
+		name string
+		// write stores the graph's fingerprint the way a build or refresh would.
+		write   func(outDir string, files map[string]FingerprintFile) error
+		changed bool
+		want    bool
+	}{
+		{name: "after a language-server pass", write: func(outDir string, files map[string]FingerprintFile) error {
+			return WriteLSPFingerprint(outDir, ExtractorID, files, nil)
+		}, want: true},
+		{name: "no language-server pass", write: func(outDir string, files map[string]FingerprintFile) error {
+			return WriteFingerprint(outDir, ExtractorID, files, nil)
+		}},
+		{name: "a file changed since the pass", write: func(outDir string, files map[string]FingerprintFile) error {
+			return WriteLSPFingerprint(outDir, ExtractorID, files, nil)
+		}, changed: true},
+		{name: "refreshed after the pass", write: func(outDir string, files map[string]FingerprintFile) error {
+			if err := WriteLSPFingerprint(outDir, ExtractorID, files, nil); err != nil {
+				return err
+			}
+			return WriteFingerprint(outDir, ExtractorID, files, nil)
+		}},
+		{name: "another extractor's pass", write: func(outDir string, files map[string]FingerprintFile) error {
+			return WriteLSPFingerprint(outDir, "go-v0", files, nil)
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			root := t.TempDir()
+			outDir := filepath.Join(root, "graft")
+			opts := sourcefiles.Options{OutDir: outDir, Extensions: []string{".ts"}}
+			writeRefreshSource(t, root, "src/a.ts", "export function a() {}\n")
+			writeRefreshSource(t, root, "src/b.ts", "export function b() {}\n")
+			built, err := BuildGraph(root, opts)
+			if err != nil {
+				t.Fatalf("BuildGraph(%q) error = %v, want nil", root, err)
+			}
+			enriched := built.Graph
+			enriched.Edges = append(slices.Clone(enriched.Edges), lspEdge)
+			if _, err := Write(enriched, outDir); err != nil {
+				t.Fatalf("Write(graph, %q) error = %v, want nil", outDir, err)
+			}
+			if err := tc.write(outDir, built.Fingerprints); err != nil {
+				t.Fatalf("writing the fingerprint to %q: %v", outDir, err)
+			}
+			if tc.changed {
+				writeRefreshSource(t, root, "src/a.ts", "export function a() { return 1; }\n")
+			}
+			rebuilt, err := BuildGraph(root, opts)
+			if err != nil {
+				t.Fatalf("BuildGraph(%q) error = %v, want nil", root, err)
+			}
+			if got := ReuseLSPEdges(&rebuilt.Graph, outDir, rebuilt.Fingerprints); got != tc.want {
+				t.Errorf("ReuseLSPEdges(%q) = %t, want %t", outDir, got, tc.want)
+			}
+			if got := slices.Contains(rebuilt.Graph.Edges, lspEdge); got != tc.want {
+				t.Errorf("ReuseLSPEdges(%q) kept the language-server edge = %t, want %t", outDir, got, tc.want)
+			}
+			if rebuilt.Graph.Meta.EdgeCount != len(rebuilt.Graph.Edges) {
+				t.Errorf("ReuseLSPEdges(%q) meta edge count = %d, want %d", outDir, rebuilt.Graph.Meta.EdgeCount, len(rebuilt.Graph.Edges))
+			}
+		})
+	}
+}
+
 func TestEnsureFreshGraphKeepsLSPEdgesAndCards(t *testing.T) {
 	t.Setenv("GRAFT_NO_REFRESH", "false")
 	// The graph's fingerprint is either this extractor's, so the refresh

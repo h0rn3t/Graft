@@ -77,7 +77,7 @@ func TestHookGoldensMatchGo(t *testing.T) {
 				hookAsk = func(context.Context, string, string, string, string) (graph.AskResult, bool) {
 					coverage := 1.0
 					return graph.AskResult{
-						Query: "auth verification", Mode: "lexical", Coverage: &coverage, CoverageStrong: &coverage,
+						Query: "auth verify", Mode: "lexical", Coverage: &coverage, CoverageStrong: &coverage,
 						Hits: []graph.AskHit{{Kind: "symbol", Title: "verify", Pointer: "src/auth.ts:L1-L4", Snippet: "function verify() {}", Score: 1}},
 					}, true
 				}

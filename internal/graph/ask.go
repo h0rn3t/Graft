@@ -459,6 +459,11 @@ func askSplitWords(text string) string {
 	return askCamelBoundary.ReplaceAllString(askAcronymBoundary.ReplaceAllString(text, "$1 $2"), "$1 $2")
 }
 
+// AskTerms splits text into the terms ask ranks by, as askTerms does.
+func AskTerms(text string) []string {
+	return askTerms(text)
+}
+
 // askTerms tokenizes like the TypeScript ask: identifiers split into words,
 // lower-cased, cut on non-alphanumerics, one-letter tokens and stop words
 // dropped, order kept. Each term is then folded with AskFold, so the index and

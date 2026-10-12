@@ -109,9 +109,17 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		return 1
 	}
 	// Only an explicit graft build enriches: hook syncs leave opts.lsp unset,
-	// since a language server can take minutes to index.
+	// since a language server can take minutes to index. A tree unchanged
+	// since the server's last complete pass keeps that pass's edges.
+	writeFingerprint := graph.WriteFingerprint
 	if value := os.Getenv("GRAFT_NO_LSP"); opts.lsp && (value == "" || value == "0" || value == "false") {
-		if lsp := graph.EnrichWithLSP(context.Background(), &built.Graph, root); lsp.Server != "" {
+		if !opts.noReuse && graph.ReuseLSPEdges(&built.Graph, contextDir, built.Fingerprints) {
+			writeFingerprint = graph.WriteLSPFingerprint
+			writeDiagnostic(stderr, "\rlsp: no file changed since the last language-server pass; kept its edges (--no-reuse asks again)")
+		} else if lsp := graph.EnrichWithLSP(context.Background(), &built.Graph, root); lsp.Server != "" {
+			if lsp.Complete {
+				writeFingerprint = graph.WriteLSPFingerprint
+			}
 			label := []rune("lsp:" + lsp.Server)
 			if len(label) > 50 {
 				label = label[:50]
@@ -138,7 +146,7 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		writeDiagnostic(stderr, "✗ %sask index write failed: %v\n", workspacePrefix, err)
 		return 1
 	}
-	if err := graph.WriteFingerprint(contextDir, graph.ExtractorID, built.Fingerprints, built.OnlyDirs); err != nil {
+	if err := writeFingerprint(contextDir, graph.ExtractorID, built.Fingerprints, built.OnlyDirs); err != nil {
 		writeDiagnostic(stderr, "✗ %sfingerprint write failed: %v\n", workspacePrefix, err)
 		return 1
 	}
