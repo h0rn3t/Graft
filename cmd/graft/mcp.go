@@ -728,7 +728,11 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 			return mcpResult{text: err.Error(), isError: true, thrown: true}
 		}
 		if result.TotalHits == 0 {
-			return mcpResult{text: scopeNote + grepZeroHitNote(result), isError: false}
+			var graphs []graph.GraphV1
+			if wiring, err := cache.loadGraph(contextDir); err == nil {
+				graphs = append(graphs, *wiring)
+			}
+			return mcpResult{text: scopeNote + grepZeroHitNote(result, graphs...), isError: false}
 		}
 		fitted := fitGrepResult(result, mcpGrepBudget)
 		text := scopeNote + formatGrepResult(fitted)
@@ -909,7 +913,7 @@ func mcpWorkspaceTraceCalls(root, contextDir, symbol string, args map[string]any
 }
 
 func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any) mcpResult {
-	result, coverage, err := federateGrep(root, contextDir, pattern, args["ignore_case"] == true, args["fixed"] == true, mcpString(args["in"]))
+	result, workspace, err := federateGrep(root, contextDir, pattern, args["ignore_case"] == true, args["fixed"] == true, mcpString(args["in"]))
 	if err != nil {
 		// The TypeScript tool reports a thrown error by its bare message.
 		text := err.Error()
@@ -918,15 +922,17 @@ func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any) mcp
 		}
 		return mcpResult{text: text, isError: true, thrown: true}
 	}
-	text := grepZeroHitNote(result)
-	if result.TotalHits > 0 {
+	var text string
+	if result.TotalHits == 0 {
+		text = grepZeroHitNote(result, workspace.Graphs()...)
+	} else {
 		fitted := fitGrepResult(result, mcpGrepBudget)
 		text = formatGrepResult(fitted)
 		if note := grepRemainderNote(result, fitted); note != "" {
 			text += note + "\n"
 		}
 	}
-	if coverage != "" {
+	if coverage := mcpWorkspaceCoverage(workspace); coverage != "" {
 		text += "\n" + coverage
 	}
 	return mcpResult{text: text, isError: false}

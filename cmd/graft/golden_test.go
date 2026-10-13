@@ -624,8 +624,9 @@ func goldenPrivateCache(rel string) bool {
 			continue
 		}
 		name := parts[i+1]
-		// The pending savings ledger postdates the frozen TypeScript fixtures.
-		if name == "savings-pending" {
+		// The pending savings ledger and the ask term cache postdate the frozen
+		// TypeScript fixtures.
+		if name == "savings-pending" || name == "ask-terms.json" {
 			return true
 		}
 		if strings.HasSuffix(name, ".json") && (strings.HasPrefix(name, "extract.") || strings.HasPrefix(name, "fingerprint.")) {

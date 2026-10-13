@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **A refresh tokenizes only the code that changed.** Each refresh rebuilt the ask index from scratch, splitting the name, path and body of every symbol into terms again, which took 40% of a one-file refresh. The term counts now persist in `graft/.cache/ask-terms.json`, keyed by the SHA-256 of each text, so only new or changed texts are tokenized. Document frequencies are counted again from the cached terms, so `ask-index.json` stays byte-identical to a full rebuild. On this repository a refresh after a one-file edit takes 1.08–1.12 s instead of 1.62–1.67 s. The first refresh after upgrading still tokenizes everything.
+- **`graft grep` and `graft_find_all` name the nearest symbol when nothing matches.** When a search for a name finds no hits, the answer now ends with the closest symbol names, as `graft read` and `graft callers` already did. A typo such as `EnsureFreshGrph` and another naming style such as `ensure_fresh_graph` both get `(Did you mean EnsureFreshGraph?)`. A regex gets no suggestion. When no name is spelled close to the query, all of these lookups now also compare names with case, `_` and `-` ignored.
+
 ## 0.6.0-beta.5 - 2026-10-12
 
 ### Changed

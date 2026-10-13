@@ -542,13 +542,19 @@ func suggestSimilar(word string, candidates []string) string {
 			similar[i] = "--" + similar[i]
 		}
 	}
-	switch len(similar) {
+	return didYouMean(similar)
+}
+
+// didYouMean offers names, already in order, as a "Did you mean" line, or
+// returns "" when there are none.
+func didYouMean(names []string) string {
+	switch len(names) {
 	case 0:
 		return ""
 	case 1:
-		return "\n(Did you mean " + similar[0] + "?)"
+		return "\n(Did you mean " + names[0] + "?)"
 	default:
-		return "\n(Did you mean one of " + strings.Join(similar, ", ") + "?)"
+		return "\n(Did you mean one of " + strings.Join(names, ", ") + "?)"
 	}
 }
 

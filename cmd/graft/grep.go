@@ -11,6 +11,7 @@ import (
 	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 
 	"github.com/h0rn3t/Graft/internal/graph"
 	"github.com/h0rn3t/Graft/internal/jsonjs"
@@ -50,7 +51,7 @@ func runGrep(opts callersOptions, stdout, stderr io.Writer) int {
 		return writeGrepJSON(stdout, stderr, result)
 	}
 	if result.TotalHits == 0 {
-		writeDiagnostic(stderr, "%s\n", grepZeroHitNote(result))
+		writeDiagnostic(stderr, "%s\n", grepZeroHitNote(result, *loaded))
 		return 0
 	}
 	text := formatGrepResult(result)
@@ -89,7 +90,7 @@ func grepSyntaxMessage(err error, pattern string, ignoreCase bool) (string, bool
 // runWorkspaceGrep greps every child of a workspace, as the TypeScript
 // runWorkspaceGrep does; --in does not apply there.
 func runWorkspaceGrep(root, contextDir string, opts callersOptions, stdout, stderr io.Writer) int {
-	result, coverage, err := federateGrep(root, contextDir, opts.query, opts.ignoreCase, opts.fixed, opts.in)
+	result, workspace, err := federateGrep(root, contextDir, opts.query, opts.ignoreCase, opts.fixed, opts.in)
 	if err != nil {
 		// Thrown in TypeScript, so the top-level handler prints the bare message.
 		if message, ok := grepSyntaxMessage(err, opts.query, opts.ignoreCase); ok {
@@ -102,8 +103,9 @@ func runWorkspaceGrep(root, contextDir string, opts callersOptions, stdout, stde
 	if opts.jsonOutput {
 		return writeGrepJSON(stdout, stderr, result)
 	}
+	coverage := mcpWorkspaceCoverage(workspace)
 	if result.TotalHits == 0 {
-		note := grepZeroHitNote(result)
+		note := grepZeroHitNote(result, workspace.Graphs()...)
 		if coverage != "" {
 			note += "\n" + coverage
 		}
@@ -438,12 +440,21 @@ func grepRemainderNote(full, fitted graph.GrepResult) string {
 	return "more hits in: " + strings.Join(parts, ", ") + " — narrow with in: one of these files or a tighter pattern"
 }
 
-func grepZeroHitNote(result graph.GrepResult) string {
+// grepZeroHitNote explains a search with no hits and, when the pattern is a
+// name, offers the nearest symbol names in graphs.
+func grepZeroHitNote(result graph.GrepResult, graphs ...graph.GraphV1) string {
 	note := fmt.Sprintf("no hits for \"%s\" in %d indexed files. The pattern may be too specific — retry graft grep with a bare symbol name or short substring (drop the receiver, full signature, and regex anchors). All indexed code was searched; use raw grep -rn only for genuinely unindexed files (docs, configs, brand-new files)", result.Pattern, result.FilesSearched)
-	if result.Truncated.Files == 0 {
-		return note
+	if result.Truncated.Files > 0 {
+		note = fmt.Sprintf("%s — note: %d indexed file%s could not be read (stale graph? run graft build)", note, result.Truncated.Files, pluralSuffix(result.Truncated.Files))
 	}
-	return fmt.Sprintf("%s — note: %d indexed file%s could not be read (stale graph? run graft build)", note, result.Truncated.Files, pluralSuffix(result.Truncated.Files))
+	// A plain or qualified name has a nearest name; a regex has none.
+	regex := strings.ContainsFunc(result.Pattern, func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && !strings.ContainsRune("_$-.:#", r)
+	})
+	if !regex {
+		note += similarSymbols(result.Pattern, graphs...)
+	}
+	return note
 }
 
 func pluralSuffix(count int) string {

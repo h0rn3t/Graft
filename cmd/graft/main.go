@@ -12,6 +12,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -585,8 +586,8 @@ func writeJSON(w, stderr io.Writer, query string, wiring graph.GraphV1, results 
 }
 
 // similarSymbols suggests the symbol names in graphs closest to the name query
-// selects, for a lookup that found nothing: most such misses are a typo or the
-// wrong case. A file path gets no suggestion.
+// selects, for a lookup that found nothing: most such misses are a typo, the
+// wrong case or another naming style. A file path gets no suggestion.
 func similarSymbols(query string, graphs ...graph.GraphV1) string {
 	for _, separator := range []string{"::", "#"} {
 		if _, name, ok := strings.CutLast(query, separator); ok {
@@ -607,7 +608,24 @@ func similarSymbols(query string, graphs ...graph.GraphV1) string {
 			}
 		}
 	}
-	return suggestSimilar(query, names)
+	if suggestion := suggestSimilar(query, names); suggestion != "" {
+		return suggestion
+	}
+	// No near spelling: the same name with case and word separators ignored,
+	// so ensure_fresh_graph still finds EnsureFreshGraph.
+	separators := strings.NewReplacer("_", "", "-", "")
+	folded := strings.ToLower(separators.Replace(query))
+	if folded == "" {
+		return ""
+	}
+	var same []string
+	for _, name := range names {
+		if strings.ToLower(separators.Replace(name)) == folded && !slices.Contains(same, name) {
+			same = append(same, name)
+		}
+	}
+	slices.SortFunc(same, localeCompareStrings())
+	return didYouMean(same)
 }
 
 func writeDiagnostic(w io.Writer, format string, args ...any) {

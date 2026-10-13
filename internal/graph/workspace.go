@@ -29,6 +29,15 @@ type WorkspaceGraphs struct {
 	Missing []string
 }
 
+// Graphs returns the loaded children's graphs in child order.
+func (workspace WorkspaceGraphs) Graphs() []GraphV1 {
+	graphs := make([]GraphV1, 0, len(workspace.Loaded))
+	for _, child := range workspace.Loaded {
+		graphs = append(graphs, child.Graph)
+	}
+	return graphs
+}
+
 // ReadWorkspaceChildren reads a version 1 index from contextDir.
 //
 // It returns sorted child names and false when the index is missing, oversized, or

@@ -219,11 +219,7 @@ func resolveReadSelector(workspace graph.WorkspaceGraphs, selector string, budge
 		message = "no exact symbol; use graft_find_all or graft_file_api to find its name"
 	}
 	if len(matches) == 0 {
-		graphs := make([]graph.GraphV1, 0, len(workspace.Loaded))
-		for _, child := range workspace.Loaded {
-			graphs = append(graphs, child.Graph)
-		}
-		message += similarSymbols(selector, graphs...)
+		message += similarSymbols(selector, workspace.Graphs()...)
 	}
 	if len(matches) > 1 {
 		message = fmt.Sprintf("ambiguous symbol (%d matches); select an exact node ID:", len(matches))

@@ -391,6 +391,12 @@ func TestMCPWorkspaceRoutesContract(t *testing.T) {
 			wantPhrases: []string{"api/src/app.ts", "web/src/app.ts", "2 of 3 workspace repos have graphs; run graft build to cover missing"},
 		},
 		{
+			name:        "grep without hits names the nearest symbol across children",
+			tool:        "graft_find_all",
+			args:        map[string]any{"pattern": "wroker"},
+			wantPhrases: []string{`no hits for "wroker"`, "\n(Did you mean worker?)", "2 of 3 workspace repos have graphs; run graft build to cover missing"},
+		},
+		{
 			name:        "grep narrows to one child with in",
 			tool:        "graft_find_all",
 			args:        map[string]any{"pattern": "worker", "in": "api/src"},

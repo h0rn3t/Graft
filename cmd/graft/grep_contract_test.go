@@ -1,13 +1,54 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/h0rn3t/Graft/internal/graph"
 )
+
+func TestGrepZeroHitSuggestsNamesContract(t *testing.T) {
+	dir := t.TempDir()
+	writeFixtureFile(t, dir, "internal/graph/refresh.go", "package graph\n\nfunc EnsureFreshGraph() {}\n")
+	file := graphNode("internal/graph/refresh.go", "refresh.go", "file", "internal/graph/refresh.go")
+	ensure := graphNode("internal/graph/refresh.go#EnsureFreshGraph", "EnsureFreshGraph", "function", "internal/graph/refresh.go")
+	ensure.Span = "L3-L3"
+	fixture := graph.GraphV1{Meta: graph.GraphMeta{Version: 1, NodeCount: 2, Languages: []string{"go"}}, Nodes: []graph.NodeV1{file, ensure}}
+	if _, err := graph.Write(fixture, filepath.Join(dir, "graft")); err != nil {
+		t.Fatalf("graph.Write(%q) error = %v", dir, err)
+	}
+	const suggestion = "\n(Did you mean EnsureFreshGraph?)"
+	tests := []struct {
+		pattern string
+		want    bool
+	}{
+		{pattern: "EnsureFreshGrph", want: true},
+		{pattern: "ensure_fresh_graph", want: true},
+		{pattern: "graph.EnsureFreshGrph", want: true},
+		{pattern: "Ensure.*Grph"},
+		{pattern: "zzqqxx"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.pattern, func(t *testing.T) {
+			var stdout, stderr bytes.Buffer
+			args := []string{"grep", tt.pattern, dir}
+			if status := run(args, &stdout, &stderr); status != 0 || stdout.Len() != 0 {
+				t.Fatalf("run(%v) = (%d, %q), want status 0 and no hits", args, status, stdout.String())
+			}
+			if got := strings.Contains(stderr.String(), suggestion); got != tt.want {
+				t.Errorf("run(%v) stderr = %q, want a suggestion: %t", args, stderr.String(), tt.want)
+			}
+			reply := mcpCall(t.Context(), dir, filepath.Join(dir, "graft"), "", "graft_find_all", map[string]any{"pattern": tt.pattern})
+			if got := strings.Contains(reply.text, suggestion); reply.isError || got != tt.want {
+				t.Errorf("mcpCall(graft_find_all, %q) = %#v, want a suggestion: %t", tt.pattern, reply, tt.want)
+			}
+		})
+	}
+}
 
 func TestFitGrepResultContract(t *testing.T) {
 	text := strings.Repeat("x", 100)
