@@ -41,7 +41,7 @@ type OwnerOptions struct {
 
 const (
 	halfLifeMS     = 120 * 24 * 60 * 60 * 1000
-	ownerSince     = "36.months"
+	ownerMonths    = 36
 	maxCommits     = 400
 	maxPathspec    = 80
 	minShare       = 0.15
@@ -94,8 +94,10 @@ func OwnersFor(ctx context.Context, root string, files []string, opts OwnerOptio
 	if now == 0 {
 		now = time.Now().UnixMilli()
 	}
+	// The window ends at now, not at git's clock, so a fixed Now sees fixed history.
+	since := time.UnixMilli(now).AddDate(0, -ownerMonths, 0).UTC().Format(time.RFC3339)
 	args := append([]string{
-		"log", "--no-merges", "--since=" + ownerSince, "-n", strconv.Itoa(maxCommits),
+		"log", "--no-merges", "--since=" + since, "-n", strconv.Itoa(maxCommits),
 		// --relative names the files relative to root, as the graph does.
 		"--format=\x01%H\x02%aI\x02%aN\x02%aE", "--name-only", "--relative", "--",
 	}, paths...)
@@ -265,6 +267,11 @@ type ownerLookup struct {
 // table has room for, and ranks the report's reviewers from them. Rows past
 // the table keep nil owners.
 func AttachOwners(ctx context.Context, root string, report *Report, opts OwnerOptions) {
+	// One reference time for every lookup and for the ages the report prints.
+	if opts.Now == 0 {
+		opts.Now = time.Now().UnixMilli()
+	}
+	report.ownersAt = opts.Now
 	lookups := make([]ownerLookup, 0, len(report.Areas)+len(report.Modules))
 	for _, area := range report.Areas {
 		lookups = append(lookups, ownerLookup{label: area.Label, files: area.Files, weight: 1, owners: &area.Owners})

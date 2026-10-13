@@ -1,6 +1,7 @@
 package blast
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"regexp"
@@ -341,7 +342,7 @@ func ownerSection(report *Report) []string {
 	if len(named) == 0 {
 		return nil
 	}
-	now := time.Now().UnixMilli()
+	now := cmp.Or(report.ownersAt, time.Now().UnixMilli())
 	out := []string{
 		"<details>",
 		fmt.Sprintf("<summary><strong>Who knows this code</strong> — %s across %s</summary>", pluralOf(len(people), "person", "people"), plural(len(rows), "area")),
@@ -551,7 +552,7 @@ func TextReport(report *Report) string {
 		lines = append(lines, fmt.Sprintf("%s also %s this code (not listed)", plural(len(files), "test suite"), verb), "")
 	}
 	if report.Reviewers != nil && len(*report.Reviewers) > 0 {
-		now := time.Now().UnixMilli()
+		now := cmp.Or(report.ownersAt, time.Now().UnixMilli())
 		lines = append(lines, "who to tag")
 		for _, person := range (*report.Reviewers)[:min(len(*report.Reviewers), MaxReviewers)] {
 			why := strings.Join(person.Areas, ", ")

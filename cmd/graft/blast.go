@@ -22,6 +22,10 @@ const (
 	blastGitTimeout = 2 * time.Minute
 )
 
+// blastNow is the time owner history is measured from; tests pin it to the
+// dates of their fixture commits.
+var blastNow = time.Now
+
 func runBlast(opts callersOptions, stdout, stderr io.Writer) int {
 	root, contextDir, shownDir, err := blastPaths(opts, stderr)
 	if err != nil {
@@ -76,7 +80,7 @@ func runBlast(opts callersOptions, stdout, stderr io.Writer) int {
 		if opts.base != nil {
 			authors = blast.DiffAuthors(ctx, root, *opts.base)
 		}
-		blast.AttachOwners(ctx, root, report, blast.OwnerOptions{Exclude: append(authors, opts.prAuthors...)})
+		blast.AttachOwners(ctx, root, report, blast.OwnerOptions{Exclude: append(authors, opts.prAuthors...), Now: blastNow().UnixMilli()})
 	}
 
 	var output string

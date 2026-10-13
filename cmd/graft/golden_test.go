@@ -848,6 +848,9 @@ func perCommandGoldenNames(t *testing.T, suite string) []string {
 }
 
 func TestBlastGoldensMatchGo(t *testing.T) {
+	// The fixture commits are dated 2026-01-01, and the goldens read "9mo ago".
+	blastNow = func() time.Time { return time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC) }
+	t.Cleanup(func() { blastNow = time.Now })
 	bundle, err := filepath.Abs(filepath.Join("testdata", "cli-go-acceptance", "blast", "fixture.bundle"))
 	if err != nil {
 		t.Fatal(err)

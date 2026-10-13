@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // newRepo returns an empty git repository with main as its branch, or skips
@@ -238,5 +239,34 @@ func TestAttachOwnersLooksUpOnlyTheRowsTheTableShows(t *testing.T) {
 	}
 	if report.Reviewers == nil || len(*report.Reviewers) != 1 || !slices.Equal((*report.Reviewers)[0].Areas, wantLabels) {
 		t.Errorf("AttachOwners() reviewers = %+v, want Ann Author over %q", report.Reviewers, wantLabels)
+	}
+}
+
+func TestAttachOwnersMeasuresHistoryFromNow(t *testing.T) {
+	repo := newRepo(t)
+	writeRepoFile(t, repo, "a.ts", "a\n")
+	t.Setenv("GIT_AUTHOR_DATE", "2026-01-01T00:00:00Z")
+	t.Setenv("GIT_COMMITTER_DATE", "2026-01-01T00:00:00Z")
+	commitAllAs(t, repo, "Ann Author", "ann@example.com", "base")
+	tests := []struct {
+		name string
+		now  time.Time
+		want string // the tag line, or "" when the commit falls out of the window
+	}{
+		{name: "nine months on", now: time.Date(2026, time.October, 1, 0, 0, 0, 0, time.UTC), want: "  Ann Author — area · 1 commit, last 9mo ago\n"},
+		{name: "past the window", now: time.Date(2029, time.June, 1, 0, 0, 0, 0, time.UTC)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			report := &Report{Areas: []*ChangedArea{{Label: "area", Files: []string{"a.ts"}}}}
+			AttachOwners(t.Context(), repo, report, OwnerOptions{Now: tt.now.UnixMilli()})
+			got := TextReport(report)
+			if tt.want == "" && strings.Contains(got, "who to tag") {
+				t.Errorf("TextReport(owners at %s) = %q, want no one to tag", tt.now, got)
+			}
+			if tt.want != "" && !strings.Contains(got, tt.want) {
+				t.Errorf("TextReport(owners at %s) = %q, want the line %q", tt.now, got, tt.want)
+			}
+		})
 	}
 }

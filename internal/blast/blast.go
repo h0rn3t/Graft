@@ -108,6 +108,9 @@ type Report struct {
 	TestModules []*ImpactedModule `json:"testModules"`
 	Areas       []*ChangedArea    `json:"areas"`
 	Reviewers   *[]Reviewer       `json:"reviewers,omitzero"`
+	// ownersAt is the time AttachOwners measured history from, in
+	// milliseconds; zero means the current time.
+	ownersAt int64
 }
 
 var (
