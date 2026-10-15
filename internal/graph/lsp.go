@@ -71,6 +71,24 @@ type LSPResult struct {
 	Answered bool
 }
 
+// LSPStage is the step a language-server pass is on.
+type LSPStage int
+
+const (
+	LSPStarting LSPStage = iota + 1 // starting and initializing the server
+	LSPIndexing                     // waiting for its first answer while it indexes
+	LSPAsking                       // asking it about files, Done of Total so far
+)
+
+// LSPProgress reports how far a language-server pass got.
+type LSPProgress struct {
+	Stage  LSPStage
+	Server string // resolved executable path
+	Done   int    // files handed to the server so far
+	Total  int    // files to ask about
+	File   string // repository-relative path of the file just handed over
+}
+
 const (
 	// lspTotalBudget bounds a whole enrichment run, server startup and
 	// indexing included; what was collected by then is kept.
@@ -84,11 +102,11 @@ const (
 )
 
 // enrichWithLSP adds the call edges server resolves for the functions and
-// methods ask reports, or for all of them when ask is nil. Server startup,
-// indexing, and request failures leave the existing graph usable and return
-// the edges collected so far. The run stops after lspTotalBudget even when ctx
-// allows longer.
-func enrichWithLSP(ctx context.Context, graph *GraphV1, root string, server lspServer, ask func(NodeV1) bool) LSPResult {
+// methods ask reports, or for all of them when ask is nil, and tells progress
+// each step it takes. Server startup, indexing, and request failures leave the
+// existing graph usable and return the edges collected so far. The run stops
+// after lspTotalBudget even when ctx allows longer.
+func enrichWithLSP(ctx context.Context, graph *GraphV1, root string, server lspServer, ask func(NodeV1) bool, progress func(LSPProgress)) LSPResult {
 	result := LSPResult{Server: server.command}
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err == nil {
@@ -160,6 +178,7 @@ func enrichWithLSP(ctx context.Context, graph *GraphV1, root string, server lspS
 		result.Complete = true // Nothing to ask; the server need not start.
 		return result
 	}
+	progress(LSPProgress{Stage: LSPStarting, Server: server.command, Total: len(files)})
 	ctx, cancel := context.WithTimeout(ctx, lspTotalBudget)
 	defer cancel()
 	client, err := startLSPClient(ctx, server, root)
@@ -170,6 +189,7 @@ func enrichWithLSP(ctx context.Context, graph *GraphV1, root string, server lspS
 	if !client.initialize(ctx) {
 		return result
 	}
+	progress(LSPProgress{Stage: LSPIndexing, Server: server.command, Total: len(files)})
 
 	probes := make([]lspProbe, 0, lspReadyProbes)
 	for _, file := range files {
@@ -206,6 +226,7 @@ func enrichWithLSP(ctx context.Context, graph *GraphV1, root string, server lspS
 			break
 		}
 		next <- index
+		progress(LSPProgress{Stage: LSPAsking, Server: server.command, Done: index + 1, Total: len(files), File: files[index].sources[0].Path})
 	}
 	close(next)
 	workers.Wait()

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`graft build` shows the language server's progress, and a workspace build shows which repo it is on.** On a terminal the build's progress line used to cover only parsing and then went quiet while the language server ran, which on a large Go repo takes minutes. Now it follows the server through its stages: `gopls: starting…`, `gopls: indexing… 42s`, then `gopls 1102/3291 ▌▌▌░░ 33% internal/app/x.go · ~2m10s left`. The time left is estimated once files have been asked about for 5 s. A workspace build used to show no progress at all. Now each repo gets the same line, prefixed with its place: `[3/51] dhcore-go · parsing 120/450 …`. Piped output is unchanged.
+
 ## 0.6.0-beta.9 - 2026-10-15
 
 ### Changed

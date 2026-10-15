@@ -60,6 +60,7 @@ type callersOptions struct {
 	followSubmodules   *bool
 	followNestedRepos  *bool
 	workspaceChildName string
+	workspaceStep      string // the child's place in a workspace build, as "3/51"
 	base               *string
 	format             string
 	noOwners           bool

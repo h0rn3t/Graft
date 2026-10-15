@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/h0rn3t/Graft/internal/graph"
+	"github.com/h0rn3t/Graft/internal/sourcefiles"
 )
 
 func TestBuildLSPAddsCompilerResolvedCallEdge(t *testing.T) {
@@ -201,6 +202,50 @@ func TestBuildLSPAsksOnlyAboutChangedCode(t *testing.T) {
 		}) {
 			t.Errorf("%s: edges = %#v, want the LSP-resolved caller to target edge kept", step.name, loaded.Edges)
 		}
+	}
+}
+
+func TestLSPPassReportsItsStages(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake language server launcher uses a POSIX shell")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("POSIX shell is unavailable")
+	}
+	t.Setenv("GRAFT_DIR", "")
+	root := t.TempDir()
+	mainPath := filepath.Join(root, "main.go")
+	if err := os.WriteFile(mainPath, []byte("package main\n\nfunc target() {}\nfunc caller() { receiver.Call() }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "other.go"), []byte("package main\n\nfunc other() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	installFakeLSPServer(t, "gopls", mainPath)
+	outDir := filepath.Join(root, "graft")
+	built, err := graph.BuildGraph(root, sourcefiles.Options{OutDir: outDir})
+	if err != nil {
+		t.Fatalf("graph.BuildGraph(%q) error = %v, want nil", root, err)
+	}
+	var got []graph.LSPProgress
+	graph.RunLSPPass(t.Context(), &built.Graph, root, outDir, built.Fingerprints, graph.LSPPassOptions{
+		Ask: true,
+		OnProgress: func(progress graph.LSPProgress) {
+			if filepath.Base(progress.Server) != "gopls" {
+				t.Errorf("LSPProgress.Server = %q, want the gopls on PATH", progress.Server)
+			}
+			progress.Server = ""
+			got = append(got, progress)
+		},
+	})
+	want := []graph.LSPProgress{
+		{Stage: graph.LSPStarting, Total: 2},
+		{Stage: graph.LSPIndexing, Total: 2},
+		{Stage: graph.LSPAsking, Done: 1, Total: 2, File: "main.go"},
+		{Stage: graph.LSPAsking, Done: 2, Total: 2, File: "other.go"},
+	}
+	if !slices.Equal(got, want) {
+		t.Errorf("RunLSPPass() progress = %+v, want %+v", got, want)
 	}
 }
 

@@ -24,12 +24,13 @@ func runWorkspaceBuild(opts callersOptions, root, contextDir string, children []
 		)
 	}
 	writeDiagnostic(stderr, "building %d workspace repos: %s\n", len(children), strings.Join(children, ", "))
-	for _, child := range children {
+	for index, child := range children {
 		childOptions := opts
 		childOptions.root = filepath.Join(root, child)
 		childOptions.rootSet = true
 		childOptions.contextDir = ""
 		childOptions.workspaceChildName = child
+		childOptions.workspaceStep = fmt.Sprintf("%d/%d", index+1, len(children))
 		if status := runBuild(childOptions, stdout, stderr); status != 0 {
 			return status
 		}

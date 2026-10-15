@@ -67,11 +67,16 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		return 1
 	}
 	var onProgress func(index, total int, file string)
+	var onLSPProgress func(graph.LSPProgress)
 	finishProgress := func() {}
 	switch {
-	case opts.workspaceChildName != "":
 	case buildProgressEnabled(stderr):
-		onProgress, finishProgress = startBuildProgress(stderr)
+		repo := ""
+		if opts.workspaceChildName != "" {
+			repo = "[" + opts.workspaceStep + "] " + opts.workspaceChildName
+		}
+		onProgress, onLSPProgress, finishProgress = startBuildProgress(stderr, repo)
+	case opts.workspaceChildName != "":
 	default:
 		onProgress = func(index, total int, file string) {
 			runes := []rune(file)
@@ -86,7 +91,9 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		NoReuse: opts.noReuse, NoSeed: opts.contextDir != "" || (opts.workspaceChildName == "" && os.Getenv("GRAFT_DIR") != ""),
 		OnProgress: onProgress,
 	})
-	finishProgress()
+	if err != nil || len(built.Unsupported) > 0 || len(built.Errors) > 0 {
+		finishProgress()
+	}
 	if err != nil {
 		if opts.workspaceChildName == "" {
 			writeDiagnostic(stderr, "\n")
@@ -114,9 +121,11 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 	// build that asks asks only about the code changed since.
 	noLSP := os.Getenv("GRAFT_NO_LSP")
 	lsp := graph.RunLSPPass(context.Background(), &built.Graph, root, contextDir, built.Fingerprints, graph.LSPPassOptions{
-		Ask:   opts.lsp && (noLSP == "" || noLSP == "0" || noLSP == "false"),
-		Reuse: !opts.noReuse,
+		Ask:        opts.lsp && (noLSP == "" || noLSP == "0" || noLSP == "false"),
+		Reuse:      !opts.noReuse,
+		OnProgress: onLSPProgress,
 	})
+	finishProgress()
 	lspNoted := true
 	switch {
 	case lsp.Kept:

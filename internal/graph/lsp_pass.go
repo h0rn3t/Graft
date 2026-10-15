@@ -34,6 +34,9 @@ type LSPPassOptions struct {
 	// Reuse starts from the pass recorded in the context directory and keeps
 	// its edges for code unchanged since; without it every function is asked.
 	Reuse bool
+	// OnProgress, when set, is told each step of the pass, on the goroutine
+	// that runs it.
+	OnProgress func(LSPProgress)
 }
 
 // LSPPass is the outcome of a build's language-server pass, which
@@ -113,7 +116,11 @@ func RunLSPPass(ctx context.Context, graph *GraphV1, root, outDir string, files 
 			ask = func(node NodeV1) bool { return requery[node.ID] }
 		}
 	}
-	pass := LSPPass{LSPResult: enrichWithLSP(ctx, graph, root, server, ask)}
+	progress := options.OnProgress
+	if progress == nil {
+		progress = func(LSPProgress) {}
+	}
+	pass := LSPPass{LSPResult: enrichWithLSP(ctx, graph, root, server, ask, progress)}
 	switch {
 	case pass.Complete:
 		pass.record = newLSPPassRecord(server, files, false)
