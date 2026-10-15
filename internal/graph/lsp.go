@@ -63,9 +63,12 @@ type LSPResult struct {
 	Added   int    // Number of new compiler-resolved edges.
 	Queried int    // Number of source definitions with call-hierarchy results.
 	Server  string // Resolved executable path, or empty when no server applies.
-	// Complete reports that the server started and every source file was
-	// asked before the budget ran out, so the edges cover the whole graph.
+	// Complete reports that every function to be asked about was asked
+	// before the budget ran out, so the edges cover all of them.
 	Complete bool
+	// Answered reports that the server answered a readiness probe; one that
+	// never did, by failing to start or to index in time, added nothing.
+	Answered bool
 }
 
 const (
@@ -80,43 +83,19 @@ const (
 	lspReadyProbes = 3
 )
 
-// EnrichWithLSP adds compiler-resolved call edges when a supported language
-// server is installed. Server startup, indexing, and request failures leave the
-// existing graph usable and return the edges collected so far. The run stops
-// after lspTotalBudget even when ctx allows longer.
-func EnrichWithLSP(ctx context.Context, graph *GraphV1, root string) LSPResult {
-	result := LSPResult{}
-	if graph == nil {
-		return result
-	}
-	languages := make(map[string]struct{})
-	for _, node := range graph.Nodes {
-		if language := lspLanguage(node.Path); language != "" {
-			languages[language] = struct{}{}
-		}
-	}
-	server, ok := pickLSPServer(languages)
-	if !ok {
-		return result
-	}
-	result.Server = server.command
-
+// enrichWithLSP adds the call edges server resolves for the functions and
+// methods ask reports, or for all of them when ask is nil. Server startup,
+// indexing, and request failures leave the existing graph usable and return
+// the edges collected so far. The run stops after lspTotalBudget even when ctx
+// allows longer.
+func enrichWithLSP(ctx context.Context, graph *GraphV1, root string, server lspServer, ask func(NodeV1) bool) LSPResult {
+	result := LSPResult{Server: server.command}
 	realRoot, err := filepath.EvalSymlinks(root)
 	if err == nil {
 		root = realRoot
 	}
 	root, err = filepath.Abs(root)
 	if err != nil {
-		return result
-	}
-	ctx, cancel := context.WithTimeout(ctx, lspTotalBudget)
-	defer cancel()
-	client, err := startLSPClient(ctx, server, root)
-	if err != nil {
-		return result // Server startup failure leaves the AST graph intact.
-	}
-	defer client.close()
-	if !client.initialize(ctx) {
 		return result
 	}
 
@@ -165,6 +144,9 @@ func EnrichWithLSP(ctx context.Context, graph *GraphV1, root string) LSPResult {
 		if _, ok := serverLanguages[lspLanguage(node.Path)]; !ok {
 			continue
 		}
+		if ask != nil && !ask(node) {
+			continue
+		}
 		index, ok := fileIndex[node.Path]
 		if !ok {
 			index = len(files)
@@ -172,6 +154,21 @@ func EnrichWithLSP(ctx context.Context, graph *GraphV1, root string) LSPResult {
 			files = append(files, lspSourceFile{abs: filepath.Join(root, filepath.FromSlash(node.Path))})
 		}
 		files[index].sources = append(files[index].sources, node)
+	}
+
+	if len(files) == 0 {
+		result.Complete = true // Nothing to ask; the server need not start.
+		return result
+	}
+	ctx, cancel := context.WithTimeout(ctx, lspTotalBudget)
+	defer cancel()
+	client, err := startLSPClient(ctx, server, root)
+	if err != nil {
+		return result // Server startup failure leaves the AST graph intact.
+	}
+	defer client.close()
+	if !client.initialize(ctx) {
+		return result
 	}
 
 	probes := make([]lspProbe, 0, lspReadyProbes)
@@ -190,6 +187,7 @@ func EnrichWithLSP(ctx context.Context, graph *GraphV1, root string) LSPResult {
 	if !client.waitUntilReady(ctx, probes) {
 		return result
 	}
+	result.Answered = true
 
 	// Workers fill calls per file; the merge below walks them in source order,
 	// so the edges added do not depend on which worker answered first.

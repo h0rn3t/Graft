@@ -234,7 +234,7 @@ Graft's native extractor is deterministic and local. It supports:
 - **C**: `.c`, `.h`
 - **C++**: `.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh`
 
-`graft build` adds compiler-grade call edges by default when `rust-analyzer`, `clangd`, `gopls`, `pyright`, or `typescript-language-server` is installed (turn it off with `--no-lsp` or `GRAFT_NO_LSP=1`). When no file changed since the server's last complete pass, a rebuild keeps that pass's edges instead of asking it again; `--no-reuse` asks again. A file with an unsupported extension is skipped and reported rather than guessed.
+`graft build` adds compiler-grade call edges by default when `rust-analyzer`, `clangd`, `gopls`, `pyright`, or `typescript-language-server` is installed (turn it off with `--no-lsp` or `GRAFT_NO_LSP=1`). A rebuild asks the server only about functions in files changed since its last pass and the functions that reference those files, and keeps the rest of its edges. A server that gave no answer is not started again until a file changes. `--no-reuse` asks about everything again. A file with an unsupported extension is skipped and reported rather than guessed.
 
 - **Generic extraction** — Rust, C, and C++ use tags queries for symbols and calls.
 - **Compiler-grade edges (by default)** — `graft build` adds precise
@@ -243,6 +243,7 @@ Graft's native extractor is deterministic and local. It supports:
   `gopls` (Go), `pyright` (Python), `typescript-language-server` (TS/JS).
   It's best-effort — with no server installed the graph is unchanged.
   Hook-driven background syncs never start a language server; `--no-lsp` skips it.
+  Both keep the edges the server found for unchanged code.
 
 ---
 

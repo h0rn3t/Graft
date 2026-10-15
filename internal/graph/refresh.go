@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -306,7 +305,7 @@ func EnsureFreshGraph(root string, options RefreshOptions) (result RefreshResult
 		prior, _ = Read(WiringPath(outDir))
 	}
 	if prior != nil {
-		carryOverLSPEdges(&built.Graph, *prior)
+		carryOverLSPEdges(&built.Graph, *prior, nil)
 	}
 	var notes []string
 	if seedNote != "" {
@@ -384,36 +383,13 @@ func EnsureFreshGraph(root string, options RefreshOptions) (result RefreshResult
 	return RefreshResult{Refreshed: true, Drift: drift, Note: note}
 }
 
-// ReuseLSPEdges adds to graph the language-server edges of the graph last
-// written to outDir, and reports whether it did. It does so only when that
-// graph was enriched by a language server (WriteLSPFingerprint) with this
-// extractor and from the same contents as files, so a build of an unchanged
-// tree need not wait for the server again. A refresh or a build without the
-// server writes a plain fingerprint, after which the server is asked anew.
-func ReuseLSPEdges(graph *GraphV1, outDir string, files map[string]FingerprintFile) bool {
-	fingerprint, err := ReadFingerprint(outDir, ExtractorID)
-	if err != nil || fingerprint == nil || !fingerprint.LSP {
-		return false
-	}
-	if !maps.EqualFunc(fingerprint.Files, files, func(prior, current FingerprintFile) bool {
-		return prior.Hash != "" && prior.Hash == current.Hash
-	}) {
-		return false
-	}
-	prior, err := Read(WiringPath(outDir))
-	if err != nil {
-		return false
-	}
-	carryOverLSPEdges(graph, *prior)
-	return true
-}
-
 // carryOverLSPEdges keeps the compiler-resolved call edges of a graph built
 // with --lsp, which a refresh does not recompute. An edge survives when both
-// ends still exist and the calling file's content hash is the one it had in
-// the prior graph. The hash, not the drift record, decides: after an extractor
+// ends still exist, the calling file's content hash is the one it had in the
+// prior graph, and the caller is not in requery, the functions about to be
+// asked again. The hash, not the drift record, decides: after an extractor
 // upgrade every file is re-parsed with no drift known, yet most are unchanged.
-func carryOverLSPEdges(graph *GraphV1, prior GraphV1) {
+func carryOverLSPEdges(graph *GraphV1, prior GraphV1, requery map[string]bool) {
 	priorHash := make(map[string]string)
 	for _, node := range prior.Nodes {
 		if node.Kind == "file" {
@@ -438,7 +414,7 @@ func carryOverLSPEdges(graph *GraphV1, prior GraphV1) {
 		}
 		sourcePath, sourceOK := pathOf[edge.Source]
 		_, targetOK := pathOf[edge.Target]
-		if !sourceOK || !targetOK || !unchanged[sourcePath] {
+		if !sourceOK || !targetOK || !unchanged[sourcePath] || requery[edge.Source] {
 			continue
 		}
 		key := edge.Source + "\x00" + string(edge.Relation) + "\x00" + edge.Target

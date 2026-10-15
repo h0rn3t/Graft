@@ -25,9 +25,6 @@ type Fingerprint struct {
 	Extractor string                     `json:"extractor"`
 	Files     map[string]FingerprintFile `json:"files"`
 	OnlyDirs  []string                   `json:"onlyDirs,omitempty"`
-	// LSP reports that the graph written with this fingerprint holds every
-	// edge a language server resolved for exactly these file contents.
-	LSP bool `json:"lsp,omitzero"`
 }
 
 // FingerprintFile stores a source file's stat and decoded-content hash.
@@ -126,16 +123,6 @@ func ReadFingerprintScope(outDir string) *Fingerprint {
 // WriteFingerprint atomically writes a fingerprint sidecar. File paths are
 // repository-relative POSIX paths, matching GraphV1 and TypeScript cache keys.
 func WriteFingerprint(outDir, extractor string, files map[string]FingerprintFile, onlyDirs []string) error {
-	return writeFingerprint(outDir, extractor, files, onlyDirs, false)
-}
-
-// WriteLSPFingerprint is WriteFingerprint for a graph a language server has
-// just enriched, so a build of the same contents can reuse its edges.
-func WriteLSPFingerprint(outDir, extractor string, files map[string]FingerprintFile, onlyDirs []string) error {
-	return writeFingerprint(outDir, extractor, files, onlyDirs, true)
-}
-
-func writeFingerprint(outDir, extractor string, files map[string]FingerprintFile, onlyDirs []string, lsp bool) error {
 	path, err := FingerprintPath(outDir, extractor)
 	if err != nil {
 		return err
@@ -147,7 +134,6 @@ func writeFingerprint(outDir, extractor string, files map[string]FingerprintFile
 		Version:   fingerprintVersion,
 		Extractor: extractor,
 		Files:     maps.Clone(files),
-		LSP:       lsp,
 	}
 	if record.Files == nil {
 		record.Files = make(map[string]FingerprintFile)

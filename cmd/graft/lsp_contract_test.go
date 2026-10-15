@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/url"
@@ -125,6 +126,80 @@ func TestBuildLSPReusesAnUnchangedTree(t *testing.T) {
 			return edge.Source == "main.go#caller" && edge.Target == "main.go#target" && edge.Confidence == "lsp_resolved"
 		}) {
 			t.Errorf("%s: run(%v) edges = %#v, want the LSP-resolved caller to target edge", step.name, args, loaded.Edges)
+		}
+	}
+}
+
+func TestBuildLSPAsksOnlyAboutChangedCode(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("fake language server launcher uses a POSIX shell")
+	}
+	if _, err := exec.LookPath("sh"); err != nil {
+		t.Skip("POSIX shell is unavailable")
+	}
+	t.Setenv("GRAFT_DIR", "")
+	root := t.TempDir()
+	mainPath := filepath.Join(root, "main.go")
+	if err := os.WriteFile(mainPath, []byte("package main\n\nfunc target() {}\nfunc caller() { receiver.Call() }\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	otherPath := filepath.Join(root, "other.go")
+	if err := os.WriteFile(otherPath, []byte("package main\n\nfunc other() {}\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	installFakeLSPServer(t, "gopls", mainPath)
+	log := filepath.Join(t.TempDir(), "asked.log")
+	t.Setenv("GRAFT_TEST_LSP_LOG", log)
+	// Builds and hook syncs run in order on one tree. A sync never asks the
+	// server and keeps its edges; a build asks only about files changed
+	// since the server's last pass.
+	for _, step := range []struct {
+		name      string
+		edit      bool // other.go changes before the step
+		sync      bool // a hook sync instead of graft build
+		wantAsked []string
+	}{
+		{name: "first build", wantAsked: []string{"main.go", "other.go"}},
+		{name: "hook sync after an edit", edit: true, sync: true},
+		{name: "build after the sync", wantAsked: []string{"other.go"}},
+		{name: "unchanged build"},
+	} {
+		if step.edit {
+			if err := os.WriteFile(otherPath, []byte("package main\n\nfunc other() { _ = 1 }\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.Remove(log); err != nil && !os.IsNotExist(err) {
+			t.Fatal(err)
+		}
+		var stderr strings.Builder
+		if step.sync {
+			if err := buildHookSync(root); err != nil {
+				t.Fatalf("%s: buildHookSync(%q) error = %v, want nil", step.name, root, err)
+			}
+		} else if status := run([]string{"build", root}, io.Discard, &stderr); status != 0 {
+			t.Fatalf("%s: run(build) status = %d, want 0; stderr = %q", step.name, status, stderr.String())
+		}
+		var asked []string
+		if data, err := os.ReadFile(log); err == nil {
+			for line := range strings.Lines(string(data)) {
+				if file := filepath.Base(strings.TrimSpace(line)); !slices.Contains(asked, file) {
+					asked = append(asked, file)
+				}
+			}
+		}
+		slices.Sort(asked)
+		if !slices.Equal(asked, step.wantAsked) {
+			t.Errorf("%s: the language server was asked about %v, want %v; stderr = %q", step.name, asked, step.wantAsked, stderr.String())
+		}
+		loaded, err := graph.Read(graph.WiringPath(filepath.Join(root, "graft")))
+		if err != nil {
+			t.Fatalf("%s: Read(%q) error = %v", step.name, graph.WiringPath(filepath.Join(root, "graft")), err)
+		}
+		if !slices.ContainsFunc(loaded.Edges, func(edge graph.EdgeV1) bool {
+			return edge.Source == "main.go#caller" && edge.Target == "main.go#target" && edge.Confidence == "lsp_resolved"
+		}) {
+			t.Errorf("%s: edges = %#v, want the LSP-resolved caller to target edge kept", step.name, loaded.Edges)
 		}
 	}
 }
@@ -273,6 +348,18 @@ func serveTestLSP() error {
 			result = map[string]any{"capabilities": map[string]any{"callHierarchyProvider": true}}
 		case "textDocument/prepareCallHierarchy":
 			result = []any{testCallHierarchyItem("caller", 1)}
+			if log := os.Getenv("GRAFT_TEST_LSP_LOG"); log != "" {
+				var params struct {
+					TextDocument struct {
+						URI string `json:"uri"`
+					} `json:"textDocument"`
+				}
+				if err := json.Unmarshal(request["params"], &params); err == nil {
+					if err := appendTestLSPLog(log, params.TextDocument.URI); err != nil {
+						return err
+					}
+				}
+			}
 			if warmLine := os.Getenv("GRAFT_TEST_LSP_WARM_LINE"); warmLine != "" {
 				var params struct {
 					Position struct {
@@ -298,6 +385,16 @@ func serveTestLSP() error {
 			return err
 		}
 	}
+}
+
+func appendTestLSPLog(path, line string) (err error) {
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
+	if err != nil {
+		return err
+	}
+	defer func() { err = errors.Join(err, file.Close()) }()
+	_, err = fmt.Fprintln(file, line)
+	return err
 }
 
 func readTestLSPMessage(reader *bufio.Reader) (map[string]json.RawMessage, error) {

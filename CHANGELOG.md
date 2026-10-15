@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **`graft build` asks the language server only about code that changed.** A build asked the server about every function again whenever any file had changed since its last pass. Now it records the content hash of every file the server was run on in `graft/.cache/lsp-pass.json`. The next build asks only about functions in files changed since, and about functions whose code or last answer names a changed file, since a call resolves through the declarations it names. The rest of the server's edges are kept. On this repository a full `gopls` pass takes 19.8 s and a build after a one-file edit takes 3.0–3.4 s instead, with an edge set identical to a fresh full pass. `--no-reuse` still asks about everything.
+- **A language server that gave no answer is not waited for again.** When a server fails to start or never answers its readiness probe (`summarizing 1/0`), the build records it. The next build of the same files says so and does not start the server. Before, every build waited for it again in each such repo, usually for the full 90 s readiness timeout. A changed file or `--no-reuse` tries again.
+
+### Fixed
+
+- **Hook syncs and `graft build --no-lsp` keep the language server's edges.** A build without the server wrote a graph without the `lsp_resolved` edges and marked the pass as gone, so the next `graft build` asked the server about everything. In a workspace, each sync after an agent's edit did this to every repo. Now these builds keep the edges of unchanged code, as a query-time refresh already did.
+- **A workspace build ends each language-server line.** In a workspace, the `summarizing …` line of one repo ran into the `✓ <repo>/` line after it.
+
 ## 0.6.0-beta.8 - 2026-10-15
 
 ### Changed

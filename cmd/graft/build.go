@@ -108,26 +108,32 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		}
 		return 1
 	}
-	// Only an explicit graft build enriches: hook syncs leave opts.lsp unset,
-	// since a language server can take minutes to index. A tree unchanged
-	// since the server's last complete pass keeps that pass's edges.
-	writeFingerprint := graph.WriteFingerprint
-	if value := os.Getenv("GRAFT_NO_LSP"); opts.lsp && (value == "" || value == "0" || value == "false") {
-		if !opts.noReuse && graph.ReuseLSPEdges(&built.Graph, contextDir, built.Fingerprints) {
-			writeFingerprint = graph.WriteLSPFingerprint
-			writeDiagnostic(stderr, "\rlsp: no file changed since the last language-server pass; kept its edges (--no-reuse asks again)")
-		} else if lsp := graph.EnrichWithLSP(context.Background(), &built.Graph, root); lsp.Server != "" {
-			if lsp.Complete {
-				writeFingerprint = graph.WriteLSPFingerprint
-			}
-			label := []rune("lsp:" + lsp.Server)
-			if len(label) > 50 {
-				label = label[:50]
-			}
-			writeDiagnostic(stderr, "\rsummarizing %d/%d: %-50s", lsp.Added+1, lsp.Queried, string(label))
+	// Only an explicit graft build asks a language server: hook syncs leave
+	// opts.lsp unset, since a server can take minutes to index. Every build
+	// keeps the server's edges for code unchanged since its last pass, and a
+	// build that asks asks only about the code changed since.
+	noLSP := os.Getenv("GRAFT_NO_LSP")
+	lsp := graph.RunLSPPass(context.Background(), &built.Graph, root, contextDir, built.Fingerprints, graph.LSPPassOptions{
+		Ask:   opts.lsp && (noLSP == "" || noLSP == "0" || noLSP == "false"),
+		Reuse: !opts.noReuse,
+	})
+	lspNoted := true
+	switch {
+	case lsp.Kept:
+		writeDiagnostic(stderr, "\rlsp: no code the language server reads changed since its last pass; kept its edges (--no-reuse asks again)")
+	case lsp.Skipped:
+		writeDiagnostic(stderr, "\rlsp: %s gave no answer for these files last time; not started again until a file changes (--no-reuse asks again)", filepath.Base(lsp.Server))
+	case lsp.Server != "":
+		label := []rune("lsp:" + lsp.Server)
+		if len(label) > 50 {
+			label = label[:50]
 		}
+		writeDiagnostic(stderr, "\rsummarizing %d/%d: %-50s", lsp.Added+1, lsp.Queried, string(label))
+	default:
+		lspNoted = false
 	}
-	if opts.workspaceChildName == "" {
+	// A workspace repo shows no parse progress, so only an LSP line needs ending.
+	if opts.workspaceChildName == "" || lspNoted {
 		writeDiagnostic(stderr, "\n")
 	}
 	lockCtx, cancelLock := context.WithTimeout(context.Background(), buildLockWait)
@@ -146,8 +152,12 @@ func runBuild(opts callersOptions, stdout, stderr io.Writer) int {
 		writeDiagnostic(stderr, "✗ %sask index write failed: %v\n", workspacePrefix, err)
 		return 1
 	}
-	if err := writeFingerprint(contextDir, graph.ExtractorID, built.Fingerprints, built.OnlyDirs); err != nil {
+	if err := graph.WriteFingerprint(contextDir, graph.ExtractorID, built.Fingerprints, built.OnlyDirs); err != nil {
 		writeDiagnostic(stderr, "✗ %sfingerprint write failed: %v\n", workspacePrefix, err)
+		return 1
+	}
+	if err := graph.WriteLSPPass(contextDir, lsp); err != nil {
+		writeDiagnostic(stderr, "✗ %s%v\n", workspacePrefix, err)
 		return 1
 	}
 	ensureBuildIgnoreFiles(root, contextDir, opts.noGitignore, opts.noIgnore)
