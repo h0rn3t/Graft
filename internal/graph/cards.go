@@ -85,8 +85,11 @@ func WriteCards(graph GraphV1, outDir string) (CardStats, error) {
 		if len(symbols) == 0 {
 			body.WriteString("_No extracted symbols in this file._\n")
 		}
-		if err := os.WriteFile(cardPath, []byte(body.String()), 0o644); err != nil {
-			return CardStats{}, fmt.Errorf("write card %q: %w", cardRel, err)
+		// A refresh rewrites every card, but an edit changes few of them.
+		if current, err := os.ReadFile(cardPath); err != nil || string(current) != body.String() {
+			if err := os.WriteFile(cardPath, []byte(body.String()), 0o644); err != nil {
+				return CardStats{}, fmt.Errorf("write card %q: %w", cardRel, err)
+			}
 		}
 		written[cardPath] = struct{}{}
 		stats.Files = append(stats.Files, CardFileInfo{Card: cardRel, Path: sourcePath, Symbols: len(symbols)})

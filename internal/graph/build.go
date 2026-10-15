@@ -102,6 +102,13 @@ const extractCacheVersion = 2
 // A SQL file whose statements cannot be parsed contributes its file node only.
 // Persist the returned fingerprints only after Write succeeds.
 func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
+	result, _, err := buildGraph(root, opts, nil)
+	return result, err
+}
+
+// buildGraph is BuildGraph with the parse cache in memory: a nil prior is
+// read from disk, and the cache of the files it built is returned.
+func buildGraph(root string, opts sourcefiles.Options, prior map[string]cachedFile) (BuildResult, map[string]cachedFile, error) {
 	if opts.OnlyDirs == nil && opts.OutDir != "" {
 		fingerprintDir := opts.OutDir
 		if !filepath.IsAbs(fingerprintDir) {
@@ -110,7 +117,7 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		fingerprint, err := ReadFingerprint(fingerprintDir, ExtractorID)
 		if err != nil {
 			if _, graphErr := os.Stat(WiringPath(fingerprintDir)); graphErr == nil {
-				return BuildResult{}, fmt.Errorf("read source scope: %w", err)
+				return BuildResult{}, nil, fmt.Errorf("read source scope: %w", err)
 			}
 		}
 		if err == nil && fingerprint != nil {
@@ -133,11 +140,11 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 	walk.Extensions = nil
 	repoFiles, err := sourcefiles.Walk(root, walk)
 	if err != nil {
-		return BuildResult{}, fmt.Errorf("walk source files: %w", err)
+		return BuildResult{}, nil, fmt.Errorf("walk source files: %w", err)
 	}
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
-		return BuildResult{}, fmt.Errorf("resolve source root: %w", err)
+		return BuildResult{}, nil, fmt.Errorf("resolve source root: %w", err)
 	}
 	relFiles := make([]string, 0, len(repoFiles))
 	var files []sourcefiles.File
@@ -171,14 +178,14 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		}
 		cachePath = filepath.Join(outDir, ".cache", "extract."+ExtractorID+".json")
 	}
-	prior := extractCache{}
-	if cachePath != "" && !opts.NoReuse {
-		if data, err := os.ReadFile(cachePath); err == nil && json.Unmarshal(data, &prior) != nil {
-			prior = extractCache{}
+	if opts.NoReuse {
+		prior = nil
+	} else if prior == nil && cachePath != "" {
+		var disk extractCache
+		if data, err := os.ReadFile(cachePath); err == nil && json.Unmarshal(data, &disk) == nil &&
+			disk.Version == extractCacheVersion && disk.Extractor == ExtractorID {
+			prior = disk.Files
 		}
-	}
-	if prior.Version != extractCacheVersion || prior.Extractor != ExtractorID || prior.Files == nil {
-		prior.Files = make(map[string]cachedFile)
 	}
 	current := extractCache{Version: extractCacheVersion, Extractor: ExtractorID, Files: make(map[string]cachedFile, len(files))}
 	result := BuildResult{
@@ -189,8 +196,14 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 		Errors:       make([]string, 0),
 		Limitations:  make([]string, 0),
 	}
-	nodes := make([]NodeV1, 0, len(files))
-	rawEdges := make([]rawEdge, 0)
+	// A cached file usually comes back unchanged, so its counts size the build.
+	nodeCount, edgeCount := len(files), 0
+	for _, cached := range prior {
+		nodeCount += len(cached.Nodes)
+		edgeCount += len(cached.RawEdges)
+	}
+	nodes := make([]NodeV1, 0, nodeCount)
+	rawEdges := make([]rawEdge, 0, edgeCount)
 	languageSet := make(map[string]struct{})
 	for index, file := range files {
 		if opts.OnProgress != nil {
@@ -222,7 +235,7 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 			continue
 		}
 		hash := fingerprint.Hash
-		cached, ok := prior.Files[file.Rel]
+		cached, ok := prior[file.Rel]
 		cacheHit := ok && cached.Hash == hash &&
 			((cached.Error != "" && len(cached.Nodes) == 0) ||
 				(cached.Error == "" && len(cached.Nodes) > 0 &&
@@ -287,7 +300,7 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 	if cachePath != "" && !opts.NoCacheWrite {
 		data, err := json.Marshal(current)
 		if err != nil {
-			return BuildResult{}, fmt.Errorf("encode graph extraction cache: %w", err)
+			return BuildResult{}, nil, fmt.Errorf("encode graph extraction cache: %w", err)
 		}
 		_ = fsutil.WriteFileAtomic(cachePath, data, 0o644) // A cache write failure only costs reuse on the next build.
 	}
@@ -304,7 +317,7 @@ func BuildGraph(root string, opts sourcefiles.Options) (BuildResult, error) {
 	}
 	slices.Sort(result.Unsupported)
 	slices.Sort(result.Errors)
-	return result, nil
+	return result, current.Files, nil
 }
 
 // nativeSupported reports whether a native Go adapter extracts file.

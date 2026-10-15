@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **The first MCP call after an edit answers about four times sooner.** `graft mcp` refreshed the graph the way a fresh process does: it decoded the parse cache, the term cache and the old graph from disk, wrote all of them back, and then decoded the new graph and ask index again to answer. The server now keeps the parse cache, the term counts, and the graph and ask index of its last refresh in memory. It answers from them as soon as they are built and writes the graph's files in the background, holding the graph writer lock until they are written. The two caches are keyed by content hash, so a refresh reads them from disk once per server and never writes them back; another process that finds them stale re-parses only the files changed since. The in-memory graph is used only while the files on disk are the ones the server wrote, so a graph that `graft build` writes is read again. A call that finds no new edit while the files are still being written answers at once. A refresh, `graft_check_freshness` and the server's exit wait for the files, and a write that fails is reported by the next call. On golang.org/x/tools (1,295 Go files), a call right after a one-file edit took 2.6–2.9 s and the next `graft_find_code` 0.73–0.77 s; now they take 0.56–0.70 s and 0.21–0.25 s. On this repository they took 1.12–1.16 s and 0.29–0.30 s; now they take 0.24–0.37 s and 0.06–0.08 s. The server holds about 60 MB more memory on x/tools.
+- **Every refresh and build writes less.** The ask index is written directly instead of through reflection, byte-identical to before; a build sizes its node and edge lists from the parse cache; and a card is rewritten only when its content changes. A CLI query after a one-file edit on x/tools takes 2.2–2.3 s instead of 2.6–2.9 s, and 0.99–1.02 s instead of 1.14–1.19 s on this repository.
+
 ## 0.6.0-beta.6 - 2026-10-13
 
 ### Changed

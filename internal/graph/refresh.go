@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/h0rn3t/Graft/internal/fsutil"
@@ -25,11 +26,121 @@ type RefreshOptions struct {
 	Source sourcefiles.Options
 	// Disabled skips the refresh probe and all filesystem writes.
 	Disabled bool
+	// Memo, when set, carries the caches, graph and ask index this refresh
+	// builds into later refreshes and queries in the same process, and writes
+	// the graph's files in the background; see RefreshMemo.
+	Memo *RefreshMemo
+}
+
+// RefreshMemo keeps what refreshes of one context directory decoded and built
+// for later refreshes and queries in the same process. Its parse cache and
+// term bags are keyed by content hash, so they stay valid whoever else writes
+// the directory, and a refresh through it reads them from disk at most once
+// and never writes them back. Such a refresh answers from the graph and ask
+// index it built and writes their files in the background, holding the graph
+// writer lock until they are written. The zero value is ready to use, and a
+// RefreshMemo is safe for concurrent use.
+type RefreshMemo struct {
+	mu                   sync.Mutex
+	outDir               string
+	extract              map[string]cachedFile
+	bags                 map[string]askBag
+	graph                *GraphV1
+	index                *AskIndex
+	built                *Fingerprint  // the files the graph was built from
+	graphFile, indexFile os.FileInfo   // the files once written
+	writing              chan struct{} // closed once the files are written
+	failure              string        // why they were not, until a refresh reports it
+}
+
+// Written returns the graph and ask index the last refresh through memo built
+// for outDir, and whether they are current: while their files are still being
+// written, or while graphFile and indexFile, stats of those files taken now,
+// describe the files written. A nil indexFile asks for the graph alone, and a
+// current nil index means the graph has no usable one. Neither may be mutated.
+func (memo *RefreshMemo) Written(outDir string, graphFile, indexFile os.FileInfo) (*GraphV1, *AskIndex, bool) {
+	if memo == nil {
+		return nil, nil, false
+	}
+	memo.mu.Lock()
+	defer memo.mu.Unlock()
+	if memo.graph == nil || memo.outDir != outDir {
+		return nil, nil, false
+	}
+	// While they are being written, the writer lock keeps every other writer
+	// out, so nothing on disk is newer.
+	if memo.writing == nil && (!sameFileStamp(memo.graphFile, graphFile) || indexFile != nil && !sameFileStamp(memo.indexFile, indexFile)) {
+		return nil, nil, false
+	}
+	if indexFile == nil {
+		return memo.graph, nil, true
+	}
+	return memo.graph, memo.index, true
+}
+
+// Wait blocks until the files of the last refresh through memo are written.
+func (memo *RefreshMemo) Wait() {
+	memo.mu.Lock()
+	writing := memo.writing
+	memo.mu.Unlock()
+	if writing != nil {
+		<-writing
+	}
+}
+
+// settle readies memo for a refresh of outDir. While the files of its last
+// refresh are still being written, a tree unchanged since that refresh is
+// current and needs no refresh; otherwise settle waits for those files and
+// returns why they were not written, once.
+func (memo *RefreshMemo) settle(root, outDir string, source sourcefiles.Options) (current bool, failure string) {
+	memo.mu.Lock()
+	writing, built, sameDir := memo.writing, memo.built, memo.outDir == outDir
+	memo.mu.Unlock()
+	if writing != nil && sameDir {
+		if drift, err := probeDrift(root, outDir, source, built); err == nil && drift != nil && len(drift.Changed)+len(drift.Added)+len(drift.Removed) == 0 {
+			return true, ""
+		}
+	}
+	memo.Wait()
+	memo.mu.Lock()
+	defer memo.mu.Unlock()
+	failure, memo.failure = memo.failure, ""
+	return false, failure
+}
+
+// caches returns the parse cache and term bags memo holds for outDir: nil
+// without a memo, so the parse and term caches on disk serve the refresh, and
+// the bags of the term cache on disk when memo holds none yet.
+func (memo *RefreshMemo) caches(outDir string) (map[string]cachedFile, map[string]askBag) {
+	if memo == nil {
+		return nil, nil
+	}
+	memo.mu.Lock()
+	var extract map[string]cachedFile
+	var bags map[string]askBag
+	if memo.outDir == outDir {
+		extract, bags = memo.extract, memo.bags
+	}
+	memo.mu.Unlock()
+	if bags == nil {
+		bags = readAskTermBags(outDir)
+	}
+	return extract, bags
+}
+
+// sameFileStamp reports whether two stats describe the same unchanged file;
+// two nil stats match.
+func sameFileStamp(before, after os.FileInfo) bool {
+	if before == nil || after == nil {
+		return before == nil && after == nil
+	}
+	return os.SameFile(before, after) && before.Size() == after.Size() && before.ModTime().Equal(after.ModTime())
 }
 
 // RefreshResult reports whether this call refreshed the graph and what drift it saw.
 type RefreshResult struct {
-	// Refreshed is true after the wiring graph was atomically replaced.
+	// Refreshed is true after the wiring graph was atomically replaced or,
+	// through a RefreshMemo, rebuilt for its files to be replaced.
 	Refreshed bool
 	// Drift records the source changes that prompted the refresh, when known.
 	Drift *Drift
@@ -41,7 +152,7 @@ type RefreshResult struct {
 // It seeds linked worktrees from their main checkout, shares .sync.lock with graph
 // writers, and leaves the current graph in place when the native extractor cannot
 // represent the tree. Refresh failures are returned in Note.
-func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
+func EnsureFreshGraph(root string, options RefreshOptions) (result RefreshResult) {
 	value := os.Getenv("GRAFT_NO_REFRESH")
 	if options.Disabled || (value != "" && value != "0" && value != "false") {
 		return RefreshResult{}
@@ -61,6 +172,22 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 	options.Source.OutDir = outDir
 	if len(options.Source.Extensions) == 0 {
 		options.Source.Extensions = SourceExtensions()
+	}
+	memo := options.Memo
+	if memo != nil {
+		current, failure := memo.settle(root, outDir, options.Source)
+		if current {
+			return RefreshResult{}
+		}
+		if failure != "" {
+			defer func() {
+				note := "the last refresh was not saved: " + failure
+				if result.Note != "" {
+					note += "; " + result.Note
+				}
+				result.Note = note
+			}()
+		}
 	}
 	seedNote := ""
 	if _, err := os.Stat(WiringPath(outDir)); errors.Is(err, fs.ErrNotExist) {
@@ -127,7 +254,12 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 		}
 		return RefreshResult{Drift: drift, Note: note}
 	}
-	defer release()
+	// A refresh through a memo hands the lock to the write it leaves running.
+	defer func() {
+		if release != nil {
+			release()
+		}
+	}()
 	if drift != nil {
 		fingerprint, err = ReadFingerprint(outDir, ExtractorID)
 		if err != nil {
@@ -147,7 +279,11 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 	if fingerprint != nil {
 		options.Source.OnlyDirs = slices.Clone(fingerprint.OnlyDirs)
 	}
-	built, err := BuildGraph(root, options.Source)
+	extract, bags := memo.caches(outDir)
+	if memo != nil {
+		options.Source.NoCacheWrite = true
+	}
+	built, extract, err := buildGraph(root, options.Source, extract)
 	if err != nil {
 		return RefreshResult{Drift: drift, Note: fmt.Sprintf("graph refresh skipped: %v", err)}
 	}
@@ -160,23 +296,17 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 			len(built.Errors), built.Errors[0],
 		)}
 	}
-	if prior, err := Read(WiringPath(outDir)); err == nil {
-		carryOverLSPEdges(&built.Graph, *prior)
-	}
-	if _, err := Write(built.Graph, outDir); err != nil {
-		return RefreshResult{Drift: drift, Note: fmt.Sprintf("graph refresh skipped: %v", err)}
-	}
-	if err := WriteAskIndex(outDir, built.Graph); err != nil {
-		return RefreshResult{Refreshed: true, Drift: drift, Note: fmt.Sprintf("ask index write failed: %v", err)}
-	}
-	if err := WriteFingerprint(outDir, ExtractorID, built.Fingerprints, options.Source.OnlyDirs); err != nil {
-		return RefreshResult{Refreshed: true, Drift: drift, Note: fmt.Sprintf("fingerprint write failed: %v", err)}
-	}
-	// Cards exist only where graft build wrote them; keep those in step.
-	if _, err := os.Stat(filepath.Join(outDir, "INDEX.md")); err == nil {
-		if _, err := WriteCards(built.Graph, outDir); err != nil {
-			return RefreshResult{Refreshed: true, Drift: drift, Note: fmt.Sprintf("card write failed: %v", err)}
+	var prior *GraphV1
+	if graphFile, err := os.Stat(WiringPath(outDir)); err == nil {
+		if written, _, ok := memo.Written(outDir, graphFile, nil); ok {
+			prior = written
 		}
+	}
+	if prior == nil {
+		prior, _ = Read(WiringPath(outDir))
+	}
+	if prior != nil {
+		carryOverLSPEdges(&built.Graph, *prior)
 	}
 	var notes []string
 	if seedNote != "" {
@@ -186,6 +316,71 @@ func EnsureFreshGraph(root string, options RefreshOptions) RefreshResult {
 		notes = append(notes, "native extractor limitations: "+strings.Join(built.Limitations, "; "))
 	}
 	note := strings.Join(notes, "; ")
+
+	sorted := sortedGraph(built.Graph)
+	_, cardsErr := os.Stat(filepath.Join(outDir, "INDEX.md"))
+	// persist writes the refreshed graph's files, the fingerprint only after
+	// the graph and index it vouches for, and words a failure as a note.
+	persist := func(writeIndex func() error) (refreshed bool, failure string) {
+		if _, err := writeSortedGraph(sorted, outDir); err != nil {
+			return false, fmt.Sprintf("graph refresh skipped: %v", err)
+		}
+		if err := writeIndex(); err != nil {
+			return true, fmt.Sprintf("ask index write failed: %v", err)
+		}
+		if err := WriteFingerprint(outDir, ExtractorID, built.Fingerprints, options.Source.OnlyDirs); err != nil {
+			return true, fmt.Sprintf("fingerprint write failed: %v", err)
+		}
+		// Cards exist only where graft build wrote them; keep those in step.
+		if cardsErr == nil {
+			if _, err := WriteCards(built.Graph, outDir); err != nil {
+				return true, fmt.Sprintf("card write failed: %v", err)
+			}
+		}
+		return true, ""
+	}
+	if memo == nil {
+		refreshed, failure := persist(func() error { return WriteAskIndex(outDir, built.Graph) })
+		if failure != "" {
+			return RefreshResult{Refreshed: refreshed, Drift: drift, Note: failure}
+		}
+		return RefreshResult{Refreshed: true, Drift: drift, Note: note}
+	}
+
+	file, bags := countAskIndex(built.Graph, bags)
+	index := file.index()
+	written := make(chan struct{})
+	memo.mu.Lock()
+	memo.outDir, memo.extract, memo.bags = outDir, extract, bags
+	memo.graph, memo.index, memo.graphFile, memo.indexFile, memo.writing = &sorted, index, nil, nil, written
+	memo.built = &Fingerprint{Files: built.Fingerprints, OnlyDirs: options.Source.OnlyDirs}
+	memo.mu.Unlock()
+	unlock := release
+	release = nil
+	go func() {
+		defer close(written)
+		defer unlock()
+		_, failure := persist(func() error {
+			data, err := file.encode()
+			if err != nil {
+				return err
+			}
+			if err := fsutil.WriteFileAtomic(askIndexPath(outDir), data, 0o644); err != nil {
+				return fmt.Errorf("write ask index: %w", err)
+			}
+			return nil
+		})
+		graphFile, _ := os.Stat(WiringPath(outDir))
+		indexFile, _ := os.Stat(askIndexPath(outDir))
+		memo.mu.Lock()
+		defer memo.mu.Unlock()
+		memo.writing = nil
+		if failure != "" {
+			memo.graph, memo.index, memo.failure = nil, nil, failure
+			return
+		}
+		memo.graphFile, memo.indexFile = graphFile, indexFile
+	}()
 	return RefreshResult{Refreshed: true, Drift: drift, Note: note}
 }
 

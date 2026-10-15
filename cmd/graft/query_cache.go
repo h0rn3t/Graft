@@ -14,6 +14,9 @@ import (
 type queryCache struct {
 	mu      sync.Mutex
 	entries []queryCacheEntry
+	// memo carries the server's refreshes into each other and hands the graph
+	// and ask index a refresh built straight to the next load.
+	memo graph.RefreshMemo
 }
 
 type queryCacheEntry struct {
@@ -61,6 +64,14 @@ func (cache *queryCache) snapshot(contextDir string, withIndex bool) (*graph.Gra
 		var indexFile os.FileInfo
 		if withIndex {
 			indexFile, _ = os.Stat(indexPath) // The sidecar is optional, including when unreadable.
+		}
+		if statErr == nil {
+			// What this server's last refresh built needs no decoding, and while
+			// its files are being written it is newer than any graph cached here.
+			if written, writtenIndex, ok := cache.memo.Written(dir, graphFile, indexFile); ok {
+				cache.entries = slices.DeleteFunc(cache.entries, func(entry queryCacheEntry) bool { return entry.dir == dir })
+				return written, writtenIndex, nil
+			}
 		}
 		var wiring *graph.GraphV1
 		for i, entry := range cache.entries {

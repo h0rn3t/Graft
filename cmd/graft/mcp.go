@@ -171,8 +171,11 @@ func runMCP(ctx context.Context, opts callersOptions, stdin io.Reader, stdout, s
 	for _, line := range lines {
 		writeDiagnostic(stderr, "%s\n", line)
 	}
-	server := newMCPServerWith(opts, root, contextDir, version, mcpInstructionsFrom(lines))
+	cache := new(queryCache)
+	server := newMCPServerWith(opts, root, contextDir, version, mcpInstructionsFrom(lines), cache)
 	err = server.Run(ctx, &mcpTransport{reader: stdin, writer: stdout})
+	// A refresh writes the graph's files after answering; finish them first.
+	cache.memo.Wait()
 	if err != nil && !errors.Is(err, io.EOF) && ctx.Err() == nil {
 		writeDiagnostic(stderr, "✗ %v\n", err)
 		return 1
@@ -182,11 +185,10 @@ func runMCP(ctx context.Context, opts callersOptions, stdin io.Reader, stdout, s
 
 func newMCPServer(ctx context.Context, opts callersOptions, root, contextDir string) *mcp.Server {
 	version := currentVersion()
-	return newMCPServerWith(opts, root, contextDir, version, mcpStartupInstructions(ctx, root, contextDir, version))
+	return newMCPServerWith(opts, root, contextDir, version, mcpStartupInstructions(ctx, root, contextDir, version), new(queryCache))
 }
 
-func newMCPServerWith(opts callersOptions, root, contextDir, version, instructions string) *mcp.Server {
-	cache := new(queryCache)
+func newMCPServerWith(opts callersOptions, root, contextDir, version, instructions string, cache *queryCache) *mcp.Server {
 	server := mcp.NewServer(
 		&mcp.Implementation{Name: "graft", Version: version},
 		&mcp.ServerOptions{
@@ -617,6 +619,9 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 			if dirOverride != "" {
 				options.Source.OutDir = contextDir
 			}
+			if cache != nil {
+				options.Memo = &cache.memo
+			}
 			refresh = graph.EnsureFreshGraph(root, options)
 		}
 		if note := graph.RefreshNote(refresh); note != "" {
@@ -784,6 +789,10 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		}
 		return mcpResult{text: text, isError: false}
 	case "graft_check_freshness":
+		// It checks the files on disk, so the last refresh must have written them.
+		if cache != nil {
+			cache.memo.Wait()
+		}
 		if _, workspace := graph.ReadWorkspaceChildren(contextDir); workspace {
 			return mcpWorkspaceCheckFreshness(root, contextDir)
 		}

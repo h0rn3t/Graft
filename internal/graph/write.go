@@ -45,6 +45,11 @@ func Read(path string) (*GraphV1, error) {
 // Write sorts and atomically persists graph under outDir. The serialized copy
 // omits body_text, which is stored separately for query-time indexing.
 func Write(graph GraphV1, outDir string) (string, error) {
+	return writeSortedGraph(sortedGraph(graph), outDir)
+}
+
+// sortedGraph returns graph as Write persists it.
+func sortedGraph(graph GraphV1) GraphV1 {
 	sorted := graph
 	sorted.Nodes = sortNodesByID(graph.Nodes)
 	for i := range sorted.Nodes {
@@ -80,7 +85,11 @@ func Write(graph GraphV1, outDir string) (string, error) {
 	for i, index := range order {
 		sorted.Edges[i] = graph.Edges[index]
 	}
+	return sorted
+}
 
+// writeSortedGraph persists a graph sortedGraph returned.
+func writeSortedGraph(sorted GraphV1, outDir string) (string, error) {
 	path := WiringPath(outDir)
 	// json/v2 escapes neither HTML characters nor U+2028/U+2029, matching the
 	// JSON.stringify output TypeScript builds write.

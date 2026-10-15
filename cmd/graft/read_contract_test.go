@@ -324,6 +324,7 @@ func TestMCPReadSharedCache(t *testing.T) {
 	writeReadFixture(t, root)
 	dir := filepath.Join(root, "graft")
 	var cache queryCache
+	t.Cleanup(cache.memo.Wait) // a refresh writes its files in the background
 	args := map[string]any{"symbol": "alpha"}
 	result := mcpCallWithCache(t.Context(), root, dir, "", "graft_read_symbol", args, &cache)
 	if result.isError || len(cache.entries) != 1 || cache.entries[0].index != nil {
@@ -359,7 +360,11 @@ func TestMCPReadSharedCache(t *testing.T) {
 		t.Fatal(err)
 	}
 	result = mcpCallWithCache(t.Context(), root, dir, "", "graft_read_symbol", args, &cache)
-	if result.isError || !strings.Contains(result.text, "updated") || cache.entries[0].wiring == wiring {
-		t.Errorf("cached read after source edit = %+v, want refreshed source and graph", result)
+	if result.isError || !strings.Contains(result.text, "updated") {
+		t.Errorf("cached read after source edit = %+v, want refreshed source", result)
+	}
+	// The refresh's own graph answers now, not a cache entry.
+	if refreshed, err := cache.loadGraph(dir); err != nil || refreshed == wiring {
+		t.Errorf("cache.loadGraph(%q) after source edit = (%p, %v), want a graph other than the original %p", dir, refreshed, err, wiring)
 	}
 }
