@@ -11,7 +11,9 @@ import (
 )
 
 func runWorkspaceBuild(opts callersOptions, root, contextDir string, children []string, stdout, stderr io.Writer) int {
-	if _, err := os.Stat(graph.WiringPath(contextDir)); err == nil {
+	_, err := os.Stat(graph.WiringPath(contextDir))
+	splitting := err == nil
+	if splitting {
 		dirs := make([]string, 0, len(children))
 		for _, child := range children {
 			dirs = append(dirs, child+"/graft/")
@@ -36,9 +38,13 @@ func runWorkspaceBuild(opts callersOptions, root, contextDir string, children []
 		writeDiagnostic(stderr, "✗ workspace index write failed: %v\n", err)
 		return 1
 	}
-	if err := graph.ClearWorkspaceParent(contextDir); err != nil {
-		writeDiagnostic(stderr, "✗ workspace parent cleanup failed: %v\n", err)
-		return 1
+	// Only the combined graph a split replaces is cleared: once split, the
+	// parent's graft/ holds its hooks' state, which a rebuild must keep.
+	if splitting {
+		if err := graph.ClearWorkspaceParent(contextDir); err != nil {
+			writeDiagnostic(stderr, "✗ workspace parent cleanup failed: %v\n", err)
+			return 1
+		}
 	}
 	ensureBuildIgnoreFiles(root, contextDir, opts.noGitignore, true)
 	if _, err := fmt.Fprintf(stdout, "✓ workspace: %d repos federated → graft/workspace.json\n", len(children)); err != nil {

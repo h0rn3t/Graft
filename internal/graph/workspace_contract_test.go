@@ -98,6 +98,50 @@ func TestLoadWorkspaceGraphsEmptyManifestContract(t *testing.T) {
 	}
 }
 
+func TestMeasureWorkspaceContract(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "parent")
+	writeWorkspaceRepo(t, root, "alpha", true)
+	writeWorkspaceRepo(t, root, "zeta", true)
+	writeWorkspaceRepo(t, base, "outside", true)
+	for name, content := range map[string]string{
+		"corrupt":   "{",
+		"metaless":  `{"nodes":[],"edges":[]}`,
+		"metalater": `{"nodes":[{"id":"x"}],"edges":[],"meta":{"version":1,"nodeCount":5,"edgeCount":4}}`,
+	} {
+		path := WiringPath(filepath.Join(root, name, "graft"))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("MkdirAll(%q) error = %v, want nil", filepath.Dir(path), err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("WriteFile(%q) error = %v, want nil", path, err)
+		}
+	}
+	contextDir := filepath.Join(root, "graft")
+	if err := WriteWorkspace(contextDir, []string{"zeta", "missing", "../outside", "corrupt", "metaless", "metalater", "alpha", ""}); err != nil {
+		t.Fatalf("WriteWorkspace(%q) error = %v, want nil", contextDir, err)
+	}
+
+	got, ok := MeasureWorkspace(root, contextDir)
+	want := []WorkspaceChildSize{
+		{Name: ""},
+		{Name: "../outside"},
+		{Name: "alpha", Built: true, NodeCount: 2, EdgeCount: 1},
+		{Name: "corrupt"},
+		{Name: "metalater", Built: true, NodeCount: 5, EdgeCount: 4},
+		{Name: "metaless"},
+		{Name: "missing"},
+		{Name: "zeta", Built: true, NodeCount: 2, EdgeCount: 1},
+	}
+	if !ok || !slices.Equal(got, want) {
+		t.Errorf("MeasureWorkspace(%q, %q) = (%v, %t), want (%v, true)", root, contextDir, got, ok, want)
+	}
+
+	if got, ok := MeasureWorkspace(root, filepath.Join(root, "alpha", "graft")); ok || got != nil {
+		t.Errorf("MeasureWorkspace(%q, a repo's own graft dir) = (%v, %t), want (nil, false)", root, got, ok)
+	}
+}
+
 func TestWorkspaceBuildChildrenContract(t *testing.T) {
 	root := t.TempDir()
 	writeWorkspaceRepo(t, root, "zeta", false)

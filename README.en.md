@@ -734,7 +734,8 @@ Graft supports these layouts:
   auto-splits: each child gets its own (git-ignored) `graft/`, and the parent
   gets a `graft/workspace.json` index. Queries from the parent federate across
   every child, always labeled `<child>/`. Run `graft build` inside a child to
-  work on just that repo.
+  work on just that repo. The parent's statusline sums every child's graph,
+  sizes the repo you last edited, and names the children not built yet.
 
 In every layout, narrow to one sub-project with `graft ask "<task>" --in <scope>/`
 once you know where you're working.

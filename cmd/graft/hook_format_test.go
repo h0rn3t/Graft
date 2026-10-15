@@ -22,6 +22,7 @@ func TestHookStatuslineFormatting(t *testing.T) {
 	tests := []struct {
 		name       string
 		stats      *hookStats
+		repos      []graph.WorkspaceChildSize
 		session    *sessionState
 		context    *int
 		contains   []string
@@ -74,10 +75,36 @@ func TestHookStatuslineFormatting(t *testing.T) {
 			contains:   []string{"~100,000 tok saved"},
 			notContain: []string{"$"},
 		},
+		{
+			name:  "workspace sums repos and sizes the edited one",
+			stats: &hookStats{NodeCount: 5, EdgeCount: 3, LastFile: new("api/src/app.ts")},
+			repos: []graph.WorkspaceChildSize{
+				{Name: "api", Built: true, NodeCount: 2, EdgeCount: 1},
+				{Name: "web", Built: true, NodeCount: 3, EdgeCount: 2},
+			},
+			context:    new(34),
+			contains:   []string{"2 repos · 5 nodes / 3 edges · ✓ synced", "ctx 34% · api: 2 nodes / 1 edges · last: app.ts"},
+			notContain: []string{"not built", "web:"},
+		},
+		{
+			name:  "workspace names a few repos without a graph",
+			stats: &hookStats{NodeCount: 2, EdgeCount: 1},
+			repos: []graph.WorkspaceChildSize{
+				{Name: "api", Built: true, NodeCount: 2, EdgeCount: 1},
+				{Name: "auth"}, {Name: "cart"}, {Name: "mail"}, {Name: "web"},
+			},
+			contains: []string{"5 repos", "⚠ 4 not built: auth, cart, mail +1 · run graft build"},
+		},
+		{
+			name:     "workspace file outside every repo",
+			stats:    &hookStats{NodeCount: 2, EdgeCount: 1, LastFile: new("notes.md")},
+			repos:    []graph.WorkspaceChildSize{{Name: "api", Built: true, NodeCount: 2, EdgeCount: 1}},
+			contains: []string{"1 repos", "last: notes.md"},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			lines := renderHookStatusline(test.stats, test.session, test.context)
+			lines := renderHookStatusline(test.stats, test.repos, test.session, test.context)
 			got := stripHookANSI(strings.Join(lines, "\n"))
 			for _, want := range test.contains {
 				if !strings.Contains(got, want) {
@@ -264,7 +291,7 @@ func TestHookStatuslineResolution(t *testing.T) {
 		if err := writeHookStats(root, hookStats{NodeCount: 7, EdgeCount: 3, Dirty: true, StaleCount: 4}); err != nil {
 			t.Fatalf("writeHookStats() error = %v, want nil", err)
 		}
-		got := resolveHookStats(root)
+		got, _ := resolveHookStats(root)
 		if got == nil || got.NodeCount != 7 || got.StaleCount != 4 {
 			t.Errorf("resolveHookStats(cache) = %#v, want dirty cache", got)
 		}
@@ -276,7 +303,7 @@ func TestHookStatuslineResolution(t *testing.T) {
 			Meta:  graph.GraphMeta{Version: 1, NodeCount: 42, EdgeCount: 100, Languages: []string{"typescript"}},
 			Nodes: []graph.NodeV1{{ID: "a", SummaryState: "ready"}, {ID: "b", SummaryState: "pending"}},
 		})
-		got := resolveHookStats(root)
+		got, _ := resolveHookStats(root)
 		if got == nil || got.NodeCount != 42 || got.ReadyCount != 1 || got.Dirty {
 			t.Errorf("resolveHookStats(graph) = %#v, want graph stats", got)
 		}
@@ -285,8 +312,8 @@ func TestHookStatuslineResolution(t *testing.T) {
 	t.Run("empty graph is built", func(t *testing.T) {
 		root := t.TempDir()
 		writeHookTestGraph(t, root, graph.GraphV1{Meta: graph.GraphMeta{Version: 1}})
-		got := resolveHookStats(root)
-		if got == nil || got.NodeCount != 0 || strings.Contains(strings.Join(renderHookStatusline(got, nil, nil), ""), "not built") {
+		got, _ := resolveHookStats(root)
+		if got == nil || got.NodeCount != 0 || strings.Contains(strings.Join(renderHookStatusline(got, nil, nil, nil), ""), "not built") {
 			t.Errorf("resolveHookStats(empty graph) = %#v, want built empty graph", got)
 		}
 	})
@@ -296,8 +323,44 @@ func TestHookStatuslineResolution(t *testing.T) {
 		if err := writeHookStats(root, emptyHookStats()); err != nil {
 			t.Fatalf("writeHookStats() error = %v, want nil", err)
 		}
-		if got := resolveHookStats(root); got != nil {
+		if got, _ := resolveHookStats(root); got != nil {
 			t.Errorf("resolveHookStats(zero cache only) = %#v, want nil", got)
+		}
+	})
+
+	t.Run("workspace sums repo graphs under the root's freshness", func(t *testing.T) {
+		t.Setenv("GRAFT_DIR", "")
+		root := t.TempDir()
+		writeHookTestGraph(t, filepath.Join(root, "api"), graph.GraphV1{Meta: graph.GraphMeta{Version: 1, NodeCount: 2, EdgeCount: 1}})
+		writeHookTestGraph(t, filepath.Join(root, "web"), graph.GraphV1{Meta: graph.GraphMeta{Version: 1, NodeCount: 3, EdgeCount: 2}})
+		if err := graph.WriteWorkspace(filepath.Join(root, "graft"), []string{"web", "missing", "api"}); err != nil {
+			t.Fatalf("graph.WriteWorkspace() error = %v, want nil", err)
+		}
+		if err := writeHookStats(root, hookStats{NodeCount: 99, Dirty: true, LastFile: new("api/src/app.ts")}); err != nil {
+			t.Fatalf("writeHookStats() error = %v, want nil", err)
+		}
+		got, repos := resolveHookStats(root)
+		if got == nil || got.NodeCount != 5 || got.EdgeCount != 3 || !got.Dirty || got.LastFile == nil {
+			t.Errorf("resolveHookStats(workspace) stats = %#v, want summed repo graphs with the root's dirty flag and last file", got)
+		}
+		wantRepos := []graph.WorkspaceChildSize{
+			{Name: "api", Built: true, NodeCount: 2, EdgeCount: 1},
+			{Name: "missing"},
+			{Name: "web", Built: true, NodeCount: 3, EdgeCount: 2},
+		}
+		if !slices.Equal(repos, wantRepos) {
+			t.Errorf("resolveHookStats(workspace) repos = %v, want %v", repos, wantRepos)
+		}
+	})
+
+	t.Run("workspace without a repo graph is not built", func(t *testing.T) {
+		t.Setenv("GRAFT_DIR", "")
+		root := t.TempDir()
+		if err := graph.WriteWorkspace(filepath.Join(root, "graft"), []string{"api"}); err != nil {
+			t.Fatalf("graph.WriteWorkspace() error = %v, want nil", err)
+		}
+		if got, repos := resolveHookStats(root); got != nil || len(repos) != 1 {
+			t.Errorf("resolveHookStats(unbuilt workspace) = (%#v, %v), want (nil, one repo)", got, repos)
 		}
 	})
 }

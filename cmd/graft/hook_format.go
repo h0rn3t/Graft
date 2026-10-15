@@ -300,15 +300,21 @@ func hookFreshnessSegment(stats hookStats) string {
 	}
 }
 
-func renderHookStatusline(stats *hookStats, session *sessionState, contextPercent *int) []string {
+// renderHookStatusline formats the statusline. In a workspace root, repos lists
+// its repositories: the top line counts them, the second sizes the one holding
+// the last edited file, and a third names the repositories without a graph.
+func renderHookStatusline(stats *hookStats, repos []graph.WorkspaceChildSize, session *sessionState, contextPercent *int) []string {
 	if stats == nil {
 		return []string{hookANSI("38;5;244", "◤ graft · not built · run ") + hookANSI("38;5;251", "graft build")}
 	}
-	top := []string{
-		hookANSI("38;5;244", "◤ ") + hookANSI("38;2;84;111;255", "graft"),
+	top := []string{hookANSI("38;5;244", "◤ ") + hookANSI("38;2;84;111;255", "graft")}
+	if repos != nil {
+		top = append(top, hookANSI("38;5;251", fmt.Sprintf("%d repos", len(repos))))
+	}
+	top = append(top,
 		hookANSI("38;5;251", fmt.Sprintf("%d nodes / %d edges", stats.NodeCount, stats.EdgeCount)),
 		hookFreshnessSegment(*stats),
-	}
+	)
 	if session != nil && session.SavedTokens > 0 {
 		money := ""
 		if session.InputCostMicros != nil && session.InputTokensBilled != nil {
@@ -324,22 +330,62 @@ func renderHookStatusline(stats *hookStats, session *sessionState, contextPercen
 		bottom = append(bottom, hookANSI("38;5;251", fmt.Sprintf("ctx %d%%", *contextPercent)))
 	}
 	if stats.LastFile != nil {
+		// A workspace root records the edited file under its repository's directory.
+		name, _, _ := strings.Cut(*stats.LastFile, "/")
+		if i := slices.IndexFunc(repos, func(repo graph.WorkspaceChildSize) bool { return repo.Built && repo.Name == name }); i >= 0 {
+			bottom = append(bottom, hookANSI("38;5;251", fmt.Sprintf("%s: %d nodes / %d edges", name, repos[i].NodeCount, repos[i].EdgeCount)))
+		}
 		bottom = append(bottom, hookANSI("38;5;244", "last: ")+hookANSI("38;5;251", filepath.Base(*stats.LastFile)))
 	}
 	lines := []string{strings.Join(top, hookSep)}
 	if len(bottom) > 0 {
 		lines = append(lines, hookANSI("38;5;244", "▸ ")+strings.Join(bottom, hookSep))
 	}
+	var unbuilt []string
+	for _, repo := range repos {
+		if !repo.Built {
+			unbuilt = append(unbuilt, repo.Name)
+		}
+	}
+	if len(unbuilt) > 0 {
+		const named = 3 // a workspace of dozens of repositories still fits one line
+		names := strings.Join(unbuilt[:min(len(unbuilt), named)], ", ")
+		if len(unbuilt) > named {
+			names += fmt.Sprintf(" +%d", len(unbuilt)-named)
+		}
+		lines = append(lines, hookANSI("38;5;244", "▸ ")+
+			hookANSI("38;2;224;165;68", fmt.Sprintf("⚠ %d not built: %s", len(unbuilt), names))+
+			hookSep+hookANSI("38;5;244", "run ")+hookANSI("38;5;251", "graft build"))
+	}
 	return lines
 }
 
-func resolveHookStats(root string) *hookStats {
+// resolveHookStats returns the statusline's stats for root, nil when nothing
+// is built, and the sizes of its repositories when root is a workspace.
+func resolveHookStats(root string) (*hookStats, []graph.WorkspaceChildSize) {
+	if repos, ok := graph.MeasureWorkspace(root, hookContextDir(root)); ok {
+		// A workspace root has no graph of its own: its hooks track freshness
+		// and the last edit, and its size is the sum of its repositories'.
+		if !slices.ContainsFunc(repos, func(repo graph.WorkspaceChildSize) bool { return repo.Built }) {
+			return nil, repos
+		}
+		stats := emptyHookStats()
+		if cached := readHookStats(root); cached != nil {
+			stats = *cached
+		}
+		stats.NodeCount, stats.EdgeCount = 0, 0
+		for _, repo := range repos {
+			stats.NodeCount += repo.NodeCount
+			stats.EdgeCount += repo.EdgeCount
+		}
+		return &stats, repos
+	}
 	if cached := readHookStats(root); cached != nil && cached.NodeCount > 0 {
-		return cached
+		return cached, nil
 	}
 	wiring, err := graph.Read(graph.WiringPath(hookContextDir(root)))
 	if err != nil {
-		return nil
+		return nil, nil
 	}
 	stats := emptyHookStats()
 	if wiring.Meta.Version != 0 {
@@ -358,7 +404,7 @@ func resolveHookStats(root string) *hookStats {
 			stats.ReadyCount++
 		}
 	}
-	return &stats
+	return &stats, nil
 }
 
 func renderHookSubagent(agent string, session *sessionState) string {

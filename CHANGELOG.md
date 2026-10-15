@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- **The statusline understands a workspace.** A session started in a folder of separate repos showed `not built · run graft build`: the statusline looked only for a graph in the folder's own `graft/`, which in a workspace holds only the `workspace.json` index. It now counts the repos and sums their graphs' nodes and edges. Its second line gives the size of the repo that holds the last edited file. A third line names up to three repos without a graph and counts the rest: `◤ graft · 40 repos · 146080 nodes / 424800 edges · ✓ synced`, `▸ ctx 34% · ms-ap: 2108 nodes / 6011 edges · last: handler.go`, `▸ ⚠ 5 not built: auth, cart, mail +2 · run graft build`. It reads each graph only up to its `meta`. Over 40 repos with 4.4 MB graphs, a statusline takes about 40 ms.
+
+### Fixed
+
+- **An edit in a workspace session no longer rebuilds every repo at the end of each turn.** After the background sync rebuilt the workspace, it looked for the parent folder's own graph, found none and marked the stats stale again. So every later turn rebuilt all the repos again. The sync now leaves a workspace's stats clean.
+- **Rebuilding a workspace keeps the session's state.** Every workspace build emptied the parent's `graft/` except `workspace.json`, which also deleted the hooks' state in `graft/.cache`. The session's saved-token tally and the last edited file were reset after every sync. Now only the build that splits a combined graph into a workspace clears the parent.
+
 ## 0.6.0-beta.7 - 2026-10-15
 
 ### Changed

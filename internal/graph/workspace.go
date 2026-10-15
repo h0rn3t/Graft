@@ -100,7 +100,7 @@ func LoadWorkspaceGraphs(root, contextDir string) WorkspaceGraphs {
 	}
 	slices.Sort(children)
 	for _, child := range children {
-		if child == "" || child == "." || child == ".." || filepath.Base(child) != child || filepath.VolumeName(child) != "" {
+		if !validWorkspaceChild(child) {
 			result.Missing = append(result.Missing, child)
 			continue
 		}
@@ -117,6 +117,84 @@ func LoadWorkspaceGraphs(root, contextDir string) WorkspaceGraphs {
 		result.Loaded = append(result.Loaded, WorkspaceChild{Name: child, Graph: *graph})
 	}
 	return result
+}
+
+// WorkspaceChildSize is the size of a workspace repository's graph.
+type WorkspaceChildSize struct {
+	Name      string // Child repository directory name relative to the workspace root.
+	Built     bool   // Whether the child has a readable graph with a meta object.
+	NodeCount int
+	EdgeCount int
+}
+
+// MeasureWorkspace returns the graph size of each child listed in the
+// workspace index in contextDir, in sorted child order. It returns false when
+// contextDir holds no valid index or root cannot be opened.
+//
+// Each graph is decoded only up to its meta object, which Write puts first, so
+// measuring dozens of repositories stays cheap enough for a statusline. Child
+// paths stay within root.
+func MeasureWorkspace(root, contextDir string) ([]WorkspaceChildSize, bool) {
+	children, indexed := ReadWorkspaceChildren(contextDir)
+	if !indexed {
+		return nil, false
+	}
+	rootFS, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, false
+	}
+	defer func() { _ = rootFS.Close() }() // The read-only root has no buffered state to flush.
+	sizes := make([]WorkspaceChildSize, 0, len(children))
+	for _, child := range children {
+		size := WorkspaceChildSize{Name: child}
+		if validWorkspaceChild(child) {
+			nodeCount, edgeCount, err := readGraphMetaSize(rootFS, filepath.Join(child, "graft", GraphDir, GraphFile))
+			size.Built, size.NodeCount, size.EdgeCount = err == nil, nodeCount, edgeCount
+		}
+		sizes = append(sizes, size)
+	}
+	return sizes, true
+}
+
+// readGraphMetaSize decodes the graph at path under root only as far as its
+// meta object, and returns the node and edge counts the meta records.
+func readGraphMetaSize(root *os.Root, path string) (nodeCount, edgeCount int, err error) {
+	file, err := root.Open(path)
+	if err != nil {
+		return 0, 0, err
+	}
+	defer func() { _ = file.Close() }() // Read-only; closing cannot lose data.
+	decoder := jsontext.NewDecoder(file)
+	if token, err := decoder.ReadToken(); err != nil || token.Kind() != jsontext.KindBeginObject {
+		return 0, 0, errors.Join(errors.New("graph is not a JSON object"), err)
+	}
+	for decoder.PeekKind() == jsontext.KindString {
+		name, err := decoder.ReadToken()
+		if err != nil {
+			return 0, 0, err
+		}
+		if name.String() != "meta" {
+			if err := decoder.SkipValue(); err != nil {
+				return 0, 0, err
+			}
+			continue
+		}
+		var meta struct {
+			NodeCount int `json:"nodeCount"`
+			EdgeCount int `json:"edgeCount"`
+		}
+		if err := jsonv2.UnmarshalDecode(decoder, &meta); err != nil {
+			return 0, 0, err
+		}
+		return meta.NodeCount, meta.EdgeCount, nil
+	}
+	return 0, 0, errors.New("graph has no meta object")
+}
+
+// validWorkspaceChild reports whether a listed child names a directory
+// directly under the workspace root.
+func validWorkspaceChild(child string) bool {
+	return child != "" && child != "." && child != ".." && filepath.Base(child) == child && filepath.VolumeName(child) == ""
 }
 
 // DiscoverWorkspaceChildren lists immediate git repositories under root in

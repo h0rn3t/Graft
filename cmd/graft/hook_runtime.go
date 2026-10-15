@@ -451,17 +451,24 @@ func runHookSync(root string, stdout, stderr io.Writer) {
 		graph.ReleaseLock(hookCacheDir(root))
 		return
 	}
-	wiring, err := graph.Read(graph.WiringPath(hookContextDir(root)))
-	if err != nil {
-		_, _ = patchHookStats(root, hookStatsPatch{Syncing: new(false), Dirty: new(true)})
-		graph.ReleaseLock(hookCacheDir(root))
-		return
+	// A workspace root has no graph of its own; the statusline sums its
+	// repositories' graphs instead of these counts.
+	var built *hookStats
+	if _, workspace := graph.ReadWorkspaceChildren(hookContextDir(root)); !workspace {
+		wiring, err := graph.Read(graph.WiringPath(hookContextDir(root)))
+		if err != nil {
+			_, _ = patchHookStats(root, hookStatsPatch{Syncing: new(false), Dirty: new(true)})
+			graph.ReleaseLock(hookCacheDir(root))
+			return
+		}
+		built = new(computeHookStats(*wiring))
 	}
-	built := computeHookStats(*wiring)
 	synced := time.Now().UTC().Format("2006-01-02T15:04:05.000Z")
 	_, _ = updateHookStats(root, func(stats *hookStats) {
-		stats.NodeCount, stats.EdgeCount, stats.Languages = built.NodeCount, built.EdgeCount, built.Languages
-		stats.TotalCount, stats.ReadyCount = built.TotalCount, built.ReadyCount
+		if built != nil {
+			stats.NodeCount, stats.EdgeCount, stats.Languages = built.NodeCount, built.EdgeCount, built.Languages
+			stats.TotalCount, stats.ReadyCount = built.TotalCount, built.ReadyCount
+		}
 		stats.Syncing, stats.SyncedAt = false, &synced
 		if !stats.Dirty {
 			stats.StaleCount = 0
@@ -810,5 +817,6 @@ func runHookStatusline(stdin io.Reader, stdout io.Writer) {
 			contextPercent = &rounded
 		}
 	}
-	_, _ = io.WriteString(stdout, strings.Join(renderHookStatusline(resolveHookStats(root), &session, contextPercent), "\n"))
+	stats, repos := resolveHookStats(root)
+	_, _ = io.WriteString(stdout, strings.Join(renderHookStatusline(stats, repos, &session, contextPercent), "\n"))
 }

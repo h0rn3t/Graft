@@ -118,6 +118,35 @@ func TestHookSyncKeepsAnEditMadeDuringTheBuild(t *testing.T) {
 	}
 }
 
+func TestHookSyncInAWorkspaceRootSettlesAndKeepsTheSession(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("GRAFT_DIR", "")
+	t.Setenv("GRAFT_NO_REFRESH", "1")
+	for _, child := range []string{"api", "web"} {
+		writeWorkspaceChildFixture(t, root, child)
+	}
+	if status := runBuild(callersOptions{command: "build", root: root, rootSet: true}, io.Discard, io.Discard); status != 0 {
+		t.Fatalf("runBuild(workspace) status = %d, want 0", status)
+	}
+	if err := updateHookSession(root, "s1", func(session *sessionState) bool {
+		session.SavedTokens = 500
+		return true
+	}); err != nil {
+		t.Fatalf("updateHookSession(s1) error = %v, want nil", err)
+	}
+	if _, err := patchHookStats(root, hookStatsPatch{Dirty: new(true), Syncing: new(true)}); err != nil {
+		t.Fatalf("patchHookStats(dirty) error = %v, want nil", err)
+	}
+
+	runHookSync(root, io.Discard, io.Discard)
+	if stats := readHookStats(root); stats == nil || stats.Dirty || stats.Syncing || stats.SyncedAt == nil {
+		t.Errorf("readHookStats(after a workspace sync) = %#v, want clean synced stats", stats)
+	}
+	if session := readHookSession(root, "s1"); session.SavedTokens != 500 {
+		t.Errorf("readHookSession(after a workspace sync).SavedTokens = %d, want 500 kept", session.SavedTokens)
+	}
+}
+
 func TestHookPostEditCountsDriftWithoutRebuilding(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("GRAFT_DIR", "")
