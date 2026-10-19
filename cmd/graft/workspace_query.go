@@ -17,8 +17,8 @@ import (
 // under <child>/ paths, as the TypeScript federateGrep does. A non-empty in
 // names one child by its first segment and a path inside it by the rest. The
 // loaded workspace comes back too, for its coverage line and name suggestions.
-func federateGrep(root, contextDir, pattern string, ignoreCase, fixed bool, in string) (graph.GrepResult, graph.WorkspaceGraphs, error) {
-	workspace := graph.LoadWorkspaceGraphs(root, contextDir)
+func federateGrep(root, contextDir, pattern string, ignoreCase, fixed bool, in string, cache *queryCache) (graph.GrepResult, graph.WorkspaceGraphs, error) {
+	workspace := graph.LoadWorkspaceGraphs(root, contextDir, cache.loadGraph)
 	onlyChild, childIn, _ := strings.Cut(strings.Trim(in, "/"), "/")
 	if onlyChild != "" && !slices.ContainsFunc(workspace.Loaded, func(child graph.WorkspaceChild) bool { return child.Name == onlyChild }) {
 		names := make([]string, 0, len(workspace.Loaded))
@@ -67,8 +67,8 @@ func federateGrep(root, contextDir, pattern string, ignoreCase, fixed bool, in s
 
 // federateCallers walks the symbol's edges in every child that defines it and
 // renders one ## <child>/ block per child, as the TypeScript federateCallers does.
-func federateCallers(root, contextDir, symbol string, direction graph.Direction, depth int, in string) (string, bool, error) {
-	workspace := graph.LoadWorkspaceGraphs(root, contextDir)
+func federateCallers(root, contextDir, symbol string, direction graph.Direction, depth int, in string, cache *queryCache) (string, bool, error) {
+	workspace := graph.LoadWorkspaceGraphs(root, contextDir, cache.loadGraph)
 	blocks := make([]string, 0, len(workspace.Loaded))
 	found := false
 	for _, child := range workspace.Loaded {

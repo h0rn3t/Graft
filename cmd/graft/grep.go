@@ -90,7 +90,7 @@ func grepSyntaxMessage(err error, pattern string, ignoreCase bool) (string, bool
 // runWorkspaceGrep greps every child of a workspace, as the TypeScript
 // runWorkspaceGrep does; --in does not apply there.
 func runWorkspaceGrep(root, contextDir string, opts callersOptions, stdout, stderr io.Writer) int {
-	result, workspace, err := federateGrep(root, contextDir, opts.query, opts.ignoreCase, opts.fixed, opts.in)
+	result, workspace, err := federateGrep(root, contextDir, opts.query, opts.ignoreCase, opts.fixed, opts.in, opts.queryCache)
 	if err != nil {
 		// Thrown in TypeScript, so the top-level handler prints the bare message.
 		if message, ok := grepSyntaxMessage(err, opts.query, opts.ignoreCase); ok {

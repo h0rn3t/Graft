@@ -60,7 +60,7 @@ func runRead(opts callersOptions, stdout, stderr io.Writer) int {
 	refreshBeforeQuery(root, contextDir, opts, &diagnostics)
 	workspace := graph.WorkspaceGraphs{}
 	if _, ok := graph.ReadWorkspaceChildren(contextDir); ok {
-		workspace = graph.LoadWorkspaceGraphs(root, contextDir)
+		workspace = graph.LoadWorkspaceGraphs(root, contextDir, opts.queryCache.loadGraph)
 	} else {
 		wiring, err := opts.queryCache.loadGraph(contextDir)
 		if err != nil {

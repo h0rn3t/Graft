@@ -24,7 +24,7 @@ func runMap(opts callersOptions, stdout, stderr io.Writer) int {
 	refreshBeforeQuery(root, contextDir, opts, stderr)
 	if _, ok := graph.ReadWorkspaceChildren(contextDir); ok {
 		// The TypeScript workspace path renders text even when --json is set.
-		if _, err := io.WriteString(stdout, graph.FederateMap(root, contextDir, graph.RepoMapOptions{MaxDirs: maxDirs})); err != nil {
+		if _, err := io.WriteString(stdout, graph.FederateMap(root, contextDir, graph.RepoMapOptions{MaxDirs: maxDirs}, opts.queryCache.loadGraph)); err != nil {
 			return 1
 		}
 		return 0

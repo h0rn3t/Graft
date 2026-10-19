@@ -55,7 +55,7 @@ func runCheck(opts callersOptions, stdout, stderr io.Writer) int {
 }
 
 func runWorkspaceCheck(root, contextDir string, stdout, stderr io.Writer) int {
-	workspace := graph.LoadWorkspaceGraphs(root, contextDir)
+	workspace := graph.LoadWorkspaceGraphs(root, contextDir, nil)
 	lines := []string{fmt.Sprintf("workspace check — %d repo(s)", len(workspace.Loaded)+len(workspace.Missing)), ""}
 	ok := true
 	for _, child := range workspace.Loaded {

@@ -344,7 +344,7 @@ func runCallers(opts callersOptions, stdout, stderr io.Writer) int {
 		if opts.direction == "out" {
 			direction = graph.DirectionOut
 		}
-		text, found, err := federateCallers(root, contextDir, opts.query, direction, workspaceCallersDepth(opts.depth), opts.in)
+		text, found, err := federateCallers(root, contextDir, opts.query, direction, workspaceCallersDepth(opts.depth), opts.in, opts.queryCache)
 		switch {
 		case err != nil:
 			writeDiagnostic(stderr, "%v\n", err)

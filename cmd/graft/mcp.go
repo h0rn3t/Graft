@@ -703,7 +703,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 		case to != "":
 			return mcpTracePath(contextDir, symbol, to, args, cache)
 		case workspace:
-			return mcpWorkspaceTraceCalls(root, contextDir, symbol, args)
+			return mcpWorkspaceTraceCalls(root, contextDir, symbol, args, cache)
 		}
 		return mcpTraceCalls(root, contextDir, symbol, args, cache)
 	case "graft_find_all":
@@ -712,7 +712,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 			return mcpResult{text: "graft_find_all requires a pattern", isError: true}
 		}
 		if _, workspace := graph.ReadWorkspaceChildren(contextDir); workspace {
-			return mcpWorkspaceGrep(root, contextDir, pattern, args)
+			return mcpWorkspaceGrep(root, contextDir, pattern, args, cache)
 		}
 		in, scopeNote := mcpScope(contextDir, mcpString(args["in"]), cache)
 		if scopeNote != "" {
@@ -761,7 +761,7 @@ func mcpCallWithCache(ctx context.Context, root, contextDir, dirOverride, reques
 			maxDirs = int(value)
 		}
 		if _, ok := graph.ReadWorkspaceChildren(contextDir); ok {
-			return mcpResult{text: graph.FederateMap(root, contextDir, graph.RepoMapOptions{MaxDirs: maxDirs}), isError: false}
+			return mcpResult{text: graph.FederateMap(root, contextDir, graph.RepoMapOptions{MaxDirs: maxDirs}, cache.loadGraph), isError: false}
 		}
 		loaded, err := cache.loadGraph(contextDir)
 		if err != nil {
@@ -909,20 +909,20 @@ func mcpTraceCalls(root, contextDir, symbol string, args map[string]any, cache *
 	return mcpResult{text: text, isError: false}
 }
 
-func mcpWorkspaceTraceCalls(root, contextDir, symbol string, args map[string]any) mcpResult {
+func mcpWorkspaceTraceCalls(root, contextDir, symbol string, args map[string]any, cache *queryCache) mcpResult {
 	direction := graph.DirectionIn
 	if mcpString(args["direction"]) == "out" {
 		direction = graph.DirectionOut
 	}
-	text, _, err := federateCallers(root, contextDir, symbol, direction, mcpDepthValue(args["depth"]), mcpString(args["in"]))
+	text, _, err := federateCallers(root, contextDir, symbol, direction, mcpDepthValue(args["depth"]), mcpString(args["in"]), cache)
 	if err != nil {
 		return mcpResult{text: err.Error(), isError: true, thrown: true}
 	}
 	return mcpResult{text: text}
 }
 
-func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any) mcpResult {
-	result, workspace, err := federateGrep(root, contextDir, pattern, args["ignore_case"] == true, args["fixed"] == true, mcpString(args["in"]))
+func mcpWorkspaceGrep(root, contextDir, pattern string, args map[string]any, cache *queryCache) mcpResult {
+	result, workspace, err := federateGrep(root, contextDir, pattern, args["ignore_case"] == true, args["fixed"] == true, mcpString(args["in"]), cache)
 	if err != nil {
 		// The TypeScript tool reports a thrown error by its bare message.
 		text := err.Error()
@@ -1000,7 +1000,7 @@ func mcpCheckFreshness(root, contextDir string) string {
 }
 
 func mcpWorkspaceCheckFreshness(root, contextDir string) mcpResult {
-	workspace := graph.LoadWorkspaceGraphs(root, contextDir)
+	workspace := graph.LoadWorkspaceGraphs(root, contextDir, nil)
 	lines := []string{fmt.Sprintf("workspace check — %d repo(s)", len(workspace.Loaded)+len(workspace.Missing)), ""}
 	for _, child := range workspace.Loaded {
 		childRoot := filepath.Join(root, child.Name)

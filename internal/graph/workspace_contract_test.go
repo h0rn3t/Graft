@@ -33,12 +33,55 @@ func TestLoadWorkspaceGraphsContract(t *testing.T) {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", filepath.Join(contextDir, "workspace.json"), err)
 	}
 
-	got := LoadWorkspaceGraphs(root, contextDir)
+	got := LoadWorkspaceGraphs(root, contextDir, nil)
 	if len(got.Loaded) != 2 || got.Loaded[0].Name != "alpha" || got.Loaded[1].Name != "zeta" {
 		t.Errorf("LoadWorkspaceGraphs(%q, %q).Loaded = %#v, want alpha and zeta in sorted order", root, contextDir, got.Loaded)
 	}
 	if !slices.Equal(got.Missing, []string{"../outside", "corrupt", "missing"}) {
 		t.Errorf("LoadWorkspaceGraphs(%q, %q).Missing = %v, want [../outside corrupt missing]", root, contextDir, got.Missing)
+	}
+}
+
+func TestLoadWorkspaceGraphsReadContract(t *testing.T) {
+	base := t.TempDir()
+	root := filepath.Join(base, "parent")
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v, want nil", root, err)
+	}
+	writeWorkspaceRepo(t, root, "alpha", true)
+	writeWorkspaceRepo(t, root, "corrupt", true)
+	writeWorkspaceRepo(t, base, "outside", true)
+	if err := os.Symlink(filepath.Join(base, "outside"), filepath.Join(root, "linked")); err != nil {
+		t.Fatalf("Symlink error = %v, want nil", err)
+	}
+	contextDir := filepath.Join(root, "graft")
+	if err := os.MkdirAll(contextDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll(%q) error = %v, want nil", contextDir, err)
+	}
+	index := `{"version":1,"children":["linked","missing","corrupt","alpha"]}`
+	if err := os.WriteFile(filepath.Join(contextDir, "workspace.json"), []byte(index), 0o644); err != nil {
+		t.Fatalf("WriteFile(%q) error = %v, want nil", filepath.Join(contextDir, "workspace.json"), err)
+	}
+	shared := &GraphV1{Nodes: []NodeV1{{ID: "shared"}}}
+	var reads []string
+	read := func(dir string) (*GraphV1, error) {
+		reads = append(reads, dir)
+		if filepath.Base(filepath.Dir(dir)) == "corrupt" {
+			return nil, os.ErrInvalid
+		}
+		return shared, nil
+	}
+
+	got := LoadWorkspaceGraphs(root, contextDir, read)
+	if len(got.Loaded) != 1 || got.Loaded[0].Name != "alpha" || len(got.Loaded[0].Graph.Nodes) != 1 || got.Loaded[0].Graph.Nodes[0].ID != "shared" {
+		t.Errorf("LoadWorkspaceGraphs(%q, %q, read).Loaded = %#v, want alpha with the graph read returned", root, contextDir, got.Loaded)
+	}
+	if !slices.Equal(got.Missing, []string{"corrupt", "linked", "missing"}) {
+		t.Errorf("LoadWorkspaceGraphs(%q, %q, read).Missing = %v, want [corrupt linked missing]", root, contextDir, got.Missing)
+	}
+	wantReads := []string{filepath.Join(root, "alpha", "graft"), filepath.Join(root, "corrupt", "graft")}
+	if !slices.Equal(reads, wantReads) {
+		t.Errorf("LoadWorkspaceGraphs(%q, %q, read) read %v, want %v: never a link out of root or an absent graph", root, contextDir, reads, wantReads)
 	}
 }
 
@@ -73,7 +116,7 @@ func TestLoadWorkspaceGraphsDiscoveryFallbackContract(t *testing.T) {
 				}
 			}
 
-			got := LoadWorkspaceGraphs(root, "")
+			got := LoadWorkspaceGraphs(root, "", nil)
 			if len(got.Loaded) != 0 || !slices.Equal(got.Missing, []string{"alpha", "beta", "vendor"}) {
 				t.Errorf("LoadWorkspaceGraphs(%q, %q) = %#v, want missing [alpha beta vendor]", root, "", got)
 			}
@@ -92,7 +135,7 @@ func TestLoadWorkspaceGraphsEmptyManifestContract(t *testing.T) {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", filepath.Join(outDir, "workspace.json"), err)
 	}
 
-	got := LoadWorkspaceGraphs(root, "")
+	got := LoadWorkspaceGraphs(root, "", nil)
 	if got.Loaded == nil || got.Missing == nil || len(got.Loaded) != 0 || len(got.Missing) != 0 {
 		t.Errorf("LoadWorkspaceGraphs(%q, %q) = %#v, want initialized empty slices from an empty index", root, "", got)
 	}
@@ -213,7 +256,7 @@ func TestLoadWorkspaceGraphsUsesLastDuplicateKeyContract(t *testing.T) {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", filepath.Join(outDir, "workspace.json"), err)
 	}
 
-	got := LoadWorkspaceGraphs(root, "")
+	got := LoadWorkspaceGraphs(root, "", nil)
 	if len(got.Loaded) != 1 || got.Loaded[0].Name != "alpha" || len(got.Missing) != 0 {
 		t.Errorf("LoadWorkspaceGraphs(%q, %q) with duplicate JSON keys = %#v, want only alpha loaded", root, "", got)
 	}
@@ -237,7 +280,7 @@ func TestLoadWorkspaceGraphsBoundsMetadataContract(t *testing.T) {
 		t.Fatalf("WriteFile(%q) oversized index error = %v, want nil", filepath.Join(outDir, "workspace.json"), err)
 	}
 
-	got := LoadWorkspaceGraphs(root, "")
+	got := LoadWorkspaceGraphs(root, "", nil)
 	if !slices.Equal(got.Missing, []string{"alpha"}) {
 		t.Errorf("LoadWorkspaceGraphs(%q, %q) with oversized metadata = %#v, want discovery without oversized includeDirs", root, "", got)
 	}
@@ -256,7 +299,7 @@ func TestFederateMapWorkspaceContract(t *testing.T) {
 		t.Fatalf("WriteFile(%q) error = %v, want nil", filepath.Join(outDir, "workspace.json"), err)
 	}
 
-	got := FederateMap(root, "", RepoMapOptions{MaxDirs: 2})
+	got := FederateMap(root, "", RepoMapOptions{MaxDirs: 2}, nil)
 	alpha := strings.Index(got, "## alpha/")
 	zeta := strings.Index(got, "## zeta/")
 	if alpha < 0 || zeta <= alpha {

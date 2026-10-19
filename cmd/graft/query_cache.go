@@ -1,6 +1,7 @@
 package main
 
 import (
+	"cmp"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,10 +11,15 @@ import (
 	"github.com/h0rn3t/Graft/internal/graph"
 )
 
+// queryCacheBudget bounds the decoded graphs and ask indexes one server keeps,
+// as estimated by queryCacheEntry.size.
+const queryCacheBudget = 256 << 20
+
 // queryCache shares immutable query data within one MCP server.
 type queryCache struct {
 	mu      sync.Mutex
 	entries []queryCacheEntry
+	budget  int64 // zero means queryCacheBudget
 	// memo carries the server's refreshes into each other and hands the graph
 	// and ask index a refresh built straight to the next load.
 	memo graph.RefreshMemo
@@ -112,16 +118,30 @@ func (cache *queryCache) snapshot(contextDir string, withIndex bool) (*graph.Gra
 		if readErr != nil {
 			return nil, nil, readErr
 		}
-		// Retain at most sixteen workspace children, evicting the least recently used.
-		if len(cache.entries) == 16 {
-			cache.entries = slices.Delete(cache.entries, 0, 1)
+		entry := queryCacheEntry{dir: dir, graphFile: graphFile, indexFile: indexFile, wiring: wiring, index: index, indexLoaded: withIndex}
+		// A workspace query loads every child in turn, so evicting the least
+		// recently used would miss on every child once they outgrow the budget;
+		// a child that does not fit is decoded per query and the cached ones stay.
+		retained := entry.size()
+		for _, cached := range cache.entries {
+			retained += cached.size()
 		}
-		cache.entries = append(cache.entries, queryCacheEntry{
-			dir: dir, graphFile: graphFile, indexFile: indexFile, wiring: wiring, index: index, indexLoaded: withIndex,
-		})
+		if len(cache.entries) == 0 || retained <= cmp.Or(cache.budget, queryCacheBudget) {
+			cache.entries = append(cache.entries, entry)
+		}
 		return wiring, index, nil
 	}
 	return nil, nil, errors.New("query files changed during loading; retry the query")
+}
+
+// size estimates the entry's heap from its files: a decoded graph takes less
+// than its JSON, while an ask index takes about four times its JSON.
+func (entry queryCacheEntry) size() int64 {
+	size := entry.graphFile.Size()
+	if entry.indexFile != nil {
+		size += 4 * entry.indexFile.Size()
+	}
+	return size
 }
 
 func sameQueryFile(before, after os.FileInfo) bool {

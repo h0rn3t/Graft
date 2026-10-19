@@ -71,8 +71,10 @@ func ReadWorkspaceChildren(contextDir string) ([]string, bool) {
 // indexes fall back to discovering immediate Git repositories under root. Child
 // graphs always use each child's own graft directory; missing or invalid graphs
 // are listed in Missing. Child paths stay within root. Workspace indexes and local
-// build settings are limited to 1 MiB before decoding.
-func LoadWorkspaceGraphs(root, contextDir string) WorkspaceGraphs {
+// build settings are limited to 1 MiB before decoding. A non-nil read loads each
+// child's graph from its graft directory, so a caller can share graphs it keeps;
+// nil decodes every graph afresh.
+func LoadWorkspaceGraphs(root, contextDir string, read func(contextDir string) (*GraphV1, error)) WorkspaceGraphs {
 	result := WorkspaceGraphs{
 		Loaded:  make([]WorkspaceChild, 0),
 		Missing: make([]string, 0),
@@ -104,15 +106,28 @@ func LoadWorkspaceGraphs(root, contextDir string) WorkspaceGraphs {
 			result.Missing = append(result.Missing, child)
 			continue
 		}
-		data, err := rootFS.ReadFile(filepath.Join(child, "graft", GraphDir, GraphFile))
-		if err != nil {
-			result.Missing = append(result.Missing, child)
-			continue
-		}
+		graphPath := filepath.Join(child, "graft", GraphDir, GraphFile)
 		var graph *GraphV1
-		if err := json.Unmarshal(data, &graph); err != nil || graph == nil {
-			result.Missing = append(result.Missing, child)
-			continue
+		if read == nil {
+			data, err := rootFS.ReadFile(graphPath)
+			if err != nil {
+				result.Missing = append(result.Missing, child)
+				continue
+			}
+			if err := json.Unmarshal(data, &graph); err != nil || graph == nil {
+				result.Missing = append(result.Missing, child)
+				continue
+			}
+		} else {
+			// The root resolves the path first, so read never follows a link out of it.
+			if _, err := rootFS.Stat(graphPath); err != nil {
+				result.Missing = append(result.Missing, child)
+				continue
+			}
+			if graph, err = read(filepath.Join(root, child, "graft")); err != nil {
+				result.Missing = append(result.Missing, child)
+				continue
+			}
 		}
 		result.Loaded = append(result.Loaded, WorkspaceChild{Name: child, Graph: *graph})
 	}
@@ -314,10 +329,12 @@ func ClearWorkspaceParent(contextDir string) error {
 }
 
 // FederateMap formats a repository map for each loaded child and reports missing graphs.
+// read loads child graphs as in [LoadWorkspaceGraphs].
+// read loads child graphs as in [LoadWorkspaceGraphs].
 // A non-zero MaxDirs budget is divided across the loaded children, with at least one
 // directory retained per child.
-func FederateMap(root, contextDir string, options RepoMapOptions) string {
-	workspace := LoadWorkspaceGraphs(root, contextDir)
+func FederateMap(root, contextDir string, options RepoMapOptions, read func(contextDir string) (*GraphV1, error)) string {
+	workspace := LoadWorkspaceGraphs(root, contextDir, read)
 	childOptions := options
 	if childOptions.MaxDirs != 0 && len(workspace.Loaded) > 0 {
 		childOptions.MaxDirs = max(1, childOptions.MaxDirs/len(workspace.Loaded))

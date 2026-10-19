@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **An MCP server in a workspace root keeps less in memory and finds cached repos again.** The server kept at most 16 repos' graphs and ask indexes and evicted the least recently used. A workspace `graft_find_code` loads every repo in the same order on every call, so with more than 16 repos nothing it needed was ever still cached. Each call decoded every graph and index again, and the garbage pushed the process to gigabytes. Now the cache is bounded by an estimate of the memory it holds (256 MiB). A repo that does not fit is decoded per call, and the cached ones stay. `graft_find_all`, `graft_trace_calls`, `graft_read_symbol` and `graft_repo_map` in a workspace now share those cached graphs instead of decoding a second copy of every repo. Over 40 repos of this repository's size, peak RSS fell from 1015 MB to 760 MB and a workspace `graft_find_code` from 14 s to 10 s.
+
 ## 0.6.0-beta.10 - 2026-10-15
 
 ### Changed

@@ -154,36 +154,56 @@ func TestQueryCacheConcurrentLoads(t *testing.T) {
 }
 
 func TestQueryCacheBoundedAndIsolated(t *testing.T) {
-	var cache queryCache
-	first := t.TempDir()
-	writeQueryCacheFixture(t, first, 1)
-	before, _, err := cache.load(first)
-	if err != nil {
+	dirs := make([]string, 5)
+	for i := range dirs {
+		dirs[i] = t.TempDir()
+		writeQueryCacheFixture(t, dirs[i], 1)
+	}
+	var probe queryCache
+	if _, _, err := probe.load(dirs[0]); err != nil {
 		t.Fatal(err)
 	}
-	for range 16 {
-		dir := t.TempDir()
-		writeQueryCacheFixture(t, dir, 1)
-		if _, _, err := cache.load(dir); err != nil {
+	// Every fixture has the same files, so the budget holds exactly three.
+	cache := queryCache{budget: 3 * probe.entries[0].size()}
+	first := make([]*graph.GraphV1, len(dirs))
+	for i, dir := range dirs {
+		var err error
+		if first[i], _, err = cache.load(dir); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if len(cache.entries) > 16 {
-		t.Errorf("cache entries = %d, want at most 16", len(cache.entries))
+	// A workspace query loads its children in the same order every time.
+	for i, dir := range dirs {
+		again, _, err := cache.load(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if wantCached := i < 3; (again == first[i]) != wantCached {
+			t.Errorf("second cache.load(dirs[%d]) reused the first graph = %v, want %v", i, again == first[i], wantCached)
+		}
 	}
-	after, _, err := cache.load(first)
-	if err != nil || after == before {
-		t.Errorf("cache.load(%q) after eviction = (%p, %v), want reloaded graph", first, after, err)
+	if len(cache.entries) != 3 {
+		t.Errorf("cache entries = %d, want 3 within the budget", len(cache.entries))
 	}
+
+	oversized := queryCache{budget: 1}
+	before, _, err := oversized.load(dirs[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after, _, err := oversized.load(dirs[0]); err != nil || after != before {
+		t.Errorf("cache.load(%q) over a budget smaller than one entry = (%p, %v), want the cached %p", dirs[0], after, err, before)
+	}
+
 	var other queryCache
-	isolated, _, err := other.load(first)
-	if err != nil || isolated == after {
-		t.Errorf("other.load(%q) = (%p, %v), want separate server value", first, isolated, err)
+	isolated, _, err := other.load(dirs[0])
+	if err != nil || isolated == first[0] {
+		t.Errorf("other.load(%q) = (%p, %v), want separate server value", dirs[0], isolated, err)
 	}
 	var uncached *queryCache
-	loaded, index, err := uncached.load(first)
-	if err != nil || loaded == after || index == nil {
-		t.Errorf("nil cache.load(%q) = (%p, %p, %v), want uncached graph and index", first, loaded, index, err)
+	loaded, index, err := uncached.load(dirs[0])
+	if err != nil || loaded == first[0] || index == nil {
+		t.Errorf("nil cache.load(%q) = (%p, %p, %v), want uncached graph and index", dirs[0], loaded, index, err)
 	}
 }
 
